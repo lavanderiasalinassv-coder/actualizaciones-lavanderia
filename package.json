@@ -1,0 +1,75 @@
+{
+  "name": "lavanderia-desktop",
+  "version": "3.1.5",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "install:all": "npm install && cd lavanderia-salinas && npm install && cd ../Server-Lavanderia && npm install",
+    "build:frontend": "cd lavanderia-salinas && npm run build",
+    "build:lavanderia": "npm run build:frontend && electron-builder",
+    "electron:build": "npm run build:lavanderia",
+    "electron:publish": "npm run build:frontend && electron-builder --publish always",
+    "lavanderia": "concurrently \"npm --prefix Server-Lavanderia run dev\" \"npm --prefix lavanderia-salinas run dev\" \"wait-on http://localhost:5173 tcp:3000 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
+    "electron:dev": "concurrently \"npm --prefix Server-Lavanderia run dev\" \"npm --prefix lavanderia-salinas run dev\" \"wait-on http://localhost:5173 tcp:3000 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\""
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/markdown-it": "^14.2.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.lavanderiasalinas.app",
+    "productName": "Lavandería Salinas",
+    "publish": {
+      "provider": "github",
+      "owner": "lavanderiasalinassv-coder",
+      "repo": "actualizaciones-lavanderia"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "Server-Lavanderia",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!node_modules/.cache",
+          "!.env"
+        ]
+      },
+      {
+        "from": "Server-Lavanderia/.env",
+        "to": "backend/.env"
+      },
+      {
+        "from": "lavanderia-salinas/dist",
+        "to": "backend/frontend/dist"
+      },
+      {
+        "from": "logoapp.png",
+        "to": "logoapp.png"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "logoapp.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
+    },
+    "asar": true
+  },
+  "dependencies": {
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/share": "^8.0.1",
+    "dompurify": "^3.4.15",
+    "electron-updater": "^6.8.9",
+    "markdown-it": "^15.0.2"
+  }
+}

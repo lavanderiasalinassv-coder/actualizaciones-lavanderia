@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.env
+*.log
+.DS_Store
+.DS_Store
+Server-Lavanderia/database/database.json
+Server-Lavanderia/database/modelos-ia.json
+Server-Lavanderia/respaldo lavanderia-salinas/
+Server-Lavanderia/uploads/
