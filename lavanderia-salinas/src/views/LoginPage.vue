@@ -19,7 +19,10 @@
           </svg>
           <div class="sombra-suelo"></div>
         </div>
-        <p>Espere por favor…<br />Estamos preparando su ciclo de lavado</p>
+        <p>
+          <template v-if="comprobandoActualizaciones">Comprobando actualizaciones...</template>
+          <template v-else>Espere por favor…<br />Estamos preparando su ciclo de lavado</template>
+        </p>
       </div>
 
       <button
@@ -270,6 +273,38 @@ const { recargarSesion } = useSesion()
 const codigo = ref('')
 const cargando = ref(false)
 const validando = ref(false)
+const comprobandoActualizaciones = ref(false)
+
+type ElectronAPIActualizaciones = {
+  isElectron?: boolean
+  buscarActualizaciones?: () => Promise<{
+    supported?: boolean
+    updateAvailable?: boolean
+    version?: string
+  }>
+}
+
+const comprobarActualizacionesAntesDeEntrar = async () => {
+  const api = (window as Window & { electronAPI?: ElectronAPIActualizaciones }).electronAPI
+  if (!api?.isElectron || !api.buscarActualizaciones) return
+
+  comprobandoActualizaciones.value = true
+  try {
+    const resultado = await api.buscarActualizaciones()
+    sessionStorage.setItem('actualizacion-verificada-en-sesion', '1')
+
+    if (resultado?.updateAvailable) {
+      sessionStorage.setItem('actualizacion-pendiente-al-entrar', JSON.stringify({ version: resultado.version || '' }))
+    } else {
+      sessionStorage.removeItem('actualizacion-pendiente-al-entrar')
+    }
+  } catch {
+    // Un fallo de red no debe impedir que el usuario ingrese a la aplicación.
+    sessionStorage.setItem('actualizacion-verificada-en-sesion', '1')
+  } finally {
+    comprobandoActualizaciones.value = false
+  }
+}
 
 // Estado del 2FA
 const mostrarModal2FA = ref(false)
@@ -438,9 +473,8 @@ watch(codigo, async (nuevo) => {
     })
     toast.present()
 
-    setTimeout(() => {
-      router.replace('/tabs/principal')
-    }, 1000)
+    await comprobarActualizacionesAntesDeEntrar()
+    await router.replace('/tabs/principal')
   } catch (err: any) {
     const esErrorRed = err?.message?.includes('fetch') || err?.message?.includes('network')
     const esFueraDeHorario = err?.message?.startsWith('El acceso solo se habilita en horario programado')
@@ -533,9 +567,9 @@ const verificarCodigo2FA = async () => {
     toast.present()
 
     cerrarModal2FA()
-    setTimeout(() => {
-      router.replace('/tabs/principal')
-    }, 1000)
+    cargando.value = true
+    await comprobarActualizacionesAntesDeEntrar()
+    await router.replace('/tabs/principal')
   } catch (error: any) {
     const toast = await toastController.create({
       message: error.message || 'Código inválido. Intenta nuevamente.',
@@ -545,6 +579,7 @@ const verificarCodigo2FA = async () => {
     toast.present()
   } finally {
     cargando2FA.value = false
+    cargando.value = false
   }
 }
 

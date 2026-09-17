@@ -1408,7 +1408,7 @@ type ElectronAPIActualizaciones = {
   onUpdateError?: (cb: (mensaje: string) => void) => void
   instalarActualizacion?: () => Promise<void>
   descargarEInstalarActualizacion?: () => Promise<{ supported?: boolean }>
-  buscarActualizaciones?: () => Promise<{ supported?: boolean }>
+  buscarActualizaciones?: () => Promise<{ supported?: boolean, updateAvailable?: boolean, version?: string }>
   obtenerVersionAplicacion?: () => Promise<string>
 }
 
@@ -1517,6 +1517,21 @@ onMounted(() => {
   api.obtenerVersionAplicacion?.().then((version) => {
     versionActual.value = version
   }).catch(() => {})
+
+  const pendienteAlEntrar = sessionStorage.getItem('actualizacion-pendiente-al-entrar')
+  if (pendienteAlEntrar) {
+    try {
+      const { version } = JSON.parse(pendienteAlEntrar) as { version?: string }
+      versionDisponible.value = version || ''
+      actualizacionPendiente.value = true
+      estadoActualizacion.value = 'disponible'
+      mostrarModalActualizacion.value = true
+    } catch {
+      // Ignorar datos temporales inválidos y continuar con la app.
+    } finally {
+      sessionStorage.removeItem('actualizacion-pendiente-al-entrar')
+    }
+  }
 
   // AppShell se monta al entrar desde el login. La marca evita búsquedas al
   // navegar entre vistas, pero se elimina al cerrar sesión.
@@ -2415,6 +2430,7 @@ const cerrarCaja = async () => {
 
 const cerrarSesion = () => {
   sessionStorage.removeItem('actualizacion-verificada-en-sesion')
+  sessionStorage.removeItem('actualizacion-pendiente-al-entrar')
   cerrarSesionSesion()
   router.replace('/login').catch(() => {})
 }
