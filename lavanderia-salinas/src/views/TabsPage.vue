@@ -34,7 +34,7 @@
         <ion-tab-button
           v-if="!esOperador && esAdministrador"
           class="tab-btn tab-cierres"
-          @click="router.push('/tabs/cierres')"
+          @click="abrirModalCierres()"
         >
           <span class="tab-icon-wrap">
             <ion-icon aria-hidden="true" :icon="lockClosedOutline" />
@@ -77,7 +77,7 @@ const turnoCerrado = computed(() =>
 )
 
 const router = useRouter()
-const { abrirModalGasto } = useModalesCaja()
+const { abrirModalGasto, abrirModalCierres } = useModalesCaja()
 const { cerrarSesion, esAdministrador, esOperador, rol } = useSesion()
 const { turno } = useTurno()
 const esRecepcionista = computed(() => rol.value === 'recepcionista')
