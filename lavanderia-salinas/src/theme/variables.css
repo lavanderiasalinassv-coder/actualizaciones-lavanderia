@@ -1,0 +1,70 @@
+:root {
+  --ion-font-family: 'Segoe UI', 'Roboto', sans-serif;
+  --ion-text-color: #0a1f38;
+  --ion-background-color: #ffffff;
+  --ion-item-background: #ffffff;
+  --ion-toolbar-background: #ffffff;
+  --ion-tab-bar-background: #ffffff;
+  --ion-card-background: #ffffff;
+  --ion-font-size-base: 17px;
+}
+
+html {
+  font-size: 17px;
+}
+
+body,
+ion-app,
+ion-content,
+ion-page,
+ion-header,
+ion-footer,
+ion-toolbar,
+ion-item,
+ion-label,
+ion-input,
+ion-textarea,
+ion-button,
+ion-card,
+ion-title,
+ion-subtitle,
+ion-searchbar,
+ion-tab-button {
+  font-size: 1rem;
+}
+
+ion-button {
+  font-size: 0.98rem;
+}
+
+ion-label,
+ion-input,
+ion-textarea,
+ion-title,
+ion-subtitle {
+  line-height: 1.4;
+}
+
+/* Fix para problemas de focus y teclado en Ionic */
+ion-content {
+  --overflow: hidden;
+}
+
+ion-input input,
+ion-textarea textarea {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Asegurar que los inputs nativos mantengan el focus */
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Fix para modales y focus */
+ion-modal ion-content {
+  --overflow: hidden;
+}

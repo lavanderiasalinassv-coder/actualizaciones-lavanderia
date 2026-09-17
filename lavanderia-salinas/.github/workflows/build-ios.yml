@@ -1,0 +1,90 @@
+name: Build iOS IPA - Lavandería Salinas
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Descargar código fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias del proyecto
+        run: npm ci
+        env:
+          npm_config_fetch_retries: 5
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retry_maxtimeout: 120000
+
+      - name: Instalar Ionic CLI
+        run: npm install -g @ionic/cli
+
+      - name: Compilar proyecto web
+        run: ionic build --prod
+
+      - name: Instalar Capacitor iOS
+        run: npm install @capacitor/ios
+
+      - name: Sincronizar proyecto iOS
+        run: npx cap sync ios
+
+      - name: Compilar App iOS
+        run: |
+          cd ios/App
+
+          if [ -d "App.xcworkspace" ]; then
+            xcodebuild build \
+              -workspace App.xcworkspace \
+              -scheme App \
+              -sdk iphoneos \
+              -configuration Release \
+              -derivedDataPath build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO
+          else
+            xcodebuild build \
+              -project App.xcodeproj \
+              -scheme App \
+              -sdk iphoneos \
+              -configuration Release \
+              -derivedDataPath build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO
+          fi
+
+      - name: Empaquetar IPA
+        run: |
+          mkdir -p build/Payload
+
+          APP_PATH=$(find ios/App -name "App.app" -type d | head -n 1)
+
+          echo "App encontrada en: $APP_PATH"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No se encontró App.app"
+            exit 1
+          fi
+
+          cp -r "$APP_PATH" build/Payload/
+
+          cd build
+
+          zip -r LavanderiaSalinas.ipa Payload
+
+      - name: Subir IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: lavanderia-salinas-ios
+          path: build/LavanderiaSalinas.ipa

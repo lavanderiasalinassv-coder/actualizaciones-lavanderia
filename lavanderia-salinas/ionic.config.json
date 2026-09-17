@@ -1,0 +1,7 @@
+{
+  "name": "Lavanderia Salinas",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
