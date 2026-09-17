@@ -78,8 +78,8 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
-                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
@@ -192,8 +192,8 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior banner-perfil-superior-compacto" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
-                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
@@ -908,7 +908,7 @@
                   Marcar como leída
                 </button>
                 <button
-                  v-if="puedeEditarAviso(notificacion)"
+                  v-if="esAdministrador"
                   class="notificacion-editar"
                   @click="abrirModalEditarAviso(notificacion)"
                 >
@@ -2147,11 +2147,11 @@ const descargarReporteCierre = (cierre: any) => {
     y += 9
   }
 
-  const dibujarCard = (etiqueta: string, valor: string, color: { fondo: number[], texto: number[] }, x: number, anchoCard: number) => {
+  const dibujarCard = (etiqueta: string, valor: string, color: { fondo: [number, number, number], texto: [number, number, number] }, x: number, anchoCard: number) => {
     const altoCard = 20
-    pdf.setFillColor(...color.fondo)
+    pdf.setFillColor(color.fondo[0], color.fondo[1], color.fondo[2])
     pdf.roundedRect(x, y, anchoCard, altoCard, 3, 3, 'F')
-    pdf.setTextColor(...color.texto)
+    pdf.setTextColor(color.texto[0], color.texto[1], color.texto[2])
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(7)
     pdf.text(etiqueta.toUpperCase(), x + 4, y + 7)
@@ -2638,11 +2638,8 @@ const guardarEdicionAviso = async () => {
 }
 
 const puedeEditarAviso = (notificacion: NotificacionUsuario) => {
-  // Solo el autor o administradores pueden editar, excepto si el autor es el desarrollador
-  const esAutorDesarrollador = notificacion.autorNombre?.toLowerCase() === 'desarrollador'
-  if (esAutorDesarrollador) return false
-  
-  return esAdministrador || (notificacion.autorNombre === usuarioActual.value?.nombre)
+  // Solo los administradores pueden editar notificaciones/avisos
+  return esAdministrador
 }
 
 const insertarHtmlTagEditar = (tag: string, style = '') => {
