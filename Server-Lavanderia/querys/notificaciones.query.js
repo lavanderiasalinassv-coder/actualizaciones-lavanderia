@@ -1,6 +1,14 @@
 const { randomUUID } = require("crypto");
 const { pool } = require("../database/MySQLConexion");
 
+const obtenerVariantePluralRol = (rol) =>
+  ({
+    administrador: "administradores",
+    recepcionista: "recepcionistas",
+    cajero: "cajeros",
+    operador: "operadores",
+  }[String(rol || "").toLowerCase()] || rol);
+
 const mapNotificacion = (row) => ({
   id: row.id,
   tipo: row.tipo,
@@ -21,6 +29,7 @@ const mapNotificacion = (row) => ({
 });
 
 const obtenerParaUsuario = async (usuarioId, rol) => {
+  const rolPlural = obtenerVariantePluralRol(rol);
   const [rows] = await pool.query(
     `SELECT n.*,
        CASE WHEN n.destinatario_id IS NULL
@@ -31,10 +40,11 @@ const obtenerParaUsuario = async (usuarioId, rol) => {
      LEFT JOIN notificaciones_lecturas l
        ON l.notificacion_id = n.id AND l.usuario_id = ?
      WHERE n.tipo = 'aviso'
+       AND (n.autor_id IS NULL OR n.autor_id <> ?)
        AND (n.destinatario_id = ? OR n.destinatario_rol = 'todos'
-         OR n.destinatario_rol = ?)
+         OR n.destinatario_rol IN (?, ?))
      ORDER BY n.creada_at DESC`,
-    [usuarioId, usuarioId, rol],
+    [usuarioId, usuarioId, usuarioId, rol, rolPlural],
   );
   return rows.map(mapNotificacion);
 };
@@ -52,6 +62,25 @@ const obtenerProblemasDeUsuario = async (usuarioId) => {
      WHERE tipo = 'problema' AND autor_id = ?
      ORDER BY creada_at DESC`,
     [usuarioId],
+  );
+  return rows.map(mapNotificacion);
+};
+
+const obtenerAvisosDeAutor = async (autorId) => {
+  const [rows] = await pool.query(
+    `SELECT * FROM notificaciones
+     WHERE tipo = 'aviso' AND autor_id = ?
+     ORDER BY creada_at DESC`,
+    [autorId],
+  );
+  return rows.map(mapNotificacion);
+};
+
+const obtenerTodosLosAvisosEnviados = async () => {
+  const [rows] = await pool.query(
+    `SELECT * FROM notificaciones
+     WHERE tipo = 'aviso'
+     ORDER BY creada_at DESC`,
   );
   return rows.map(mapNotificacion);
 };
@@ -76,15 +105,17 @@ const crearAviso = async ({
   titulo,
   mensaje,
   destinatarioRol,
+  destinatarioId,
 }) => {
   const id = randomUUID();
   await pool.query(
     `INSERT INTO notificaciones
-      (id, tipo, destinatario_rol, autor_id, autor_nombre, titulo, mensaje)
-     VALUES (?, 'aviso', ?, ?, ?, ?, ?)`,
+      (id, tipo, destinatario_rol, destinatario_id, autor_id, autor_nombre, titulo, mensaje)
+     VALUES (?, 'aviso', ?, ?, ?, ?, ?, ?)`,
     [
       id,
       destinatarioRol || "todos",
+      destinatarioId || null,
       autorId || null,
       autorNombre,
       titulo,
@@ -97,7 +128,10 @@ const crearAviso = async ({
   return mapNotificacion(rows[0]);
 };
 
-const editarAviso = async (id, { titulo, mensaje, destinatarioRol, usuarioId, esAdministrador }) => {
+const editarAviso = async (
+  id,
+  { titulo, mensaje, destinatarioRol, destinatarioId, usuarioId, esDesarrollador },
+) => {
   const [rows] = await pool.query(
     `SELECT * FROM notificaciones WHERE id = ? AND tipo = 'aviso'`,
     [id]
@@ -106,22 +140,17 @@ const editarAviso = async (id, { titulo, mensaje, destinatarioRol, usuarioId, es
   if (!rows.length) return null;
   
   const aviso = rows[0];
-  
-  // No permitir editar avisos del desarrollador
-  if (aviso.autor_nombre?.toLowerCase() === 'desarrollador') {
-    return null;
-  }
-  
-  // Solo el autor o administradores pueden editar
-  if (aviso.autor_id !== usuarioId && !esAdministrador) {
+  // Los administradores solo modifican sus propios avisos; el desarrollador
+  // puede administrar el historial completo.
+  if (!esDesarrollador && String(aviso.autor_id) !== String(usuarioId)) {
     return null;
   }
   
   await pool.query(
     `UPDATE notificaciones
-     SET titulo = ?, mensaje = ?, destinatario_rol = ?
+     SET titulo = ?, mensaje = ?, destinatario_rol = ?, destinatario_id = ?
      WHERE id = ? AND tipo = 'aviso'`,
-    [titulo, mensaje, destinatarioRol, id]
+    [titulo, mensaje, destinatarioRol, destinatarioId || null, id]
   );
   
   const [updatedRows] = await pool.query("SELECT * FROM notificaciones WHERE id = ?", [id]);
@@ -161,14 +190,16 @@ const actualizarEstadoProblema = async (id, estado) => {
 };
 
 const marcarLeida = async (id, usuarioId, rol) => {
+  const rolPlural = obtenerVariantePluralRol(rol);
   await pool.query(
     `INSERT INTO notificaciones_lecturas (notificacion_id, usuario_id, leida)
      SELECT n.id, ?, 1
      FROM notificaciones n
      WHERE n.id = ? AND n.tipo = 'aviso'
-       AND (n.destinatario_id = ? OR n.destinatario_rol = 'todos' OR n.destinatario_rol = ?)
+       AND (n.destinatario_id = ? OR n.destinatario_rol = 'todos'
+         OR n.destinatario_rol IN (?, ?))
      ON DUPLICATE KEY UPDATE leida = 1`,
-    [usuarioId, id, usuarioId, rol],
+    [usuarioId, id, usuarioId, rol, rolPlural],
   );
 };
 
@@ -182,27 +213,24 @@ const eliminarProblemaDeUsuario = async (id, usuarioId) => {
 
 const limpiarNotificaciones = async () => {
   await pool.query("DELETE FROM notificaciones_lecturas");
-  // Eliminar solo notificaciones que no sean avisos del desarrollador
-  await pool.query("DELETE FROM notificaciones WHERE NOT (tipo = 'aviso' AND LOWER(autor_nombre) = 'desarrollador')");
+  await pool.query("DELETE FROM notificaciones");
 };
 
-const eliminarNotificacion = async (id) => {
-  // Primero verificar si es un aviso del desarrollador
+const eliminarNotificacion = async (id, usuarioId, esDesarrollador = false) => {
   const [rows] = await pool.query(
-    "SELECT autor_nombre FROM notificaciones WHERE id = ? AND tipo = 'aviso'",
-    [id]
+    "SELECT autor_id FROM notificaciones WHERE id = ? AND tipo = 'aviso'",
+    [id],
   );
-  
-  if (rows.length > 0) {
-    const autorNombre = rows[0].autor_nombre?.toLowerCase();
-    // No permitir eliminar avisos del desarrollador
-    if (autorNombre === 'desarrollador') {
-      return false;
-    }
-  }
-  
+  if (!rows.length) return false;
+
+  if (!esDesarrollador && String(rows[0].autor_id) !== String(usuarioId))
+    return false;
+
   await pool.query("DELETE FROM notificaciones_lecturas WHERE notificacion_id = ?", [id]);
-  const [resultado] = await pool.query("DELETE FROM notificaciones WHERE id = ?", [id]);
+  const [resultado] = await pool.query(
+    "DELETE FROM notificaciones WHERE id = ? AND tipo = 'aviso'",
+    [id],
+  );
   return resultado.affectedRows > 0;
 };
 
@@ -210,6 +238,8 @@ module.exports = {
   obtenerParaUsuario,
   obtenerProblemas,
   obtenerProblemasDeUsuario,
+  obtenerAvisosDeAutor,
+  obtenerTodosLosAvisosEnviados,
   crearProblema,
   crearAviso,
   editarAviso,

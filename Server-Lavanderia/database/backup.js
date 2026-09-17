@@ -24,13 +24,12 @@ function valorSql(valor) {
   return mysql.escape(valor);
 }
 
-async function crearRespaldo(pool, tablasSolicitadas) {
-  const tablasDisponibles = await obtenerTablas(pool);
-  const tablas = [...new Set(tablasSolicitadas)].filter((tabla) =>
-    tablasDisponibles.includes(tabla),
-  );
+async function crearRespaldo(pool) {
+  // El respaldo siempre debe ser completo: se consultan las tablas existentes
+  // en la base de datos al momento de exportar, sin depender del cliente.
+  const tablas = await obtenerTablas(pool);
   if (tablas.length === 0)
-    throw new Error("Selecciona al menos una tabla válida.");
+    throw new Error("No se encontraron tablas para respaldar.");
 
   const bloques = [
     "-- Respaldo Lavanderia Salinas",

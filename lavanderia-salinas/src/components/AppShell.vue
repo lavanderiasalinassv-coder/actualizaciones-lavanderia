@@ -52,7 +52,15 @@
                         {{ problemasPendientes.length }}
                       </div>
                     </button>
-                    <button v-if="esAdministrador" class="notificacion-menu-item" @click="abrirModalAviso">
+                    <button v-if="esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                      <ion-icon :icon="listOutline" />
+                      <span>Mis avisos enviados</span>
+                    </button>
+                    <button v-if="esAdministrador && !esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                      <ion-icon :icon="listOutline" />
+                      <span>Mis avisos enviados</span>
+                    </button>
+                    <button v-if="esAdministrador || esModoDesarrollador" class="notificacion-menu-item" @click="abrirModalAviso">
                       <ion-icon :icon="megaphoneOutline" />
                       <span>Enviar aviso</span>
                     </button>
@@ -76,6 +84,9 @@
                 </button>
                 <button v-if="esAdministrador" class="notificacion-icono-btn facebook-launch-btn" type="button" title="Abrir Facebook Messenger" aria-label="Abrir Facebook Messenger" @click="abrirFacebook">
                   <ion-icon :icon="logoFacebook" />
+                </button>
+                <button v-if="esAdministrador" class="notificacion-icono-btn navegador-launch-btn" type="button" title="Abrir Navegador" aria-label="Abrir Navegador" @click="abrirNavegador">
+                  <ion-icon :icon="globeOutline" />
                 </button>
                 <button class="banner-perfil-superior" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
                   <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
@@ -166,7 +177,15 @@
                         {{ problemasPendientes.length }}
                       </div>
                     </button>
-                    <button v-if="esAdministrador" class="notificacion-menu-item" @click="abrirModalAviso">
+                    <button v-if="esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                      <ion-icon :icon="listOutline" />
+                      <span>Mis avisos enviados</span>
+                    </button>
+                    <button v-if="esAdministrador && !esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                      <ion-icon :icon="listOutline" />
+                      <span>Mis avisos enviados</span>
+                    </button>
+                    <button v-if="esAdministrador || esModoDesarrollador" class="notificacion-menu-item" @click="abrirModalAviso">
                       <ion-icon :icon="megaphoneOutline" />
                       <span>Enviar aviso</span>
                     </button>
@@ -190,6 +209,9 @@
                 </button>
                 <button v-if="squeeze < 0.98 && esAdministrador" class="notificacion-icono-btn facebook-launch-btn" type="button" title="Abrir Facebook Messenger" aria-label="Abrir Facebook Messenger" @click="abrirFacebook">
                   <ion-icon :icon="logoFacebook" />
+                </button>
+                <button v-if="squeeze < 0.98 && esAdministrador" class="notificacion-icono-btn navegador-launch-btn" type="button" title="Abrir Navegador" aria-label="Abrir Navegador" @click="abrirNavegador">
+                  <ion-icon :icon="globeOutline" />
                 </button>
                 <button class="banner-perfil-superior banner-perfil-superior-compacto" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
                   <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
@@ -908,14 +930,14 @@
                   Marcar como leída
                 </button>
                 <button
-                  v-if="esAdministrador"
+                  v-if="puedeGestionarAviso(notificacion)"
                   class="notificacion-editar"
                   @click="abrirModalEditarAviso(notificacion)"
                 >
                   <ion-icon :icon="createOutline" />
                 </button>
                 <button
-                  v-if="esAdministrador"
+                  v-if="puedeGestionarAviso(notificacion)"
                   class="notificacion-eliminar"
                   @click="eliminarNotificacionConfirmada(notificacion.id)"
                 >
@@ -991,6 +1013,13 @@
           <option value="recepcionista">Recepcionistas</option>
           <option value="cajero">Cajeros</option>
           <option value="operador">Operadores</option>
+          <option value="individual">Usuario específico</option>
+        </select>
+        <select v-if="destinatarioAviso === 'individual'" v-model="destinatarioAvisoId" class="modal-input-text">
+          <option value="" disabled>Selecciona un usuario</option>
+          <option v-for="usuario in usuariosDestinatarios" :key="usuario.id" :value="usuario.id">
+            {{ usuario.nombre }} ({{ usuario.rol }})
+          </option>
         </select>
         <label class="modal-label" for="aviso-titulo">Título</label>
         <input id="aviso-titulo" v-model="tituloAviso" class="modal-input-text" type="text" placeholder="Ej: Nuevo aviso" />
@@ -1070,7 +1099,7 @@
         
         <div class="modal-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalAviso = false">Cancelar</ion-button>
-          <ion-button class="btn-primario" :disabled="!tituloAviso.trim() || !mensajeAviso.trim() || enviandoAviso" @click="enviarAvisoDesdeModal">
+          <ion-button class="btn-primario" :disabled="!tituloAviso.trim() || !mensajeAviso.trim() || (destinatarioAviso === 'individual' && !destinatarioAvisoId) || enviandoAviso" @click="enviarAvisoDesdeModal">
             {{ enviandoAviso ? 'Enviando...' : 'Enviar aviso' }}
           </ion-button>
         </div>
@@ -1092,6 +1121,21 @@
 
         <label class="modal-label" for="aviso-editar-titulo">Título</label>
         <input id="aviso-editar-titulo" v-model="tituloAvisoEditar" class="modal-input-text" type="text" placeholder="Ej: Nuevo aviso" />
+        <label class="modal-label" for="aviso-editar-destinatario">Destinatarios</label>
+        <select id="aviso-editar-destinatario" v-model="destinatarioAvisoEditar" class="modal-input-text">
+          <option value="todos">Todos los usuarios</option>
+          <option value="administrador">Administradores</option>
+          <option value="recepcionista">Recepcionistas</option>
+          <option value="cajero">Cajeros</option>
+          <option value="operador">Operadores</option>
+          <option value="individual">Usuario específico</option>
+        </select>
+        <select v-if="destinatarioAvisoEditar === 'individual'" v-model="destinatarioAvisoIdEditar" class="modal-input-text">
+          <option value="" disabled>Selecciona un usuario</option>
+          <option v-for="usuario in usuariosDestinatarios" :key="usuario.id" :value="usuario.id">
+            {{ usuario.nombre }} ({{ usuario.rol }})
+          </option>
+        </select>
         <label class="modal-label" for="aviso-editar-mensaje">Mensaje</label>
         
         <div class="aviso-editor-container">
@@ -1168,7 +1212,7 @@
         
         <div class="modal-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalEditarAviso = false">Cancelar</ion-button>
-          <ion-button class="btn-primario" :disabled="!tituloAvisoEditar.trim() || !mensajeAvisoEditar.trim() || enviandoAvisoEditar" @click="guardarEdicionAviso">
+          <ion-button class="btn-primario" :disabled="!tituloAvisoEditar.trim() || !mensajeAvisoEditar.trim() || (destinatarioAvisoEditar === 'individual' && !destinatarioAvisoIdEditar) || enviandoAvisoEditar" @click="guardarEdicionAviso">
             {{ enviandoAvisoEditar ? 'Guardando...' : 'Guardar cambios' }}
           </ion-button>
         </div>
@@ -1256,6 +1300,14 @@
       </div>
     </ion-modal>
 
+    <!-- Panel Navegador -->
+    <NavegadorPannel
+      :abierto="mostrarPanelNavegador"
+      @cerrar="cerrarNavegador"
+      @modo-cambio="panelNavegadorLateral = $event"
+      @lado-cambio="panelLado = $event"
+    />
+
   </ion-page>
 </template>
 
@@ -1279,6 +1331,7 @@ import { useNotificaciones, type NotificacionUsuario } from '@/composables/useNo
 import { usePanelRedes } from '@/composables/usePanelRedes'
 import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import { jsPDF } from 'jspdf'
+import NavegadorPannel from '@/components/NavegadorPannel.vue'
 const { validarSesion } = useSesion()
 const mensajeErrorActualizacion = ref('')
 
@@ -1303,6 +1356,7 @@ import {
   megaphoneOutline,
   logoWhatsapp,
   logoFacebook,
+  globeOutline,
   businessOutline,
   createOutline,
   shirtOutline,
@@ -1351,6 +1405,9 @@ const {
   notificacionesUsuario,
   notificacionesNoLeidas,
   cargarNotificaciones,
+  cargarAvisosEnviados,
+  cargarUsuariosDestinatarios,
+  usuariosDestinatarios,
   reportarProblema,
   enviarAviso,
   editarAviso,
@@ -1374,22 +1431,27 @@ const avisoParaEditar = ref<NotificacionUsuario | null>(null)
 const tituloAvisoEditar = ref('')
 const mensajeAvisoEditar = ref('')
 const destinatarioAvisoEditar = ref('todos')
+const destinatarioAvisoIdEditar = ref('')
 const enviandoAvisoEditar = ref(false)
 const colorSeleccionado = ref('#000000')
 const colorSeleccionadoEditar = ref('#000000')
 const {
   mostrarPanelWhatsapp,
   mostrarPanelFacebook,
+  mostrarPanelNavegador,
   urlWhatsappInicial,
   panelWhatsappLateral,
   panelFacebookLateral,
+  panelNavegadorLateral,
   panelLado,
   panelLateralAbierto,
   ladoPanelActivo,
   abrirWhatsapp: abrirWhatsappPanel,
   abrirFacebook,
+  abrirNavegador,
   cerrarWhatsapp,
-  cerrarFacebook
+  cerrarFacebook,
+  cerrarNavegador
 } = usePanelRedes()
 
 const abrirWhatsapp = () => {
@@ -1566,6 +1628,7 @@ const enviandoProblema = ref(false)
 const tituloAviso = ref('')
 const mensajeAviso = ref('')
 const destinatarioAviso = ref('todos')
+const destinatarioAvisoId = ref('')
 const enviandoAviso = ref(false)
 const contentAreaRef = ref<HTMLDivElement | null>(null)
 const navegando = ref(false)
@@ -1581,9 +1644,25 @@ const abrirMenuNotificaciones = () => {
   mostrarMenuNotificaciones.value = !mostrarMenuNotificaciones.value
 }
 
-const abrirModalAviso = () => {
+const abrirModalAviso = async () => {
+  try {
+    await cargarUsuariosDestinatarios()
+  } catch (error) {
+    console.error('No se pudo cargar el listado de destinatarios:', error)
+  }
   mostrarModalAviso.value = true
   mostrarMenuNotificaciones.value = false
+}
+
+const abrirHistorialAvisos = async () => {
+  try {
+    await cargarAvisosEnviados()
+    mostrarModalNotificaciones.value = true
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo cargar el historial de avisos.')
+  } finally {
+    mostrarMenuNotificaciones.value = false
+  }
 }
 
 const actualizarEspacioPanel = (activo: boolean) => {
@@ -1591,8 +1670,8 @@ const actualizarEspacioPanel = (activo: boolean) => {
   document.documentElement.classList.toggle('app-panel-lateral-izquierda', activo && panelLado.value === 'izquierda')
 }
 
-watch([mostrarPanelWhatsapp, mostrarPanelFacebook, panelWhatsappLateral, panelFacebookLateral, panelLado], ([whatsappAbierto, facebookAbierto, whatsappLateral, facebookLateral]) => {
-  actualizarEspacioPanel(Boolean((whatsappAbierto && whatsappLateral) || (facebookAbierto && facebookLateral)))
+watch([mostrarPanelWhatsapp, mostrarPanelFacebook, mostrarPanelNavegador, panelWhatsappLateral, panelFacebookLateral, panelNavegadorLateral, panelLado], ([whatsappAbierto, facebookAbierto, navegadorAbierto, whatsappLateral, facebookLateral, navegadorLateral]) => {
+  actualizarEspacioPanel(Boolean((whatsappAbierto && whatsappLateral) || (facebookAbierto && facebookLateral) || (navegadorAbierto && navegadorLateral)))
 }, { immediate: true })
 
 const limpiarNotificacionesDesdeMenu = async () => {
@@ -2507,10 +2586,11 @@ const enviarAvisoDesdeModal = async () => {
   if (!tituloAviso.value.trim() || !mensajeAviso.value.trim() || enviandoAviso.value) return
   enviandoAviso.value = true
   try {
-    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value)
+    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined)
     tituloAviso.value = ''
     mensajeAviso.value = ''
     destinatarioAviso.value = 'todos'
+    destinatarioAvisoId.value = ''
     mostrarModalAviso.value = false
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo enviar el aviso.')
@@ -2615,7 +2695,8 @@ const abrirModalEditarAviso = (notificacion: NotificacionUsuario) => {
   avisoParaEditar.value = notificacion
   tituloAvisoEditar.value = notificacion.titulo
   mensajeAvisoEditar.value = notificacion.mensaje
-  destinatarioAvisoEditar.value = 'todos' // No tenemos esta info en la notificación
+  destinatarioAvisoEditar.value = notificacion.destinatarioRol || 'todos'
+  destinatarioAvisoIdEditar.value = notificacion.destinatarioId || ''
   mostrarModalEditarAviso.value = true
 }
 
@@ -2624,12 +2705,13 @@ const guardarEdicionAviso = async () => {
   
   enviandoAvisoEditar.value = true
   try {
-    await editarAviso(avisoParaEditar.value.id, tituloAvisoEditar.value, mensajeAvisoEditar.value, destinatarioAvisoEditar.value)
+    await editarAviso(avisoParaEditar.value.id, tituloAvisoEditar.value, mensajeAvisoEditar.value, destinatarioAvisoEditar.value, destinatarioAvisoIdEditar.value || undefined)
     mostrarModalEditarAviso.value = false
     avisoParaEditar.value = null
     tituloAvisoEditar.value = ''
     mensajeAvisoEditar.value = ''
     destinatarioAvisoEditar.value = 'todos'
+    destinatarioAvisoIdEditar.value = ''
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo editar el aviso.')
   } finally {
@@ -2638,9 +2720,12 @@ const guardarEdicionAviso = async () => {
 }
 
 const puedeEditarAviso = (notificacion: NotificacionUsuario) => {
-  // Solo los administradores pueden editar notificaciones/avisos
-  return esAdministrador
+  if (esModoDesarrollador.value) return true
+  return esAdministrador.value &&
+    String(notificacion.autorId ?? '') === String(usuarioActual.value?.id ?? '')
 }
+
+const puedeGestionarAviso = puedeEditarAviso
 
 const insertarHtmlTagEditar = (tag: string, style = '') => {
   const editor = document.getElementById('aviso-editar-mensaje') as HTMLElement
@@ -2801,6 +2886,7 @@ const getIconoLavanderia = (id: string) => {
   --app-panel-ancho: 30vw;
   --whatsapp-panel-ancho: 30vw;
   --facebook-panel-ancho: 30vw;
+  --navegador-panel-ancho: 30vw;
 }
 
 :global(html.app-panel-lateral-activo ion-app > ion-router-outlet) {
@@ -4663,6 +4749,17 @@ ion-content.shell-container {
   border-color: rgba(8, 102, 255, 0.58);
 }
 
+.navegador-launch-btn {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.36);
+  color: #60a5fa;
+}
+
+.navegador-launch-btn:hover {
+  background: rgba(59, 130, 246, 0.26);
+  border-color: rgba(59, 130, 246, 0.58);
+}
+
 .notificacion-icono-btn:disabled {
   cursor: not-allowed;
   opacity: 0.42;
@@ -4684,6 +4781,12 @@ ion-content.shell-container {
   background: rgba(8, 102, 255, 0.10);
   border-color: rgba(8, 102, 255, 0.22);
   color: rgba(8, 102, 255, 0.5);
+}
+
+.navegador-launch-btn:disabled {
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.22);
+  color: rgba(59, 130, 246, 0.5);
 }
 
 .notificacion-icono-btn ion-icon {

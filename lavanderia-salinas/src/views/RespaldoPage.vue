@@ -9,7 +9,7 @@
         <div>
           <p class="eyebrow">Seguridad de datos</p>
           <h2>Respaldo</h2>
-          <p>Exporta las tablas seleccionadas en un archivo SQL.</p>
+          <p>Exporta todas las tablas existentes en un archivo SQL.</p>
         </div>
       </header>
 
@@ -30,15 +30,11 @@
         <div v-else-if="tablas.length === 0" class="estado error">No se encontraron tablas disponibles.</div>
         <template v-else>
           <div class="seleccion-row">
-            <label class="check-item check-todas">
-              <input v-model="todasSeleccionadas" type="checkbox" />
-              <span>Seleccionar todas</span>
-            </label>
-            <span class="contador">{{ seleccionadas.length }} de {{ tablas.length }}</span>
+            <span>Se incluirán todas las tablas detectadas.</span>
+            <span class="contador">{{ tablas.length }} tablas</span>
           </div>
           <div class="tablas-lista">
             <label v-for="tabla in tablas" :key="tabla" class="check-item">
-              <input v-model="seleccionadas" type="checkbox" :value="tabla" />
               <span class="table-name"><span class="table-symbol">DB</span>{{ nombreVisibleTabla(tabla) }}</span>
             </label>
           </div>
@@ -50,7 +46,7 @@
           <button v-if="ultimoRespaldo" class="btn-secundario" type="button" @click="abrirCarpeta">
             <ion-icon :icon="folderOpenOutline" /> Abrir carpeta
           </button>
-          <button class="btn-primario" type="button" :disabled="cargando || seleccionadas.length === 0" @click="crearRespaldo">
+          <button class="btn-primario" type="button" :disabled="cargando || tablas.length === 0" @click="crearRespaldo">
             <ion-icon :icon="downloadOutline" />
             {{ generando ? 'Exportando...' : 'Crear respaldo' }}
           </button>
@@ -62,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { IonIcon } from '@ionic/vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
@@ -74,7 +70,6 @@ const esElectron = typeof window !== 'undefined' && typeof (window as Window & {
   electronAPI?: { detectarNavegadores?: () => unknown }
 }).electronAPI?.detectarNavegadores === 'function'
 const tablas = ref<string[]>([])
-const seleccionadas = ref<string[]>([])
 const directorio = ref('')
 const mensaje = ref('')
 const hayError = ref(false)
@@ -102,11 +97,6 @@ const nombresTablas: Record<string, string> = {
 const nombreVisibleTabla = (tabla: string) => nombresTablas[tabla] ?? tabla
   .split('_').map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1)).join(' ')
 
-const todasSeleccionadas = computed({
-  get: () => tablas.value.length > 0 && seleccionadas.value.length === tablas.value.length,
-  set: (seleccionar: boolean) => { seleccionadas.value = seleccionar ? [...tablas.value] : [] }
-})
-
 const cargarTablas = async () => {
   if (!esElectron) {
     cargando.value = false
@@ -133,7 +123,7 @@ const crearRespaldo = async () => {
   hayError.value = false
   try {
     const respuesta = await fetch(`${API_LOCAL_URL}/backups`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tablas: seleccionadas.value })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
     })
     const resultado = await respuesta.json()
     if (!respuesta.ok) throw new Error(resultado.message)

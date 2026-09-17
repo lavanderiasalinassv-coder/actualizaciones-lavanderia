@@ -179,65 +179,6 @@ async function migrateOrdenMovimientosAuditoria() {
   }
 }
 
-// Ejecutar migración de protección de avisos del desarrollador
-async function migrateProtegerAvisosDesarrollador() {
-  try {
-    console.log("Verificando protección de avisos del desarrollador...");
-
-    // Verificar si el trigger de DELETE ya existe
-    const [triggers] = await pool.execute(
-      "SHOW TRIGGERS LIKE 'proteger_avisos_desarrollador_before_delete'"
-    );
-
-    if (triggers.length === 0) {
-      console.log("Creando trigger de protección para DELETE...");
-      await pool.execute(`
-        CREATE TRIGGER proteger_avisos_desarrollador_before_delete
-        BEFORE DELETE ON notificaciones
-        FOR EACH ROW
-        BEGIN
-          IF OLD.tipo = 'aviso' AND LOWER(OLD.autor_nombre) = 'desarrollador' THEN
-            SIGNAL SQLSTATE '45000' 
-            SET MESSAGE_TEXT = 'No se pueden eliminar avisos del desarrollador';
-          END IF;
-        END
-      `);
-      console.log("✓ Trigger de DELETE creado.");
-    } else {
-      console.log("✓ Trigger de DELETE ya existe.");
-    }
-
-    // Verificar si el trigger de UPDATE ya existe
-    const [updateTriggers] = await pool.execute(
-      "SHOW TRIGGERS LIKE 'proteger_avisos_desarrollador_before_update'"
-    );
-
-    if (updateTriggers.length === 0) {
-      console.log("Creando trigger de protección para UPDATE...");
-      await pool.execute(`
-        CREATE TRIGGER proteger_avisos_desarrollador_before_update
-        BEFORE UPDATE ON notificaciones
-        FOR EACH ROW
-        BEGIN
-          IF OLD.tipo = 'aviso' AND LOWER(OLD.autor_nombre) = 'desarrollador' THEN
-            IF OLD.titulo <> NEW.titulo OR OLD.mensaje <> NEW.mensaje OR OLD.destinatario_rol <> NEW.destinatario_rol THEN
-              SIGNAL SQLSTATE '45000' 
-              SET MESSAGE_TEXT = 'No se pueden modificar avisos del desarrollador';
-            END IF;
-          END IF;
-        END
-      `);
-      console.log("✓ Trigger de UPDATE creado.");
-    } else {
-      console.log("✓ Trigger de UPDATE ya existe.");
-    }
-
-    console.log("✅ Protección de avisos del desarrollador completada.");
-  } catch (error) {
-    console.error("Error durante la migración de protección de avisos:", error.message);
-  }
-}
-
 async function migrateUnidadesMedida() {
   console.log("Verificando unidades de medida...");
   const unidadesInventario = [
@@ -514,12 +455,9 @@ app.get("/api/backups/tables", async (_req, res) => {
   }
 });
 
-app.post("/api/backups", async (req, res) => {
+app.post("/api/backups", async (_req, res) => {
   try {
-    const respaldo = await crearRespaldo(
-      pool,
-      Array.isArray(req.body.tablas) ? req.body.tablas : [],
-    );
+    const respaldo = await crearRespaldo(pool);
     res.json({ ok: true, ...respaldo });
   } catch (error) {
     res.status(400).json({
@@ -668,5 +606,4 @@ app.listen(PORT, async () => {
   await migrateHorasAjustadas();
   await migratePerfilImagen();
   await migrateNotificaciones();
-  await migrateProtegerAvisosDesarrollador();
 });

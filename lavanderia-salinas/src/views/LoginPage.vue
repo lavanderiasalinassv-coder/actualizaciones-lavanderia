@@ -880,19 +880,10 @@ const verificarCodigoRecuperacion = async () => {
       throw new Error(resultado.error)
     }
 
-    // El código es válido, ahora enviamos el 2FA y mostramos el PIN temporal
+    // El código es válido, ahora enviamos el 2FA
     if (resultado.usuario) {
       // Primero cerramos el modal de recuperación
       cerrarModalRecuperacionPIN()
-
-      // Mostramos un toast con el PIN
-      const toast = await toastController.create({
-        message: `Tu PIN temporal es: ${resultado.pinTemporal}. Este código expirará en 1 minuto.`,
-        duration: 60000,
-        color: 'success',
-        position: 'top'
-      })
-      toast.present()
 
       // Si el usuario requiere 2FA, también enviamos el código 2FA
       if (resultado.requiere2FA) {
