@@ -197,7 +197,7 @@
               </div>
               <button class="banner-home-btn banner-home-btn-compacta" @click="irA('/tabs/principal')">
                 <ion-icon :icon="homeOutline" />
-                <span>Home nuevas actualizaciones</span>
+                <span>Home</span>
               </button>
 
               <div class="banner-compacta-reloj">
