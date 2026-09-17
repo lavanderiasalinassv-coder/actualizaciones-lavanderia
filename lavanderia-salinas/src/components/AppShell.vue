@@ -2170,13 +2170,13 @@ const descargarReporteCierre = (cierre: any) => {
   const cardWidth = (anchoUtil - 8) / 3
   const cardGap = 4
   const cards = [
-    { etiqueta: 'Apertura', valor: `$${Number(cierre.apertura || 0).toFixed(2)}`, color: { fondo: [52, 211, 153], texto: [255, 255, 255] } },
-    { etiqueta: 'Dejado en caja', valor: `$${Number(cierre.saldoCierre || 0).toFixed(2)}`, color: { fondo: [59, 130, 246], texto: [255, 255, 255] } },
-    { etiqueta: 'Cobrado', valor: `$${Number(cierre.totales?.cobrado || 0).toFixed(2)}`, color: { fondo: [16, 185, 129], texto: [255, 255, 255] } },
-    { etiqueta: 'Depósitos', valor: `$${Number(cierre.totales?.depositos || 0).toFixed(2)}`, color: { fondo: [245, 158, 11], texto: [255, 255, 255] } },
-    { etiqueta: 'Cancelaciones', valor: `$${Number(cierre.totales?.cancelaciones || 0).toFixed(2)}`, color: { fondo: [239, 68, 68], texto: [255, 255, 255] } },
-    { etiqueta: 'Gastos', valor: `$${Number(cierre.totales?.gastos || 0).toFixed(2)}`, color: { fondo: [139, 92, 246], texto: [255, 255, 255] } },
-    { etiqueta: 'Total recaudado', valor: `$${Number(cierre.totales?.recaudado || 0).toFixed(2)}`, color: { fondo: [8, 26, 48], texto: [255, 255, 255] } }
+    { etiqueta: 'Apertura', valor: `$${Number(cierre.apertura || 0).toFixed(2)}`, color: { fondo: [52, 211, 153] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Dejado en caja', valor: `$${Number(cierre.saldoCierre || 0).toFixed(2)}`, color: { fondo: [59, 130, 246] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Cobrado', valor: `$${Number(cierre.totales?.cobrado || 0).toFixed(2)}`, color: { fondo: [16, 185, 129] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Depósitos', valor: `$${Number(cierre.totales?.depositos || 0).toFixed(2)}`, color: { fondo: [245, 158, 11] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Cancelaciones', valor: `$${Number(cierre.totales?.cancelaciones || 0).toFixed(2)}`, color: { fondo: [239, 68, 68] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Gastos', valor: `$${Number(cierre.totales?.gastos || 0).toFixed(2)}`, color: { fondo: [139, 92, 246] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } },
+    { etiqueta: 'Total recaudado', valor: `$${Number(cierre.totales?.recaudado || 0).toFixed(2)}`, color: { fondo: [8, 26, 48] as [number, number, number], texto: [255, 255, 255] as [number, number, number] } }
   ]
 
   cards.forEach((card, indice) => {
