@@ -197,7 +197,7 @@
               </div>
               <button class="banner-home-btn banner-home-btn-compacta" @click="irA('/tabs/principal')">
                 <ion-icon :icon="homeOutline" />
-                <span>Home</span>
+                <span>Home Nuevas updates</span>
               </button>
 
               <div class="banner-compacta-reloj">
@@ -1226,9 +1226,6 @@
 
         <div class="modal-botones">
           <template v-if="estadoActualizacion === 'disponible'">
-            <ion-button class="btn-fantasma" @click="mostrarModalActualizacion = false">
-              Ver después
-            </ion-button>
             <ion-button class="btn-primario" :disabled="instalandoActualizacion" @click="descargarEInstalarActualizacion">
               {{ instalandoActualizacion ? 'Preparando instalación...' : 'Instalar ahora' }}
             </ion-button>
@@ -1240,9 +1237,6 @@
             @click="instalarActualizacionAhora"
           >
             {{ instalandoActualizacion ? 'Reiniciando...' : 'Instalar ahora' }}
-          </ion-button>
-          <ion-button v-if="estadoActualizacion === 'lista'" class="btn-fantasma" @click="mostrarModalActualizacion = false">
-            Ver después
           </ion-button>
           <ion-button
             v-else-if="estadoActualizacion === 'buscando' || estadoActualizacion === 'descargando'"
@@ -1549,6 +1543,16 @@ onMounted(() => {
     sessionStorage.setItem('actualizacion-verificada-en-sesion', '1')
     void abrirBuscarActualizaciones(false)
   }
+
+  // Escuchar evento para mostrar modal de actualización desde el login
+  const handleMostrarModalActualizacion = () => {
+    mostrarModalActualizacion.value = true
+  }
+  window.addEventListener('mostrar-modal-actualizacion', handleMostrarModalActualizacion)
+
+  onUnmounted(() => {
+    window.removeEventListener('mostrar-modal-actualizacion', handleMostrarModalActualizacion)
+  })
 })
 
 const temaProblema = ref('')

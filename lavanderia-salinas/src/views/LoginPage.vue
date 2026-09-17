@@ -149,11 +149,13 @@
           <label class="modal-2fa-label">Ingresa el código de 4 dígitos</label>
           <div class="modal-2fa-codigo-input">
             <input
+              ref="input2FA"
               v-model="codigo2FA"
               type="text"
               maxlength="4"
               placeholder="0000"
               @input="formatearCodigo2FA"
+              @keydown.enter="verificarCodigo2FA"
               @keydown="handleModalKeydown"
             />
           </div>
@@ -282,7 +284,7 @@ import {
   IonIcon,
   toastController
 } from '@ionic/vue'
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { App as CapacitorApp } from '@capacitor/app'
 import logo from '@/assets/logo.png'
@@ -390,6 +392,8 @@ const comprobarActualizacionesAntesDeEntrar = async () => {
 
     if (resultado?.updateAvailable) {
       sessionStorage.setItem('actualizacion-pendiente-al-entrar', JSON.stringify({ version: resultado.version || '' }))
+      // Disparar evento para mostrar el modal de actualización inmediatamente
+      window.dispatchEvent(new CustomEvent('mostrar-modal-actualizacion'))
     } else {
       sessionStorage.removeItem('actualizacion-pendiente-al-entrar')
     }
@@ -408,6 +412,7 @@ const codigoAcceso2FA = ref('')
 const codigo2FA = ref('')
 const cargando2FA = ref(false)
 const tiempoReenvio = ref(0)
+const input2FA = ref<HTMLInputElement | null>(null)
 let intervaloReenvio: any = null
 
 // Estado de recuperación de PIN
@@ -535,6 +540,9 @@ watch(codigo, async (nuevo) => {
           codigoAcceso2FA.value = nuevo
           mostrarModal2FA.value = true
           iniciarContadorReenvio()
+          nextTick(() => {
+            input2FA.value?.focus()
+          })
 
           if (respuesta.errorEnvio) {
             const toast = await toastController.create({
@@ -897,6 +905,9 @@ const verificarCodigoRecuperacion = async () => {
         codigoAcceso2FA.value = resultado.pinTemporal
         mostrarModal2FA.value = true
         iniciarContadorReenvio()
+        nextTick(() => {
+          input2FA.value?.focus()
+        })
       } else {
         // Si no requiere 2FA, preparamos el código y permitimos acceso
         codigo.value = resultado.pinTemporal
