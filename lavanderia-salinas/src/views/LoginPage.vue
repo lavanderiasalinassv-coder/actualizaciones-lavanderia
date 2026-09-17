@@ -86,15 +86,6 @@
               </div>
               </div>
 
-              <button
-                class="olvide-pin-btn"
-                type="button"
-                :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN || cargandoRecuperacion"
-                @click="abrirModalRecuperacionPIN"
-              >
-                Olvidé mi PIN
-              </button>
-
               <ion-grid class="keypad-grid">
                 <ion-row v-for="fila in teclas" :key="fila.join('-')">
                   <ion-col v-for="n in fila" :key="n" size="4" class="key-col">
@@ -122,6 +113,15 @@
                   </ion-col>
                 </ion-row>
               </ion-grid>
+
+              <button
+                class="olvide-pin-btn"
+                type="button"
+                :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN || cargandoRecuperacion"
+                @click="abrirModalRecuperacionPIN"
+              >
+                Olvidé mi PIN
+              </button>
             </div>
           </div>
         </section>
@@ -188,9 +188,10 @@
         <div class="modal-recuperacion-pin-header">
           <div class="modal-recuperacion-pin-icon">🔑</div>
           <div>
-            <h3 class="modal-recuperacion-pin-titulo">Recuperar PIN</h3>
+            <h3 class="modal-recuperacion-pin-titulo">Iniciar Sesión Temporal</h3>
             <p class="modal-recuperacion-pin-subtitulo">
-              Ingresa tu correo electrónico para recibir un código temporal
+              Ingresa tu correo electrónico que registraste para tu pin, una vez ingreses
+              puedes cambiar tu pin desde la sección de perfil.
             </p>
           </div>
         </div>
@@ -201,6 +202,7 @@
             <input
               v-model="correoRecuperacion"
               type="email"
+              style="color: black;"
               placeholder="tu.correo@ejemplo.com"
               :disabled="cargandoRecuperacion || codigoEnviado"
               @keydown.enter="enviarCodigoRecuperacion"
@@ -215,6 +217,7 @@
             <input
               v-model="codigoRecuperacion"
               type="text"
+              style="color: black;"
               maxlength="6"
               placeholder="000000"
               :disabled="cargandoRecuperacion"

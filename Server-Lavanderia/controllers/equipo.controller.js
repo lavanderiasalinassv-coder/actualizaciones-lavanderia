@@ -354,6 +354,17 @@ const recuperarPIN = async (req, res) => {
       return res.status(404).json({ error: "No se encontró un usuario con ese correo." });
     }
 
+    // ── Validación de horario (cajero / recepcionista / operador) ──
+    // Se hace ANTES de enviar el código por correo para no
+    // desperdiciar correos si el usuario está fuera de su turno.
+    const chequeoHorario = await validarAccesoPorHorario(usuario);
+    if (!chequeoHorario.permitido) {
+      return res.status(403).json({
+        fueraDeHorario: true,
+        error: chequeoHorario.motivo,
+      });
+    }
+
     // Generar código temporal de 6 dígitos
     const codigoTemporal = generarCodigoTemporal();
 
