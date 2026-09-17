@@ -21,9 +21,9 @@
               </span>
             </button>
             <div v-if="mostrarMenuNotificaciones" class="notificacion-menu">
-              <button v-if="!esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalNotificaciones = true; mostrarMenuNotificaciones = false">
+              <button class="notificacion-menu-item" @click="abrirModalNotificaciones">
                 <ion-icon :icon="notificationsOutline" />
-                <span>Notificaciones</span>
+                <span>{{ esModoDesarrollador ? 'Historial de avisos' : 'Notificaciones' }}</span>
                 <div v-if="totalNotificacionesNoLeidas > 0" class="notificacion-menu-burbuja">
                   {{ totalNotificacionesNoLeidas }}
                 </div>
@@ -39,7 +39,15 @@
                   {{ problemasPendientes.length }}
                 </div>
               </button>
-              <button v-if="esAdministrador" class="notificacion-menu-item" @click="abrirModalAviso">
+              <button v-if="esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                <ion-icon :icon="listOutline" />
+                <span>Mis avisos enviados</span>
+              </button>
+              <button v-if="esAdministrador && !esModoDesarrollador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                <ion-icon :icon="listOutline" />
+                <span>Mis avisos enviados</span>
+              </button>
+              <button v-if="esAdministrador || esModoDesarrollador" class="notificacion-menu-item" @click="abrirModalAviso">
                 <ion-icon :icon="megaphoneOutline" />
                 <span>Enviar aviso</span>
               </button>
@@ -408,13 +416,13 @@
               <ion-icon :icon="shirtOutline" />
             </div>
             <div>
-              <p class="modal-titulo">Notificaciones</p>
-              <p class="modal-subtitulo">{{ notificacionesNoLeidas.length }} notificaciones sin leer</p>
+              <p class="modal-titulo">{{ esModoDesarrollador || mostrandoHistorialAvisos ? 'Historial de avisos enviados' : 'Notificaciones' }}</p>
+              <p class="modal-subtitulo">{{ esModoDesarrollador || mostrandoHistorialAvisos ? 'Edita o elimina cada aviso de forma individual' : `${notificacionesNoLeidas.length} notificaciones sin leer` }}</p>
             </div>
           </div>
           <div class="modal-header-right">
             <button 
-              v-if="notificacionesNoLeidas.length > 0" 
+              v-if="!esModoDesarrollador && !mostrandoHistorialAvisos && notificacionesNoLeidas.length > 0"
               class="modal-accion-secundaria" 
               @click="marcarTodasNotificacionesLeidas"
             >
@@ -464,16 +472,23 @@
 
               <div class="notificacion-acciones">
                 <button
-                  v-if="!notificacion.leida"
+                  v-if="!esModoDesarrollador && !mostrandoHistorialAvisos && !notificacion.leida"
                   class="notificacion-marcar-leida"
                   @click="marcarNotificacionLeida(notificacion.id)"
                 >
                   Marcar como leída
                 </button>
                 <button
-                  v-if="esAdministrador"
+                  v-if="puedeGestionarAviso(notificacion)"
+                  class="notificacion-editar"
+                  @click="editarAvisoIndividual(notificacion)"
+                >
+                  <ion-icon :icon="createOutline" />
+                </button>
+                <button
+                  v-if="puedeGestionarAviso(notificacion)"
                   class="notificacion-eliminar"
-                  @click="eliminarNotificacion(notificacion.id)"
+                  @click="eliminarNotificacionIndividual(notificacion.id)"
                 >
                   <ion-icon :icon="closeOutline" />
                 </button>
@@ -584,10 +599,17 @@
         <label class="modal-label">Destinatario</label>
         <select v-model="destinatarioAviso" class="modal-input-select">
           <option value="todos">Todos los usuarios</option>
-          <option value="administradores">Solo administradores</option>
-          <option value="recepcionistas">Solo recepcionistas</option>
-          <option value="cajeros">Solo cajeros</option>
-          <option value="operadores">Solo operadores</option>
+          <option value="administrador">Solo administradores</option>
+          <option value="recepcionista">Solo recepcionistas</option>
+          <option value="cajero">Solo cajeros</option>
+          <option value="operador">Solo operadores</option>
+          <option value="individual">Usuario específico</option>
+        </select>
+        <select v-if="destinatarioAviso === 'individual'" v-model="destinatarioAvisoId" class="modal-input-select">
+          <option value="" disabled>Selecciona un usuario</option>
+          <option v-for="usuario in usuariosDestinatarios" :key="usuario.id" :value="usuario.id">
+            {{ usuario.nombre }} ({{ usuario.rol }})
+          </option>
         </select>
 
         <label class="modal-label">Mensaje</label>
@@ -656,7 +678,7 @@
 
         <div class="modal-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalAviso = false">Cancelar</ion-button>
-          <ion-button class="btn-primario" :disabled="!tituloAviso.trim() || !mensajeAviso.trim() || enviandoAviso" @click="enviarAvisoDesdeModal">
+          <ion-button class="btn-primario" :disabled="!tituloAviso.trim() || !mensajeAviso.trim() || (destinatarioAviso === 'individual' && !destinatarioAvisoId) || enviandoAviso" @click="enviarAvisoDesdeModal">
             {{ enviandoAviso ? 'Enviando...' : 'Enviar aviso' }}
           </ion-button>
         </div>
@@ -925,24 +947,34 @@ const {
   notificacionesNoLeidas,
   totalNotificacionesNoLeidas,
   cargarNotificaciones,
+  cargarAvisosEnviados,
+  cargarUsuariosDestinatarios,
   marcarNotificacionLeida,
   marcarTodasNotificacionesLeidas,
   eliminarNotificacion,
   esModoDesarrollador,
   problemasPendientes,
+  usuariosDestinatarios,
   reportarProblema,
   enviarAviso,
-  limpiarNotificaciones,
+  editarAviso,
   cambiarEstadoProblema,
-  eliminarProblema
+  eliminarProblema,
+  limpiarNotificaciones
 } = useNotificaciones()
 
 const mostrarModalNotificaciones = ref(false)
+const mostrandoHistorialAvisos = ref(false)
 const mostrarMenuNotificaciones = ref(false)
 const mostrarModalReportarProblema = ref(false)
 const mostrarModalListaProblemas = ref(false)
 const mostrarModalAviso = ref(false)
 const insigniaNotificacionesOculta = ref(false)
+const tituloAviso = ref('')
+const mensajeAviso = ref('')
+const destinatarioAviso = ref('todos')
+const destinatarioAvisoId = ref('')
+const enviandoAviso = ref(false)
 
 const abrirMenuNotificaciones = () => {
   insigniaNotificacionesOculta.value = true
@@ -950,13 +982,78 @@ const abrirMenuNotificaciones = () => {
 }
 
 const abrirModalNotificaciones = async () => {
-  await cargarNotificaciones()
+  mostrandoHistorialAvisos.value = false
+  await cargarNotificaciones(true)
   mostrarModalNotificaciones.value = true
+  mostrarMenuNotificaciones.value = false
 }
 
-const abrirModalAviso = () => {
+const abrirHistorialAvisos = async () => {
+  mostrandoHistorialAvisos.value = true
+  await cargarAvisosEnviados()
+  mostrarModalNotificaciones.value = true
+  mostrarMenuNotificaciones.value = false
+}
+
+const abrirModalAviso = async () => {
+  try {
+    await cargarUsuariosDestinatarios()
+  } catch (error) {
+    console.error('No se pudo cargar el listado de destinatarios:', error)
+  }
   mostrarModalAviso.value = true
   mostrarMenuNotificaciones.value = false
+}
+
+const puedeGestionarAviso = (notificacion: typeof notificacionesUsuario.value[number]) => {
+  if (esModoDesarrollador.value) return true
+  if (!esAdministrador.value) return false
+  return String(notificacion.autorId ?? '') === String(usuarioActual.value?.id ?? '')
+}
+
+const editarAvisoIndividual = async (notificacion: typeof notificacionesUsuario.value[number]) => {
+  const titulo = window.prompt('Título del aviso:', notificacion.titulo)
+  if (titulo === null || !titulo.trim()) return
+  const mensaje = window.prompt('Mensaje del aviso:', notificacion.mensaje)
+  if (mensaje === null || !mensaje.trim()) return
+
+  try {
+    await editarAviso(
+      notificacion.id,
+      titulo.trim(),
+      mensaje.trim(),
+      notificacion.destinatarioRol || 'todos',
+      notificacion.destinatarioId,
+    )
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo editar el aviso.')
+  }
+}
+
+const eliminarNotificacionIndividual = async (notificacionId: string) => {
+  if (!window.confirm('¿Confirmas que deseas eliminar este aviso?')) return
+  try {
+    await eliminarNotificacion(notificacionId)
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo eliminar el aviso.')
+  }
+}
+
+const enviarAvisoDesdeModal = async () => {
+  if (!tituloAviso.value.trim() || !mensajeAviso.value.trim() || enviandoAviso.value) return
+  enviandoAviso.value = true
+  try {
+    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined)
+    tituloAviso.value = ''
+    mensajeAviso.value = ''
+    destinatarioAviso.value = 'todos'
+    destinatarioAvisoId.value = ''
+    mostrarModalAviso.value = false
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo enviar el aviso.')
+  } finally {
+    enviandoAviso.value = false
+  }
 }
 
 const limpiarNotificacionesDesdeMenu = async () => {
@@ -1320,10 +1417,6 @@ const motivoGasto = ref('')
 const temaProblema = ref('')
 const detallesProblema = ref('')
 const enviandoProblema = ref(false)
-const tituloAviso = ref('')
-const mensajeAviso = ref('')
-const destinatarioAviso = ref('todos')
-const enviandoAviso = ref(false)
 const colorSeleccionado = ref('#000000')
 
 const enviarProblema = async () => {
@@ -1352,35 +1445,6 @@ const enviarProblema = async () => {
     await toast.present()
   } finally {
     enviandoProblema.value = false
-  }
-}
-
-const enviarAvisoDesdeModal = async () => {
-  if (!tituloAviso.value.trim() || !mensajeAviso.value.trim()) return
-
-  enviandoAviso.value = true
-  try {
-    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value)
-    mostrarModalAviso.value = false
-    tituloAviso.value = ''
-    mensajeAviso.value = ''
-    const toast = await toastController.create({
-      message: 'Aviso enviado correctamente.',
-      duration: 2200,
-      color: 'success',
-      position: 'top'
-    })
-    await toast.present()
-  } catch (error) {
-    const toast = await toastController.create({
-      message: error instanceof Error ? error.message : 'No se pudo enviar el aviso.',
-      duration: 2500,
-      color: 'danger',
-      position: 'top'
-    })
-    await toast.present()
-  } finally {
-    enviandoAviso.value = false
   }
 }
 

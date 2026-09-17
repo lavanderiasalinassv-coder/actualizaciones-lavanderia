@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const {
   listarNotificaciones,
+  listarAvisosEnviados,
   listarProblemas,
   listarMisProblemas,
   reportarProblema,
@@ -15,6 +16,7 @@ const {
 
 const router = Router();
 router.get("/notificaciones", listarNotificaciones);
+router.get("/notificaciones/enviados", listarAvisosEnviados);
 router.get("/notificaciones/problemas", listarProblemas);
 router.get("/notificaciones/problemas/mios", listarMisProblemas);
 router.post("/notificaciones/problemas", reportarProblema);

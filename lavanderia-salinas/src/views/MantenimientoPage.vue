@@ -80,6 +80,7 @@ import {
   cashOutline,
   checkmarkCircleOutline,
   fileTrayFullOutline,
+  notificationsOutline,
   peopleOutline,
   receiptOutline,
   trashBinOutline,
@@ -87,7 +88,7 @@ import {
   walletOutline
 } from 'ionicons/icons'
 
-type GrupoId = 'ordenes' | 'caja' | 'cierres' | 'depositos' | 'horarios' | 'tareas' | 'clientes' | 'seguridad'
+type GrupoId = 'ordenes' | 'caja' | 'cierres' | 'depositos' | 'horarios' | 'notificaciones' | 'tareas' | 'clientes' | 'seguridad'
 
 const router = useRouter()
 const { usuarioActual, esAdministrador } = useSesion()
@@ -103,7 +104,8 @@ const grupos: Array<{ id: GrupoId; nombre: string; descripcion: string; icono: s
   { id: 'caja', nombre: 'Caja', descripcion: 'Movimientos, cierres y turnos históricos', icono: walletOutline },
   { id: 'cierres', nombre: 'Cierres', descripcion: 'Cierres de caja y turnos históricos', icono: fileTrayFullOutline },
   { id: 'depositos', nombre: 'Depósitos', descripcion: 'Depósitos registrados en los movimientos de caja', icono: cashOutline },
-  { id: 'horarios', nombre: 'Horarios', descripcion: 'Registros, pagos, turnos y notificaciones', icono: calendarOutline },
+  { id: 'horarios', nombre: 'Horarios', descripcion: 'Registros, pagos, turnos y pago por hora', icono: calendarOutline },
+  { id: 'notificaciones', nombre: 'Notificaciones', descripcion: 'Vacía el historial de avisos, reportes y sus lecturas', icono: notificationsOutline },
   { id: 'tareas', nombre: 'Tareas', descripcion: 'Todas las tareas del equipo', icono: checkmarkCircleOutline },
   { id: 'clientes', nombre: 'Clientes', descripcion: 'Directorio y estadísticas de clientes', icono: peopleOutline },
   { id: 'seguridad', nombre: 'Códigos 2FA', descripcion: 'Códigos temporales de verificación', icono: warningOutline }

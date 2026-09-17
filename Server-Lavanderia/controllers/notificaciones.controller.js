@@ -2,13 +2,15 @@ const {
   obtenerParaUsuario,
   obtenerProblemas,
   obtenerProblemasDeUsuario,
+  obtenerAvisosDeAutor,
+  obtenerTodosLosAvisosEnviados,
   crearProblema,
   crearAviso,
   editarAviso,
   actualizarEstadoProblema,
   marcarLeida,
-  limpiarNotificaciones,
   eliminarProblemaDeUsuario,
+  limpiarNotificaciones,
   eliminarNotificacion,
 } = require("../querys/notificaciones.query");
 
@@ -31,12 +33,33 @@ const identidad = (req) => ({
   rol: String(req.header("x-user-role") || "").toLowerCase(),
 });
 
+const normalizarRolDestinatario = (rol) =>
+  ({
+    administradores: "administrador",
+    recepcionistas: "recepcionista",
+    cajeros: "cajero",
+    operadores: "operador",
+  }[rol] || rol);
+
 const listarNotificaciones = async (req, res) => {
-  if (esDesarrollador(req)) return res.json([]);
   const usuario = identidad(req);
   if (!usuario.id)
     return res.status(401).json({ error: "La sesión no es válida." });
   res.json(await obtenerParaUsuario(usuario.id, usuario.rol));
+};
+
+const listarAvisosEnviados = async (req, res) => {
+  if (!esDesarrollador(req) && !esAdministrador(req))
+    return res.status(403).json({ error: "Solo el desarrollador o administrador puede ver avisos enviados." });
+
+  const usuario = identidad(req);
+  if (!usuario.id)
+    return res.status(401).json({ error: "La sesión no es válida." });
+  return res.json(
+    esDesarrollador(req)
+      ? await obtenerTodosLosAvisosEnviados()
+      : await obtenerAvisosDeAutor(usuario.id),
+  );
 };
 
 const listarProblemas = async (req, res) => {
@@ -86,9 +109,10 @@ const enviarAviso = async (req, res) => {
   const usuario = identidad(req);
   const titulo = String(req.body.titulo || "").trim();
   const mensaje = String(req.body.mensaje || "").trim();
-  const destinatarioRol = String(req.body.destinatarioRol || "todos")
+  const destinatarioRol = normalizarRolDestinatario(String(req.body.destinatarioRol || "todos")
     .trim()
-    .toLowerCase();
+    .toLowerCase());
+  const destinatarioId = req.body.destinatarioId || null;
   if (!titulo || !mensaje)
     return res
       .status(400)
@@ -100,17 +124,26 @@ const enviarAviso = async (req, res) => {
       titulo,
       mensaje,
       destinatarioRol,
+      destinatarioId,
     }),
   );
 };
 
 const editarAvisoHandler = async (req, res) => {
+  if (!esAdministrador(req) && !esDesarrollador(req))
+    return res
+      .status(403)
+      .json({ error: "Solo el desarrollador o el autor administrador puede editar avisos." });
+
   const usuario = identidad(req);
+  if (!usuario.id)
+    return res.status(401).json({ error: "La sesiÃ³n no es vÃ¡lida." });
   const titulo = String(req.body.titulo || "").trim();
   const mensaje = String(req.body.mensaje || "").trim();
-  const destinatarioRol = String(req.body.destinatarioRol || "todos")
+  const destinatarioRol = normalizarRolDestinatario(String(req.body.destinatarioRol || "todos")
     .trim()
-    .toLowerCase();
+    .toLowerCase());
+  const destinatarioId = req.body.destinatarioId || null;
   
   if (!titulo || !mensaje)
     return res
@@ -121,8 +154,9 @@ const editarAvisoHandler = async (req, res) => {
     titulo,
     mensaje,
     destinatarioRol,
+    destinatarioId,
     usuarioId: usuario.id,
-    esAdministrador: esAdministrador(req),
+    esDesarrollador: esDesarrollador(req),
   });
   
   if (!avisoEditado)
@@ -154,12 +188,16 @@ const marcarComoLeida = async (req, res) => {
 };
 
 const limpiarTodas = async (req, res) => {
-  if (!esDesarrollador(req) && !esAdministrador(req))
+  if (!esDesarrollador(req))
     return res.status(403).json({
-      error: "Solo el desarrollador o administrador puede limpiar las notificaciones.",
+      error: "Solo el desarrollador puede limpiar todas las notificaciones.",
     });
   await limpiarNotificaciones();
-  res.status(204).send();
+  return res.status(204).send();
+
+  return res.status(405).json({
+    error: "El borrado masivo de notificaciones está deshabilitado. Elimina cada aviso desde el historial.",
+  });
 };
 
 const eliminarMiProblema = async (req, res) => {
@@ -182,15 +220,23 @@ const eliminarNotificacionPorId = async (req, res) => {
   if (!esAdministrador(req) && !esDesarrollador(req))
     return res
       .status(403)
-      .json({ error: "Solo el administrador puede eliminar notificaciones." });
-  const eliminado = await eliminarNotificacion(req.params.id);
+      .json({ error: "Solo el desarrollador o administrador puede eliminar avisos." });
+  const usuario = identidad(req);
+  if (!usuario.id)
+    return res.status(401).json({ error: "La sesiÃ³n no es vÃ¡lida." });
+  const eliminado = await eliminarNotificacion(
+    req.params.id,
+    usuario.id,
+    esDesarrollador(req),
+  );
   if (!eliminado)
-    return res.status(403).json({ error: "No se puede eliminar avisos del desarrollador." });
+    return res.status(403).json({ error: "Aviso no encontrado o no tienes permiso para eliminarlo." });
   res.status(204).send();
 };
 
 module.exports = {
   listarNotificaciones,
+  listarAvisosEnviados,
   listarProblemas,
   listarMisProblemas,
   reportarProblema,

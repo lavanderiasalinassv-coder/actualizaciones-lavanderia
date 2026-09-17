@@ -20,6 +20,8 @@ const TABLAS_POR_GRUPO = Object.freeze({
     "horarios_notificaciones",
     "horarios_pago_por_hora",
   ],
+  // Se eliminan primero las lecturas para respetar la relación con los avisos.
+  notificaciones: ["notificaciones_lecturas", "notificaciones"],
   tareas: ["tareas"],
   clientes: ["clientes"],
   seguridad: ["codigos_2fa"],

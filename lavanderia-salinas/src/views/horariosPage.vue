@@ -1,20 +1,6 @@
 <template>
   <AppShell>
     <div class="horarios-page">
-      <!-- ───────────── Encabezado con el usuario real de la sesión ───────────── -->
-      <div class="config-card usuario-card">
-        <div class="config-card-header">
-          <span class="config-card-label">Horarios de personal</span>
-        </div>
-        <div v-if="usuarioActual" class="usuario-actual">
-          <span class="empleado-avatar">{{ inicial(usuarioActual.nombre) }}</span>
-          <div>
-            <small>Hola!</small>
-            <p class="usuario-nombre">{{ usuarioActual.nombre }}</p>
-          </div>
-        </div>
-      </div>
-
       <div v-if="esAdministrador" class="config-card calendario-admin-card">
         <div class="card-header-row calendario-admin-header">
           <span class="card-title">
