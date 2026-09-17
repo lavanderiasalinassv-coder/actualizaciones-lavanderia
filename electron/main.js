@@ -39,8 +39,10 @@ function configurarAutoUpdater() {
     return;
   }
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // La descarga se inicia únicamente cuando la persona elige instalarla.
+  // Así puede posponer una actualización recién detectada.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("checking-for-update", () => {
     console.log("Buscando actualizaciones...");
@@ -83,18 +85,26 @@ function configurarAutoUpdater() {
     }
   });
 
-  autoUpdater.checkForUpdates();
 }
 
 ipcMain.handle("instalar-actualizacion", () => {
   autoUpdater.quitAndInstall();
 });
 
+ipcMain.handle("descargar-e-instalar-actualizacion", async () => {
+  if (!app.isPackaged) return { supported: false };
+  await autoUpdater.downloadUpdate();
+  autoUpdater.quitAndInstall();
+});
+
 ipcMain.handle("buscar-actualizaciones", () => {
   if (app.isPackaged) {
-    autoUpdater.checkForUpdates();
+    return autoUpdater.checkForUpdates();
   }
+  return { supported: false };
 });
+
+ipcMain.handle("obtener-version-aplicacion", () => app.getVersion());
 
 ipcMain.handle("reiniciar-electron", () => {
   for (const ventana of BrowserWindow.getAllWindows()) {

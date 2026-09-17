@@ -29,8 +29,8 @@
                 <div class="banner-notificacion-icono">
                   <button class="notificacion-icono-btn" @click="abrirMenuNotificaciones">
                     <ion-icon :icon="notificationsOutline" />
-                    <div v-if="!insigniaNotificacionesOculta && (totalNotificacionesNoLeidas > 0 || (esModoDesarrollador && problemasPendientes.length > 0))" class="notificacion-burbuja-pequena">
-                      {{ totalNotificacionesNoLeidas + (esModoDesarrollador ? problemasPendientes.length : 0) }}
+                    <div v-if="!insigniaNotificacionesOculta && totalAlertasNotificaciones > 0" class="notificacion-burbuja-pequena">
+                      {{ totalAlertasNotificaciones }}
                     </div>
                   </button>
                   <div v-if="mostrarMenuNotificaciones" class="notificacion-menu">
@@ -56,9 +56,10 @@
                       <ion-icon :icon="megaphoneOutline" />
                       <span>Enviar aviso</span>
                     </button>
-                    <button v-if="esElectron" class="notificacion-menu-item" @click="abrirBuscarActualizaciones">
+                    <button v-if="esElectron" class="notificacion-menu-item" @click="abrirBuscarActualizaciones()">
                       <ion-icon :icon="cloudDownloadOutline" />
                       <span>Buscar actualizaciones</span>
+                      <div v-if="actualizacionPendiente" class="notificacion-menu-burbuja">1</div>
                     </button>
                     <button v-if="esModoDesarrollador" class="notificacion-menu-item notificacion-menu-item-peligro" @click="limpiarNotificacionesDesdeMenu">
                       <ion-icon :icon="trashOutline" />
@@ -141,8 +142,8 @@
                 <div v-if="squeeze < 0.98" class="banner-notificacion-icono">
                   <button class="notificacion-icono-btn" @click="abrirMenuNotificaciones">
                     <ion-icon :icon="notificationsOutline" />
-                    <div v-if="!insigniaNotificacionesOculta && (totalNotificacionesNoLeidas > 0 || (esModoDesarrollador && problemasPendientes.length > 0))" class="notificacion-burbuja-pequena">
-                      {{ totalNotificacionesNoLeidas + (esModoDesarrollador ? problemasPendientes.length : 0) }}
+                    <div v-if="!insigniaNotificacionesOculta && totalAlertasNotificaciones > 0" class="notificacion-burbuja-pequena">
+                      {{ totalAlertasNotificaciones }}
                     </div>
                   </button>
                   <div v-if="mostrarMenuNotificaciones" class="notificacion-menu">
@@ -168,9 +169,10 @@
                       <ion-icon :icon="megaphoneOutline" />
                       <span>Enviar aviso</span>
                     </button>
-                    <button v-if="esElectron" class="notificacion-menu-item" @click="abrirBuscarActualizaciones">
+                    <button v-if="esElectron" class="notificacion-menu-item" @click="abrirBuscarActualizaciones()">
                       <ion-icon :icon="cloudDownloadOutline" />
                       <span>Buscar actualizaciones</span>
+                      <div v-if="actualizacionPendiente" class="notificacion-menu-burbuja">1</div>
                     </button>
                     <button v-if="esModoDesarrollador" class="notificacion-menu-item notificacion-menu-item-peligro" @click="limpiarNotificacionesDesdeMenu">
                       <ion-icon :icon="trashOutline" />
@@ -1203,7 +1205,7 @@
           </div>
 
           <div v-else-if="estadoActualizacion === 'disponible'" class="actualizacion-info">
-            <p>Hay una nueva versión disponible. Se descargará automáticamente en segundo plano.</p>
+            <p>Hay una nueva actualización disponible. Puedes instalarla ahora o verla después.</p>
           </div>
           <div v-else-if="estadoActualizacion === 'error'" class="actualizacion-info">
           <p>No se pudo verificar la actualización.</p>
@@ -1219,16 +1221,28 @@
           <div v-else-if="estadoActualizacion === 'lista'" class="actualizacion-info">
             <p>La actualización ya se descargó. Reinicia la aplicación para aplicarla.</p>
           </div>
+          <p class="actualizacion-version-actual">Versión actual: {{ versionActual || 'Consultando...' }}</p>
         </div>
 
         <div class="modal-botones">
+          <template v-if="estadoActualizacion === 'disponible'">
+            <ion-button class="btn-fantasma" @click="mostrarModalActualizacion = false">
+              Ver después
+            </ion-button>
+            <ion-button class="btn-primario" :disabled="instalandoActualizacion" @click="descargarEInstalarActualizacion">
+              {{ instalandoActualizacion ? 'Preparando instalación...' : 'Instalar ahora' }}
+            </ion-button>
+          </template>
           <ion-button
             v-if="estadoActualizacion === 'lista'"
             class="btn-primario"
             :disabled="instalandoActualizacion"
             @click="instalarActualizacionAhora"
           >
-            {{ instalandoActualizacion ? 'Reiniciando...' : 'Reiniciar e instalar ahora' }}
+            {{ instalandoActualizacion ? 'Reiniciando...' : 'Instalar ahora' }}
+          </ion-button>
+          <ion-button v-if="estadoActualizacion === 'lista'" class="btn-fantasma" @click="mostrarModalActualizacion = false">
+            Ver después
           </ion-button>
           <ion-button
             v-else-if="estadoActualizacion === 'buscando' || estadoActualizacion === 'descargando'"
@@ -1393,7 +1407,9 @@ type ElectronAPIActualizaciones = {
   onUpdateNoDisponible?: (cb: () => void) => void
   onUpdateError?: (cb: (mensaje: string) => void) => void
   instalarActualizacion?: () => Promise<void>
-  buscarActualizaciones?: () => Promise<void>
+  descargarEInstalarActualizacion?: () => Promise<{ supported?: boolean }>
+  buscarActualizaciones?: () => Promise<{ supported?: boolean }>
+  obtenerVersionAplicacion?: () => Promise<string>
 }
 
 const obtenerElectronAPI = () =>
@@ -1405,20 +1421,45 @@ const mostrarModalActualizacion = ref(false)
 const estadoActualizacion = ref<'buscando' | 'disponible' | 'descargando' | 'lista' | 'sin-actualizacion' | 'error'>('buscando')
 const progresoActualizacion = ref(0)
 const versionDisponible = ref('')
+const versionActual = ref('')
 const instalandoActualizacion = ref(false)
+const actualizacionPendiente = ref(false)
+const totalAlertasNotificaciones = computed(() =>
+  totalNotificacionesNoLeidas.value
+  + (esModoDesarrollador.value ? problemasPendientes.value.length : 0)
+  + (actualizacionPendiente.value ? 1 : 0)
+)
 
-const abrirBuscarActualizaciones = async () => {
+const abrirBuscarActualizaciones = async (mostrarModal = true) => {
   mostrarMenuNotificaciones.value = false
   const api = obtenerElectronAPI()
   if (!api?.buscarActualizaciones) return
 
   estadoActualizacion.value = 'buscando'
   progresoActualizacion.value = 0
-  mostrarModalActualizacion.value = true
+  mostrarModalActualizacion.value = mostrarModal
 
   try {
-    await api.buscarActualizaciones()
-  } catch {
+    const resultado = await api.buscarActualizaciones()
+    if (resultado?.supported === false) estadoActualizacion.value = 'sin-actualizacion'
+  } catch (error) {
+    mensajeErrorActualizacion.value = error instanceof Error ? error.message : 'No se pudo verificar la actualización.'
+    estadoActualizacion.value = 'error'
+    if (mostrarModal) mostrarModalActualizacion.value = true
+  }
+}
+
+const descargarEInstalarActualizacion = async () => {
+  const api = obtenerElectronAPI()
+  if (!api?.descargarEInstalarActualizacion || instalandoActualizacion.value) return
+  instalandoActualizacion.value = true
+  estadoActualizacion.value = 'descargando'
+  try {
+    await api.descargarEInstalarActualizacion()
+  } catch (error) {
+    mensajeErrorActualizacion.value = error instanceof Error ? error.message : 'No se pudo preparar la actualización.'
+    estadoActualizacion.value = 'error'
+    instalandoActualizacion.value = false
   }
 }
 
@@ -1444,6 +1485,7 @@ onMounted(() => {
 
   api.onUpdateDisponible?.((info) => {
     versionDisponible.value = info?.version || ''
+    actualizacionPendiente.value = true
     estadoActualizacion.value = 'disponible'
     progresoActualizacion.value = 0
     mostrarModalActualizacion.value = true
@@ -1464,12 +1506,24 @@ onMounted(() => {
 
   api.onUpdateNoDisponible?.(() => {
     estadoActualizacion.value = 'sin-actualizacion'
+    actualizacionPendiente.value = false
   })
 
   api.onUpdateError?.((mensaje) => {
     mensajeErrorActualizacion.value = mensaje
     estadoActualizacion.value = 'error'
   })
+
+  api.obtenerVersionAplicacion?.().then((version) => {
+    versionActual.value = version
+  }).catch(() => {})
+
+  // AppShell se monta al entrar desde el login. La marca evita búsquedas al
+  // navegar entre vistas, pero se elimina al cerrar sesión.
+  if (!sessionStorage.getItem('actualizacion-verificada-en-sesion')) {
+    sessionStorage.setItem('actualizacion-verificada-en-sesion', '1')
+    void abrirBuscarActualizaciones(false)
+  }
 })
 
 const temaProblema = ref('')
@@ -2360,6 +2414,7 @@ const cerrarCaja = async () => {
 }
 
 const cerrarSesion = () => {
+  sessionStorage.removeItem('actualizacion-verificada-en-sesion')
   cerrarSesionSesion()
   router.replace('/login').catch(() => {})
 }
@@ -5633,6 +5688,15 @@ ion-modal.modal-aviso-inicial::part(content) {
   color: #27394a;
   text-align: center;
   margin: 0;
+}
+
+.actualizacion-version-actual {
+  width: 100%;
+  margin: 14px 0 0;
+  color: #718396 !important;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .actualizacion-progreso {
