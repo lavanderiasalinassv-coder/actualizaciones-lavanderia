@@ -78,8 +78,8 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
-                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
@@ -192,8 +192,8 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior banner-perfil-superior-compacto" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
-                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
@@ -908,7 +908,7 @@
                   Marcar como leída
                 </button>
                 <button
-                  v-if="esAdministrador"
+                  v-if="puedeEditarAviso(notificacion)"
                   class="notificacion-editar"
                   @click="abrirModalEditarAviso(notificacion)"
                 >
@@ -928,7 +928,6 @@
       </div>
     </ion-modal>
 
-    <!-- Aviso inicial: se muestra hasta que el usuario lo marca como leído -->
     <ion-modal :is-open="mostrarModalAvisoInicial" class="modal-shell modal-aviso-inicial" :backdrop-dismiss="false">
       <div v-if="avisoInicial" class="modal-contenido modal-aviso-inicial-contenido modal-fondo-blanco">
         <div class="modal-header">
@@ -947,7 +946,6 @@
         </div>
 
         <div class="aviso-inicial-body">
-          <!-- Iconos de lavandería como marca de agua -->
           <div class="lavanderia-watermark">
             <ion-icon :icon="shirtOutline" class="watermark-icon watermark-icon-1" />
             <ion-icon :icon="bodyOutline" class="watermark-icon watermark-icon-2" />
@@ -2149,11 +2147,11 @@ const descargarReporteCierre = (cierre: any) => {
     y += 9
   }
 
-  const dibujarCard = (etiqueta: string, valor: string, color: { fondo: [number, number, number], texto: [number, number, number] }, x: number, anchoCard: number) => {
+  const dibujarCard = (etiqueta: string, valor: string, color: { fondo: number[], texto: number[] }, x: number, anchoCard: number) => {
     const altoCard = 20
-    pdf.setFillColor(color.fondo[0], color.fondo[1], color.fondo[2])
+    pdf.setFillColor(...color.fondo)
     pdf.roundedRect(x, y, anchoCard, altoCard, 3, 3, 'F')
-    pdf.setTextColor(color.texto[0], color.texto[1], color.texto[2])
+    pdf.setTextColor(...color.texto)
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(7)
     pdf.text(etiqueta.toUpperCase(), x + 4, y + 7)
@@ -2640,8 +2638,11 @@ const guardarEdicionAviso = async () => {
 }
 
 const puedeEditarAviso = (notificacion: NotificacionUsuario) => {
-  // Solo los administradores pueden editar notificaciones/avisos
-  return esAdministrador
+  // Solo el autor o administradores pueden editar, excepto si el autor es el desarrollador
+  const esAutorDesarrollador = notificacion.autorNombre?.toLowerCase() === 'desarrollador'
+  if (esAutorDesarrollador) return false
+  
+  return esAdministrador || (notificacion.autorNombre === usuarioActual.value?.nombre)
 }
 
 const insertarHtmlTagEditar = (tag: string, style = '') => {
