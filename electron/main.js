@@ -97,9 +97,14 @@ ipcMain.handle("descargar-e-instalar-actualizacion", async () => {
   autoUpdater.quitAndInstall();
 });
 
-ipcMain.handle("buscar-actualizaciones", () => {
+ipcMain.handle("buscar-actualizaciones", async () => {
   if (app.isPackaged) {
-    return autoUpdater.checkForUpdates();
+    const resultado = await autoUpdater.checkForUpdates();
+    return {
+      supported: true,
+      updateAvailable: Boolean(resultado?.isUpdateAvailable),
+      version: resultado?.updateInfo?.version || "",
+    };
   }
   return { supported: false };
 });

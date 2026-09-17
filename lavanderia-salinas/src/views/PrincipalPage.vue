@@ -653,29 +653,6 @@
       </div>
     </ion-modal>
 
-    <ion-modal :is-open="mostrarNotificacionPruebaActualizacion" class="modal-home" @didDismiss="mostrarNotificacionPruebaActualizacion = false">
-      <div class="modal-contenido">
-        <div class="modal-header">
-          <div class="modal-header-left">
-            <div class="modal-header-icon">
-              <ion-icon :icon="checkmarkCircleOutline" />
-            </div>
-            <div>
-              <p class="modal-titulo">Actualización de prueba</p>
-              <p class="modal-subtitulo">Confirmación de versión instalada</p>
-            </div>
-          </div>
-          <button class="modal-cerrar" @click="mostrarNotificacionPruebaActualizacion = false">
-            <ion-icon :icon="closeOutline" />
-          </button>
-        </div>
-        <p style="margin: 8px 0 18px; color: #27394a; line-height: 1.5;">Si ves esto, la actualización funciona.</p>
-        <div class="modal-botones">
-          <ion-button class="btn-primario" @click="mostrarNotificacionPruebaActualizacion = false">Entendido</ion-button>
-        </div>
-      </div>
-    </ion-modal>
-
   </div>
   </AppShell>
 </template>
@@ -1308,7 +1285,6 @@ onIonViewWillEnter(() => {
 const mostrarModalGasto = ref(false)
 const mostrarModalCierre = ref(false)
 const mostrarModalDeposito = ref(false)
-const mostrarNotificacionPruebaActualizacion = ref(true)
 const montoGasto = ref(0)
 const motivoGasto = ref('')
 
