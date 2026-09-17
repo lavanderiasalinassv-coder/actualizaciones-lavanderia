@@ -2,6 +2,9 @@
   <AppShell>
     <div class="api-page">
       <header class="api-header">
+        <button class="volver-btn" type="button" title="Volver a configuración" @click="volver">
+          <ion-icon :icon="arrowBackOutline" />
+        </button>
         <div>
           <p class="api-eyebrow">Conexión</p>
           <h2>API del sistema</h2>
@@ -96,9 +99,11 @@
 <script setup lang="ts">
 import { IonButton, IonIcon } from '@ionic/vue'
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import { API_LOCAL_URL, useApiConfig } from '@/composables/useApiConfig'
 import {
+  arrowBackOutline,
   checkmarkCircleOutline,
   desktopOutline,
   globeOutline,
@@ -117,8 +122,11 @@ const {
   guardarApiConfig // 👈 Usamos la función principal del composable
 } = useApiConfig()
 
+const router = useRouter()
 const mensaje = ref('')
 const esError = ref(false)
+
+const volver = () => void router.replace('/tabs/configuracion')
 
 // Clic en la tarjeta de Servidor en Línea
 const seleccionarServidor = () => {
@@ -160,9 +168,19 @@ const guardarConfiguracion = () => {
 .api-header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 14px;
   padding: 8px 2px 0;
+}
+
+.volver-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(10,31,56,.12);
+  border-radius: 10px;
+  background: #fff;
+  color: #123a66;
+  font-size: 20px;
+  cursor: pointer;
 }
 
 .api-eyebrow {

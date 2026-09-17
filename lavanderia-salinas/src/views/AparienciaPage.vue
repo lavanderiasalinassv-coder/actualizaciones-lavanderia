@@ -1,6 +1,18 @@
 <template>
   <AppShell>
     <div class="horarios-page">
+      <!-- ───────────── Encabezado con botón de regreso ───────────── -->
+      <header class="page-header">
+        <button class="volver-btn" type="button" title="Volver a configuración" @click="volver">
+          <ion-icon :icon="arrowBackOutline" />
+        </button>
+        <div>
+          <p class="eyebrow">Personalización</p>
+          <h2>Apariencia</h2>
+          <p>Ajusta la identidad visual de cada pantalla.</p>
+        </div>
+      </header>
+
       <!-- ───────────── Encabezado con el usuario real de la sesión ───────────── -->
       <div class="config-card">
         <div class="config-card-header">
@@ -142,6 +154,7 @@
 <script setup lang="ts">
 import { IonIcon, onIonViewWillEnter } from '@ionic/vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import logoPredeterminado from '@/assets/logo.png'
 import { useSesion } from '@/composables/useSesion'
@@ -150,6 +163,7 @@ import { getApiBaseUrl } from '@/composables/useApiConfig'
 import {
   addOutline,
   alertCircleOutline,
+  arrowBackOutline,
   calendarClearOutline,
   cashOutline,
   checkmarkCircleOutline,
@@ -165,6 +179,7 @@ import {
 } from 'ionicons/icons'
 
 /* ───────────── Sesión real (viene del login por PIN) ───────────── */
+const router = useRouter()
 const { usuarioActual, esAdministrador } = useSesion()
 const { apariencia, cargarApariencia, guardarApariencia: guardarAparienciaServidor } = useApariencia()
 const borrador = reactive<AparienciaConfig>({ ...aparienciaPredeterminada })
@@ -172,6 +187,8 @@ const subiendoImagen = ref<'appShellImagen' | 'loginImagen' | null>(null)
 const guardando = ref(false)
 const mensaje = ref('')
 const esError = ref(false)
+
+const volver = () => void router.replace('/tabs/configuracion')
 
 const previewLoginStyle = computed(() => ({
   backgroundColor: borrador.loginColor,
@@ -267,6 +284,44 @@ const inicial = (nombre: string) => nombre.trim().charAt(0).toUpperCase()
   flex-direction: column;
   gap: 18px;
   color-scheme: light;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 8px 2px 0;
+}
+
+.volver-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(10,31,56,.12);
+  border-radius: 10px;
+  background: #fff;
+  color: #123a66;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #6d829c;
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.page-header h2 {
+  margin: 0 0 8px;
+  font-size: 1.6rem;
+  color: #0a1f38;
+}
+
+.page-header p {
+  margin: 0;
+  color: #6d829c;
 }
 
 /* ── Tarjeta base (reutiliza look del Home) ── */

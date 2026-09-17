@@ -60,7 +60,8 @@
             aria-label="Editar mi perfil"
             @click="abrirModalPerfil"
           >
-            <img v-if="imagenPerfil" :src="imagenPerfil" :alt="`Foto de ${nombreUsuario}`" />
+            <img v-if="esDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${nombreUsuario}`" />
+            <img v-else-if="imagenPerfil" :src="imagenPerfil" :alt="`Foto de ${nombreUsuario}`" />
             <ion-icon v-else :icon="personCircleOutline" />
           </button>
         </div>
@@ -339,10 +340,11 @@
 
         <div class="perfil-imagen-editor">
           <div class="perfil-imagen-preview">
-            <img v-if="imagenPerfil" :src="imagenPerfil" :alt="`Foto de ${nombreUsuario}`" />
+            <img v-if="esDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${nombreUsuario}`" />
+            <img v-else-if="imagenPerfil" :src="imagenPerfil" :alt="`Foto de ${nombreUsuario}`" />
             <ion-icon v-else :icon="personOutline" />
           </div>
-          <div class="perfil-imagen-acciones">
+          <div v-if="!esDesarrollador" class="perfil-imagen-acciones">
             <div class="perfil-imagen-botones">
               <label class="btn-foto-perfil" :class="{ deshabilitado: cambiosImagenPerfil >= 2 || subiendoImagen }">
                 <ion-icon :icon="cameraOutline" />
@@ -367,16 +369,24 @@
             </div>
             <small>{{ cambiosImagenPerfil >= 2 ? 'Límite de 2 cambios alcanzado.' : `Puedes cambiarla ${2 - cambiosImagenPerfil} vez${2 - cambiosImagenPerfil === 1 ? '' : 'es'} más.` }}</small>
           </div>
+          <div v-else class="perfil-imagen-acciones">
+            <small>La foto de perfil del desarrollador no se puede cambiar.</small>
+          </div>
         </div>
 
         <label class="modal-label" for="perfil-nombre">Nombre</label>
-        <input id="perfil-nombre" v-model="perfilForm.nombre" class="modal-input-texto" type="text" maxlength="80" />
+        <input id="perfil-nombre" v-model="perfilForm.nombre" class="modal-input-texto" type="text" maxlength="80" :disabled="esDesarrollador" />
 
-        <label class="modal-label" for="perfil-pin">Nuevo PIN de acceso</label>
-        <input id="perfil-pin" v-model="perfilForm.codigo" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="6 dígitos" />
+        <div v-if="!esDesarrollador">
+          <label class="modal-label" for="perfil-pin">Nuevo PIN de acceso</label>
+          <input id="perfil-pin" v-model="perfilForm.codigo" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="6 dígitos" />
 
-        <label class="modal-label" for="perfil-pin-confirmacion">Confirmar nuevo PIN</label>
-        <input id="perfil-pin-confirmacion" v-model="perfilForm.confirmacion" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="Repite el PIN" />
+          <label class="modal-label" for="perfil-pin-confirmacion">Confirmar nuevo PIN</label>
+          <input id="perfil-pin-confirmacion" v-model="perfilForm.confirmacion" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="Repite el PIN" />
+        </div>
+        <div v-else class="perfil-desarrollador-info">
+          <small>El PIN del desarrollador no se puede cambiar desde la aplicación.</small>
+        </div>
 
         <p v-if="perfilError" class="perfil-error">{{ perfilError }}</p>
 
@@ -669,6 +679,7 @@ import { useTurno } from '@/composables/useTurno'
 import { useApariencia } from '@/composables/useApariencia'
 import { combinarFechaHoraCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
 import logo from '@/assets/logo.png'
+import imagenDesarrollador from '@/assets/perfilprogramador.png'
 import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import { editarUsuarioEquipo } from '@/composables/useEquipo'
 import { subirImagenPerfil } from '@/composables/useCloudinary'
@@ -906,6 +917,8 @@ type AccesoDirecto = {
 
 const { usuarioActual, esAdministrador, esOperador, rol, recargarSesion } = useSesion()
 
+const esDesarrollador = computed(() => usuarioActual.value?.nombre === 'Desarrollador')
+
 // Lógica de notificaciones
 const {
   notificacionesUsuario,
@@ -1072,6 +1085,21 @@ const validarPerfil = () => {
     perfilError.value = 'No se encontró el usuario de la sesión.'
     return false
   }
+
+  // Restricciones para el desarrollador
+  if (esDesarrollador.value) {
+    if (cambioNombre) {
+      perfilError.value = 'El nombre del desarrollador no se puede cambiar.'
+      return false
+    }
+    if (quiereCambiarCodigo) {
+      perfilError.value = 'El PIN del desarrollador no se puede cambiar desde la aplicación.'
+      return false
+    }
+    perfilError.value = 'No se pueden realizar cambios al perfil del desarrollador.'
+    return false
+  }
+
   if (!nombre) {
     perfilError.value = 'El nombre es obligatorio.'
     return false

@@ -10,7 +10,8 @@ export default defineConfig({
     vue()
   ],
   build: {
-    target: 'es2022'
+    target: 'es2022',
+    copyPublicDir: true
   },
   esbuild: {
     target: 'es2022'
