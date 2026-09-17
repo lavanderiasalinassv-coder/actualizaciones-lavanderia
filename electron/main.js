@@ -55,6 +55,9 @@ function configurarAutoUpdater() {
 
   autoUpdater.on("update-not-available", () => {
     console.log("La app está en la última versión.");
+    if (ventanaPrincipal) {
+      ventanaPrincipal.webContents.send("update-no-disponible");
+    }
   });
 
   autoUpdater.on("download-progress", (progress) => {
@@ -72,6 +75,12 @@ function configurarAutoUpdater() {
 
   autoUpdater.on("error", (err) => {
     console.error("Error en auto-updater:", err);
+    if (ventanaPrincipal) {
+      ventanaPrincipal.webContents.send(
+        "update-error",
+        err?.message || "Error desconocido",
+      );
+    }
   });
 
   autoUpdater.checkForUpdates();
