@@ -151,7 +151,49 @@ const enviarCorreoNotificacion = async (req, res) => {
   }
 };
 
+const enviarCorreoRecuperacion = async (correo, codigo) => {
+  try {
+    console.log(`Enviando correo de recuperación a ${correo}`);
+
+    await transporter.sendMail({
+      from: "Lavandería Salinas <lavanderiasalinassv@gmail.com>",
+      to: correo,
+      subject: "Código de recuperación de PIN - Lavandería Salinas",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f7fa;">
+          <div style="background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <h2 style="color: #123a66; margin: 0 0 20px 0;">🔑 Recuperación de PIN</h2>
+            <p style="color: #526b82; line-height: 1.6; margin: 0 0 20px 0;">
+              Hemos recibido una solicitud para recuperar tu PIN de acceso al sistema de Lavandería Salinas.
+            </p>
+            <div style="background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0; font-size: 14px; opacity: 0.9;">Tu código temporal es:</p>
+              <p style="margin: 0; font-size: 32px; font-weight: bold; letter-spacing: 4px;">${codigo}</p>
+            </div>
+            <p style="color: #6d829c; font-size: 14px; margin: 20px 0 10px 0;">
+              ⚠️ Este código expirará en <strong>1 minuto</strong> por seguridad.
+            </p>
+            <p style="color: #6d829c; font-size: 14px; margin: 10px 0 20px 0;">
+              Si no solicitaste esta recuperación, ignora este correo.
+            </p>
+            <p style="color: #6d829c; font-size: 14px; margin: 0;">
+              Gracias por confiar en Lavandería Salinas.
+            </p>
+          </div>
+        </div>
+      `,
+    });
+
+    console.log(`Correo de recuperación enviado exitosamente a ${correo}`);
+    return true;
+  } catch (error) {
+    console.error("Error al enviar correo de recuperación:", error);
+    throw error;
+  }
+};
+
 module.exports = {
   enviarCorreoHTML,
   enviarCorreoNotificacion,
+  enviarCorreoRecuperacion,
 };

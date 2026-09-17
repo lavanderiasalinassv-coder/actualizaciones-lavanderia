@@ -309,6 +309,53 @@ const eliminarUsuarioEquipo = async (id) => {
   return imagenPerfil;
 };
 
+// Funciones para recuperación de PIN
+const obtenerUsuarioPorCorreo = async (correo) => {
+  const correoNormalizado = normalizarTexto(correo).toLowerCase();
+  if (!correoNormalizado) return null;
+
+  const [rows] = await pool.query(
+    `SELECT ${CAMPOS_EQUIPO} FROM usuarios_equipo WHERE correo = ? AND activo = 1 LIMIT 1`,
+    [correoNormalizado],
+  );
+
+  return rows.length ? mapRow(rows[0]) : null;
+};
+
+const generarCodigoTemporal = () => {
+  // Generar código de 6 dígitos
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const guardarCodigoRecuperacion = async (usuarioId, codigo) => {
+  const expiracion = new Date(Date.now() + 60 * 1000); // 1 minuto de expiración
+
+  await pool.query(
+    "INSERT INTO codigos_recuperacion (id, usuario_id, codigo, expiracion) VALUES (?, ?, ?, ?) " +
+    "ON DUPLICATE KEY UPDATE codigo = ?, expiracion = ?",
+    [randomUUID(), usuarioId, codigo, expiracion, codigo, expiracion]
+  );
+};
+
+const verificarCodigoRecuperacion = async (usuarioId, codigo) => {
+  const [rows] = await pool.query(
+    "SELECT * FROM codigos_recuperacion WHERE usuario_id = ? AND codigo = ? AND expiracion > NOW() LIMIT 1",
+    [usuarioId, codigo]
+  );
+
+  if (!rows.length) {
+    throw new AppError("Código inválido o expirado.", 400);
+  }
+
+  // Eliminar el código usado
+  await pool.query(
+    "DELETE FROM codigos_recuperacion WHERE usuario_id = ?",
+    [usuarioId]
+  );
+
+  return true;
+};
+
 module.exports = {
   obtenerEquipo,
   autenticarUsuarioEquipo,
@@ -318,4 +365,8 @@ module.exports = {
   actualizarImagenPerfil,
   obtenerImagenPerfil,
   eliminarUsuarioEquipo,
+  obtenerUsuarioPorCorreo,
+  generarCodigoTemporal,
+  guardarCodigoRecuperacion,
+  verificarCodigoRecuperacion,
 };

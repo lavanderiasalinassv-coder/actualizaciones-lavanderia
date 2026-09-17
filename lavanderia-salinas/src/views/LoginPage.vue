@@ -86,6 +86,15 @@
               </div>
               </div>
 
+              <button
+                class="olvide-pin-btn"
+                type="button"
+                :disabled="cargando || mostrarModal2FA || cargandoRecuperacion"
+                @click="abrirModalRecuperacionPIN"
+              >
+                Olvidé mi PIN
+              </button>
+
               <ion-grid class="keypad-grid">
                 <ion-row v-for="fila in teclas" :key="fila.join('-')">
                   <ion-col v-for="n in fila" :key="n" size="4" class="key-col">
@@ -168,6 +177,87 @@
             @click="reenviarCodigo2FA"
           >
             {{ tiempoReenvio > 0 ? `Reenviar en ${tiempoReenvio}s` : 'Reenviar código' }}
+          </button>
+        </div>
+      </div>
+    </ion-modal>
+
+    <!-- Modal Recuperación PIN -->
+    <ion-modal :is-open="mostrarModalRecuperacionPIN" class="modal-recuperacion-pin" @didDismiss="cerrarModalRecuperacionPIN">
+      <div class="modal-recuperacion-pin-contenido force-light">
+        <div class="modal-recuperacion-pin-header">
+          <div class="modal-recuperacion-pin-icon">🔑</div>
+          <div>
+            <h3 class="modal-recuperacion-pin-titulo">Recuperar PIN</h3>
+            <p class="modal-recuperacion-pin-subtitulo">
+              Ingresa tu correo electrónico para recibir un código temporal
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-recuperacion-pin-inputs">
+          <label class="modal-recuperacion-pin-label">Correo electrónico</label>
+          <div class="modal-recuperacion-pin-email-input">
+            <input
+              v-model="correoRecuperacion"
+              type="email"
+              placeholder="tu.correo@ejemplo.com"
+              :disabled="cargandoRecuperacion || codigoEnviado"
+              @keydown.enter="enviarCodigoRecuperacion"
+            />
+          </div>
+        </div>
+
+        <div v-if="codigoEnviado" class="modal-recuperacion-pin-inputs">
+          <label class="modal-recuperacion-pin-label">Código temporal (expira en 1 minuto)</label>
+          <div class="modal-recuperacion-pin-codigo-input">
+            <input
+              v-model="codigoRecuperacion"
+              type="text"
+              maxlength="6"
+              placeholder="000000"
+              :disabled="cargandoRecuperacion"
+              @input="formatearCodigoRecuperacion"
+              @keydown.enter="verificarCodigoRecuperacion"
+            />
+          </div>
+          <div class="modal-recuperacion-pin-tiempo">
+            <span v-if="tiempoExpiracion > 0" class="tiempo-restante">
+              ⏱️ Expira en {{ tiempoExpiracion }} segundos
+            </span>
+            <span v-else class="tiempo-expirado">
+              ⏰ Código expirado
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-recuperacion-pin-botones">
+          <button class="btn-outline-recuperacion" @click="cerrarModalRecuperacionPIN">Cancelar</button>
+          <button
+            v-if="!codigoEnviado"
+            class="btn-principal-recuperacion"
+            :disabled="!correoRecuperacion || cargandoRecuperacion"
+            @click="enviarCodigoRecuperacion"
+          >
+            {{ cargandoRecuperacion ? 'Enviando...' : 'Enviar código' }}
+          </button>
+          <button
+            v-else
+            class="btn-principal-recuperacion"
+            :disabled="codigoRecuperacion.length !== 6 || cargandoRecuperacion || tiempoExpiracion <= 0"
+            @click="verificarCodigoRecuperacion"
+          >
+            {{ cargandoRecuperacion ? 'Verificando...' : 'Verificar código' }}
+          </button>
+        </div>
+
+        <div v-if="codigoEnviado && tiempoExpiracion > 0" class="modal-recuperacion-pin-reenvio">
+          <button
+            class="btn-reenvio-recuperacion"
+            :disabled="cargandoRecuperacion || tiempoReenvioRecuperacion > 0"
+            @click="reenviarCodigoRecuperacion"
+          >
+            {{ tiempoReenvioRecuperacion > 0 ? `Reenviar en ${tiempoReenvioRecuperacion}s` : 'Reenviar código' }}
           </button>
         </div>
       </div>
@@ -314,6 +404,17 @@ const codigo2FA = ref('')
 const cargando2FA = ref(false)
 const tiempoReenvio = ref(0)
 let intervaloReenvio: any = null
+
+// Estado de recuperación de PIN
+const mostrarModalRecuperacionPIN = ref(false)
+const correoRecuperacion = ref('')
+const codigoRecuperacion = ref('')
+const codigoEnviado = ref(false)
+const cargandoRecuperacion = ref(false)
+const tiempoExpiracion = ref(0)
+const tiempoReenvioRecuperacion = ref(0)
+let intervaloExpiracion: any = null
+let intervaloReenvioRecuperacion: any = null
 
 const esElectron = () => {
   const nav = typeof navigator !== 'undefined' ? navigator : null
@@ -630,6 +731,213 @@ const iniciarContadorReenvio = () => {
       intervaloReenvio = null
     }
   }, 1000)
+}
+
+// Funciones de recuperación de PIN
+const abrirModalRecuperacionPIN = () => {
+  mostrarModalRecuperacionPIN.value = true
+  correoRecuperacion.value = ''
+  codigoRecuperacion.value = ''
+  codigoEnviado.value = false
+  tiempoExpiracion.value = 0
+  tiempoReenvioRecuperacion.value = 0
+}
+
+const cerrarModalRecuperacionPIN = () => {
+  mostrarModalRecuperacionPIN.value = false
+  correoRecuperacion.value = ''
+  codigoRecuperacion.value = ''
+  codigoEnviado.value = false
+  tiempoExpiracion.value = 0
+  tiempoReenvioRecuperacion.value = 0
+  if (intervaloExpiracion) {
+    clearInterval(intervaloExpiracion)
+    intervaloExpiracion = null
+  }
+  if (intervaloReenvioRecuperacion) {
+    clearInterval(intervaloReenvioRecuperacion)
+    intervaloReenvioRecuperacion = null
+  }
+}
+
+const formatearCodigoRecuperacion = () => {
+  codigoRecuperacion.value = codigoRecuperacion.value.replace(/\D/g, '').slice(0, 6)
+}
+
+const iniciarContadorExpiracion = () => {
+  tiempoExpiracion.value = 60
+  if (intervaloExpiracion) clearInterval(intervaloExpiracion)
+
+  intervaloExpiracion = setInterval(() => {
+    tiempoExpiracion.value--
+    if (tiempoExpiracion.value <= 0) {
+      clearInterval(intervaloExpiracion)
+      intervaloExpiracion = null
+      codigoEnviado.value = false
+    }
+  }, 1000)
+}
+
+const iniciarContadorReenvioRecuperacion = () => {
+  tiempoReenvioRecuperacion.value = 30
+  if (intervaloReenvioRecuperacion) clearInterval(intervaloReenvioRecuperacion)
+
+  intervaloReenvioRecuperacion = setInterval(() => {
+    tiempoReenvioRecuperacion.value--
+    if (tiempoReenvioRecuperacion.value <= 0) {
+      clearInterval(intervaloReenvioRecuperacion)
+      intervaloReenvioRecuperacion = null
+    }
+  }, 1000)
+}
+
+const enviarCodigoRecuperacion = async () => {
+  if (!correoRecuperacion.value) return
+
+  cargandoRecuperacion.value = true
+
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/equipo/recuperar-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: correoRecuperacion.value })
+    })
+
+    if (!respuesta.ok) {
+      const error = await respuesta.json().catch(() => ({ error: 'No se pudo enviar el código.' }))
+      throw new Error(error.error || 'No se pudo enviar el código.')
+    }
+
+    const resultado = await respuesta.json()
+
+    if (resultado.error) {
+      throw new Error(resultado.error)
+    }
+
+    codigoEnviado.value = true
+    iniciarContadorExpiracion()
+    iniciarContadorReenvioRecuperacion()
+
+    const toast = await toastController.create({
+      message: 'Código enviado a tu correo electrónico.',
+      duration: 2500,
+      color: 'success'
+    })
+    toast.present()
+  } catch (error: any) {
+    const toast = await toastController.create({
+      message: error.message || 'Error al enviar código. Intenta nuevamente.',
+      duration: 2500,
+      color: 'danger'
+    })
+    toast.present()
+  } finally {
+    cargandoRecuperacion.value = false
+  }
+}
+
+const verificarCodigoRecuperacion = async () => {
+  if (codigoRecuperacion.value.length !== 6 || tiempoExpiracion.value <= 0) return
+
+  cargandoRecuperacion.value = true
+
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/equipo/verificar-recuperacion-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correo: correoRecuperacion.value,
+        codigo: codigoRecuperacion.value
+      })
+    })
+
+    if (!respuesta.ok) {
+      const error = await respuesta.json().catch(() => ({ error: 'Código inválido.' }))
+      throw new Error(error.error || 'Código inválido.')
+    }
+
+    const resultado = await respuesta.json()
+
+    if (resultado.error) {
+      throw new Error(resultado.error)
+    }
+
+    // El código es válido, ahora enviamos el 2FA y mostramos el PIN temporal
+    if (resultado.usuario) {
+      // Primero cerramos el modal de recuperación
+      cerrarModalRecuperacionPIN()
+
+      // Mostramos un toast con el PIN
+      const toast = await toastController.create({
+        message: `Tu PIN temporal es: ${resultado.pinTemporal}. Este código expirará en 1 minuto.`,
+        duration: 60000,
+        color: 'success',
+        position: 'top'
+      })
+      toast.present()
+
+      // Si el usuario requiere 2FA, también enviamos el código 2FA
+      if (resultado.requiere2FA) {
+        usuario2FA.value = {
+          id: resultado.usuario.id,
+          nombre: resultado.usuario.nombre,
+          correo: resultado.usuario.correo,
+          rol: resultado.usuario.rol
+        }
+        codigoAcceso2FA.value = resultado.pinTemporal
+        mostrarModal2FA.value = true
+        iniciarContadorReenvio()
+      } else {
+        // Si no requiere 2FA, preparamos el código y permitimos acceso
+        codigo.value = resultado.pinTemporal
+      }
+    }
+  } catch (error: any) {
+    const toast = await toastController.create({
+      message: error.message || 'Código inválido. Intenta nuevamente.',
+      duration: 2500,
+      color: 'danger'
+    })
+    toast.present()
+  } finally {
+    cargandoRecuperacion.value = false
+  }
+}
+
+const reenviarCodigoRecuperacion = async () => {
+  if (!correoRecuperacion.value) return
+
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/equipo/recuperar-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: correoRecuperacion.value })
+    })
+
+    if (!respuesta.ok) {
+      const error = await respuesta.json().catch(() => ({ error: 'No se pudo reenviar el código.' }))
+      throw new Error(error.error || 'No se pudo reenviar el código.')
+    }
+
+    codigoEnviado.value = true
+    codigoRecuperacion.value = ''
+    iniciarContadorExpiracion()
+    iniciarContadorReenvioRecuperacion()
+
+    const toast = await toastController.create({
+      message: 'Nuevo código enviado a tu correo.',
+      duration: 2500,
+      color: 'success'
+    })
+    toast.present()
+  } catch (error: any) {
+    const toast = await toastController.create({
+      message: error.message || 'Error al reenviar código. Intenta nuevamente.',
+      duration: 2500,
+      color: 'danger'
+    })
+    toast.present()
+  }
 }
 </script>
 <style scoped>
@@ -1465,6 +1773,206 @@ ion-content {
 }
 
 .btn-reenvio:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Estilos para recuperación de PIN */
+.olvide-pin-btn {
+  background: transparent;
+  border: none;
+  color: #4fb3e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 15px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  text-decoration: underline;
+}
+
+.olvide-pin-btn:hover:not(:disabled) {
+  color: #123a66;
+  background: rgba(79, 179, 224, 0.1);
+}
+
+.olvide-pin-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-recuperacion-pin {
+  --width: min(450px, 90vw);
+  --height: auto;
+  --border-radius: 16px;
+}
+
+.modal-recuperacion-pin-contenido {
+  padding: 32px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.modal-recuperacion-pin-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.modal-recuperacion-pin-icon {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+}
+
+.modal-recuperacion-pin-titulo {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #123a66;
+}
+
+.modal-recuperacion-pin-subtitulo {
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.modal-recuperacion-pin-inputs {
+  margin-bottom: 20px;
+}
+
+.modal-recuperacion-pin-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.modal-recuperacion-pin-email-input,
+.modal-recuperacion-pin-codigo-input {
+  width: 100%;
+}
+
+.modal-recuperacion-pin-email-input input,
+.modal-recuperacion-pin-codigo-input input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.modal-recuperacion-pin-email-input input:focus,
+.modal-recuperacion-pin-codigo-input input:focus {
+  outline: none;
+  border-color: #4fb3e0;
+  box-shadow: 0 0 0 3px rgba(79, 179, 224, 0.1);
+}
+
+.modal-recuperacion-pin-email-input input:disabled,
+.modal-recuperacion-pin-codigo-input input:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.modal-recuperacion-pin-tiempo {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.tiempo-restante {
+  color: #059669;
+  font-weight: 600;
+}
+
+.tiempo-expirado {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.modal-recuperacion-pin-botones {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-outline-recuperacion {
+  flex: 1;
+  padding: 12px 20px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  color: #374151;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-outline-recuperacion:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.btn-principal-recuperacion {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%);
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+}
+
+.btn-principal-recuperacion:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(79, 179, 224, 0.4);
+}
+
+.btn-principal-recuperacion:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modal-recuperacion-pin-reenvio {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.btn-reenvio-recuperacion {
+  background: transparent;
+  border: none;
+  color: #4fb3e0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.btn-reenvio-recuperacion:hover:not(:disabled) {
+  background: rgba(79, 179, 224, 0.1);
+  color: #123a66;
+}
+
+.btn-reenvio-recuperacion:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

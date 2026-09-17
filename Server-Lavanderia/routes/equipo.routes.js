@@ -9,6 +9,8 @@ const {
   editarEquipo,
   eliminarEquipo,
   subirImagenPerfil,
+  recuperarPIN,
+  verificarRecuperacionPIN,
 } = require("../controllers/equipo.controller");
 
 const router = Router();
@@ -24,6 +26,8 @@ router.get("/equipo", listarEquipo);
 router.post("/equipo/auth", autenticarEquipo);
 router.post("/equipo/verificar-2fa", verificar2FA);
 router.post("/equipo/validar-confiable", validarConfiable); // 👈 nuevo
+router.post("/equipo/recuperar-pin", recuperarPIN);
+router.post("/equipo/verificar-recuperacion-pin", verificarRecuperacionPIN);
 router.post("/equipo", crearEquipo);
 router.put("/equipo/:id", editarEquipo);
 router.post(

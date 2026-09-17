@@ -7,6 +7,10 @@ const {
   actualizarImagenPerfil,
   obtenerImagenPerfil,
   eliminarUsuarioEquipo,
+  obtenerUsuarioPorCorreo,
+  generarCodigoTemporal,
+  guardarCodigoRecuperacion,
+  verificarCodigoRecuperacion,
 } = require("../querys/equipo.query");
 const { crearCodigo2FA, validarCodigo2FA } = require("../querys/auth2fa.query");
 const { obtenerTurnoDeFecha } = require("../querys/horarios.query");
@@ -335,6 +339,88 @@ const validarConfiable = async (req, res) => {
   }
 };
 
+// Controladores para recuperación de PIN
+const recuperarPIN = async (req, res) => {
+  try {
+    const { correo } = req.body;
+
+    if (!correo) {
+      return res.status(400).json({ error: "El correo es obligatorio." });
+    }
+
+    const usuario = await obtenerUsuarioPorCorreo(correo);
+
+    if (!usuario) {
+      return res.status(404).json({ error: "No se encontró un usuario con ese correo." });
+    }
+
+    // Generar código temporal de 6 dígitos
+    const codigoTemporal = generarCodigoTemporal();
+
+    // Guardar código en base de datos con expiración de 1 minuto
+    await guardarCodigoRecuperacion(usuario.id, codigoTemporal);
+
+    // Enviar código por correo
+    try {
+      const { enviarCorreoRecuperacion } = require("../controllers/correo.controller");
+      await enviarCorreoRecuperacion(usuario.correo, codigoTemporal);
+    } catch (error) {
+      console.error("Error al enviar correo de recuperación:", error);
+      return res.status(200).json({
+        error: "Código generado pero no se pudo enviar por correo. Contacta al administrador."
+      });
+    }
+
+    res.status(200).json({ message: "Código enviado al correo." });
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
+const verificarRecuperacionPIN = async (req, res) => {
+  try {
+    const { correo, codigo } = req.body;
+
+    if (!correo || !codigo) {
+      return res.status(400).json({ error: "Correo y código son obligatorios." });
+    }
+
+    const usuario = await obtenerUsuarioPorCorreo(correo);
+
+    if (!usuario) {
+      return res.status(404).json({ error: "No se encontró un usuario con ese correo." });
+    }
+
+    // Verificar código temporal
+    await verificarCodigoRecuperacion(usuario.id, codigo);
+
+    // Generar PIN temporal (usar el mismo código temporal como PIN por 1 minuto)
+    const pinTemporal = codigo;
+
+    // Si el usuario requiere 2FA, generar y enviar código 2FA
+    let requiere2FA = false;
+    try {
+      await crearCodigo2FA(usuario.id, usuario.correo);
+      requiere2FA = true;
+    } catch (error) {
+      console.error("Error al enviar código 2FA:", error);
+    }
+
+    res.status(200).json({
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        correo: usuario.correo,
+        rol: usuario.rol
+      },
+      pinTemporal,
+      requiere2FA
+    });
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
 module.exports = {
   listarEquipo,
   autenticarEquipo,
@@ -344,4 +430,6 @@ module.exports = {
   eliminarEquipo,
   subirImagenPerfil,
   validarConfiable,
+  recuperarPIN,
+  verificarRecuperacionPIN,
 };
