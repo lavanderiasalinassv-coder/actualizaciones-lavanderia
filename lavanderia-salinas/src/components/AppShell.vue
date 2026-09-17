@@ -1406,6 +1406,7 @@ type ElectronAPIActualizaciones = {
   onUpdateLista?: (cb: (info: any) => void) => void
   onUpdateNoDisponible?: (cb: () => void) => void
   onUpdateError?: (cb: (mensaje: string) => void) => void
+  onLogMain?: (cb: (mensaje: string) => void) => void
   instalarActualizacion?: () => Promise<void>
   descargarEInstalarActualizacion?: () => Promise<{ supported?: boolean }>
   buscarActualizaciones?: () => Promise<{ supported?: boolean, updateAvailable?: boolean, version?: string }>
@@ -1483,7 +1484,13 @@ onMounted(() => {
   const api = obtenerElectronAPI()
   if (!api?.isElectron) return
 
+  // Listener para logs del proceso principal
+  api.onLogMain?.((mensaje) => {
+    console.log('[MAIN PROCESS]:', mensaje)
+  })
+
   api.onUpdateDisponible?.((info) => {
+    console.log('[UPDATE] Actualización disponible:', info)
     versionDisponible.value = info?.version || ''
     actualizacionPendiente.value = true
     estadoActualizacion.value = 'disponible'
@@ -1492,12 +1499,14 @@ onMounted(() => {
   })
 
   api.onUpdateProgreso?.((percent) => {
+    console.log('[UPDATE] Progreso:', percent)
     estadoActualizacion.value = 'descargando'
     progresoActualizacion.value = Math.round(percent || 0)
     mostrarModalActualizacion.value = true
   })
 
   api.onUpdateLista?.((info) => {
+    console.log('[UPDATE] Actualización lista:', info)
     versionDisponible.value = info?.version || versionDisponible.value
     estadoActualizacion.value = 'lista'
     progresoActualizacion.value = 100
@@ -1505,6 +1514,7 @@ onMounted(() => {
   })
 
   api.onUpdateNoDisponible?.(() => {
+    console.log('[UPDATE] No hay actualización disponible')
     estadoActualizacion.value = 'sin-actualizacion'
     actualizacionPendiente.value = false
   })

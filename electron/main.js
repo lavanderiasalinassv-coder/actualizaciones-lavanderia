@@ -34,13 +34,17 @@ function prepararConfiguracionBaseDatos() {
 }
 
 function configurarAutoUpdater() {
+  console.log("🔄 [MAIN] Iniciando configuración de auto-updater");
+  console.log("🔄 [MAIN] app.isPackaged:", app.isPackaged);
+  console.log("🔄 [MAIN] app.getVersion():", app.getVersion());
+
   if (!app.isPackaged) {
-    console.log("Auto-updater desactivado en modo desarrollo");
+    console.log("🔄 [MAIN] Auto-updater desactivado en modo desarrollo");
     return;
   }
 
-  console.log("Configurando auto-updater con app version:", app.getVersion());
-  console.log("Publisher config:", {
+  console.log("🔄 [MAIN] Configurando auto-updater con app version:", app.getVersion());
+  console.log("🔄 [MAIN] Publisher config:", {
     provider: "github",
     owner: "lavanderiasalinassv-coder",
     repo: "actualizaciones-lavanderia"
@@ -53,56 +57,72 @@ function configurarAutoUpdater() {
     repo: "actualizaciones-lavanderia"
   });
 
+  console.log("🔄 [MAIN] Feed URL configurado");
+
   // La descarga se inicia únicamente cuando la persona elige instalarla.
   // Así puede posponer una actualización recién detectada.
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
+  console.log("🔄 [MAIN] autoDownload:", autoUpdater.autoDownload);
+  console.log("🔄 [MAIN] autoInstallOnAppQuit:", autoUpdater.autoInstallOnAppQuit);
+
   autoUpdater.on("checking-for-update", () => {
-    console.log("Buscando actualizaciones...");
+    console.log("🔍 [MAIN] Buscando actualizaciones...");
+    if (ventanaPrincipal) {
+      ventanaPrincipal.webContents.send("log-main", "🔍 Buscando actualizaciones...");
+    }
   });
 
   autoUpdater.on("update-available", (info) => {
-    console.log("Actualización disponible:", info.version);
-    console.log("Detalles completos de actualización:", JSON.stringify(info, null, 2));
+    console.log("✅ [MAIN] Actualización disponible:", info.version);
+    console.log("✅ [MAIN] Detalles completos de actualización:", JSON.stringify(info, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-disponible", info);
+      ventanaPrincipal.webContents.send("log-main", `✅ Actualización disponible: ${info.version}`);
     }
   });
 
   autoUpdater.on("update-not-available", (info) => {
-    console.log("La app está en la última versión.");
-    console.log("Info de versión actual:", JSON.stringify(info, null, 2));
+    console.log("ℹ️ [MAIN] La app está en la última versión.");
+    console.log("ℹ️ [MAIN] Info de versión actual:", JSON.stringify(info, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-no-disponible");
+      ventanaPrincipal.webContents.send("log-main", "ℹ️ La app está en la última versión");
     }
   });
 
   autoUpdater.on("download-progress", (progress) => {
+    console.log("📥 [MAIN] Progreso de descarga:", progress.percent);
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-progreso", progress.percent);
+      ventanaPrincipal.webContents.send("log-main", `📥 Progreso de descarga: ${progress.percent}%`);
     }
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    console.log("Actualización descargada:", info.version);
+    console.log("🎉 [MAIN] Actualización descargada:", info.version);
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-lista", info);
+      ventanaPrincipal.webContents.send("log-main", `🎉 Actualización descargada: ${info.version}`);
     }
   });
 
   autoUpdater.on("error", (err) => {
-    console.error("Error en auto-updater:", err);
-    console.error("Detalles del error:", JSON.stringify(err, null, 2));
+    console.error("❌ [MAIN] Error en auto-updater:", err);
+    console.error("❌ [MAIN] Detalles del error:", JSON.stringify(err, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send(
         "update-error",
         err?.message || "Error desconocido",
       );
+      ventanaPrincipal.webContents.send("log-main", `❌ Error: ${err?.message || "Error desconocido"}`);
     }
   });
 
+  console.log("🚀 [MAIN] Iniciando checkForUpdates()");
   autoUpdater.checkForUpdates();
+  console.log("🚀 [MAIN] checkForUpdates() iniciado");
 }
 
 ipcMain.handle("instalar-actualizacion", () => {
