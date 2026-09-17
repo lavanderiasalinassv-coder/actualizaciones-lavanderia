@@ -39,6 +39,20 @@ function configurarAutoUpdater() {
     return;
   }
 
+  console.log("Configurando auto-updater con app version:", app.getVersion());
+  console.log("Publisher config:", {
+    provider: "github",
+    owner: "lavanderiasalinassv-coder",
+    repo: "actualizaciones-lavanderia"
+  });
+
+  // Configuración explícita para asegurar que busque en el repositorio correcto
+  autoUpdater.setFeedURL({
+    provider: "github",
+    owner: "lavanderiasalinassv-coder",
+    repo: "actualizaciones-lavanderia"
+  });
+
   // La descarga se inicia únicamente cuando la persona elige instalarla.
   // Así puede posponer una actualización recién detectada.
   autoUpdater.autoDownload = false;
@@ -50,13 +64,15 @@ function configurarAutoUpdater() {
 
   autoUpdater.on("update-available", (info) => {
     console.log("Actualización disponible:", info.version);
+    console.log("Detalles completos de actualización:", JSON.stringify(info, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-disponible", info);
     }
   });
 
-  autoUpdater.on("update-not-available", () => {
+  autoUpdater.on("update-not-available", (info) => {
     console.log("La app está en la última versión.");
+    console.log("Info de versión actual:", JSON.stringify(info, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-no-disponible");
     }
@@ -77,6 +93,7 @@ function configurarAutoUpdater() {
 
   autoUpdater.on("error", (err) => {
     console.error("Error en auto-updater:", err);
+    console.error("Detalles del error:", JSON.stringify(err, null, 2));
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send(
         "update-error",
@@ -85,6 +102,7 @@ function configurarAutoUpdater() {
     }
   });
 
+  autoUpdater.checkForUpdates();
 }
 
 ipcMain.handle("instalar-actualizacion", () => {
