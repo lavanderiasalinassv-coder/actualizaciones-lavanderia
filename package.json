@@ -1,6 +1,6 @@
 {
   "name": "lavanderia-desktop",
-  "version": "3.2.8",
+  "version": "3.2.9",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -56,7 +56,12 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "logoapp.ico"
     },
     "nsis": {
