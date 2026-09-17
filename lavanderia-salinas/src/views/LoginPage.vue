@@ -89,7 +89,7 @@
               <button
                 class="olvide-pin-btn"
                 type="button"
-                :disabled="cargando || mostrarModal2FA || cargandoRecuperacion"
+                :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN || cargandoRecuperacion"
                 @click="abrirModalRecuperacionPIN"
               >
                 Olvidé mi PIN
@@ -98,25 +98,25 @@
               <ion-grid class="keypad-grid">
                 <ion-row v-for="fila in teclas" :key="fila.join('-')">
                   <ion-col v-for="n in fila" :key="n" size="4" class="key-col">
-                    <ion-button class="key" fill="clear" :disabled="cargando || mostrarModal2FA" @click="presionar(n)">
+                    <ion-button class="key" fill="clear" :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN" @click="presionar(n)">
                       {{ n }}
                     </ion-button>
                   </ion-col>
                 </ion-row>
                 <ion-row>
-                
+
                 <ion-col size="4" class="key-col">
 
                   </ion-col>
 
                   <ion-col size="4" class="key-col">
-                    <ion-button class="key" fill="clear" :disabled="cargando || mostrarModal2FA" @click="presionar('0')">
+                    <ion-button class="key" fill="clear" :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN" @click="presionar('0')">
                       0
                     </ion-button>
                   </ion-col>
 
                   <ion-col size="4" class="key-col">
-                    <ion-button class="borrar-btn" fill="clear" :disabled="cargando || mostrarModal2FA" @click="borrar">
+                    <ion-button class="borrar-btn" fill="clear" :disabled="cargando || mostrarModal2FA || mostrarModalRecuperacionPIN" @click="borrar">
                       <span class="delete-symbol">⌫</span>
                     </ion-button>
                   </ion-col>
@@ -204,6 +204,7 @@
               placeholder="tu.correo@ejemplo.com"
               :disabled="cargandoRecuperacion || codigoEnviado"
               @keydown.enter="enviarCodigoRecuperacion"
+              @keydown="handleModalRecuperacionKeydown"
             />
           </div>
         </div>
@@ -219,6 +220,7 @@
               :disabled="cargandoRecuperacion"
               @input="formatearCodigoRecuperacion"
               @keydown.enter="verificarCodigoRecuperacion"
+              @keydown="handleModalRecuperacionKeydown"
             />
           </div>
           <div class="modal-recuperacion-pin-tiempo">
@@ -615,6 +617,11 @@ const formatearCodigo2FA = () => {
 
 const handleModalKeydown = (e: KeyboardEvent) => {
   // Prevenir que las teclas del modal afecten al keypad del login
+  e.stopPropagation()
+}
+
+const handleModalRecuperacionKeydown = (e: KeyboardEvent) => {
+  // Prevenir que las teclas del modal de recuperación afecten al keypad del login
   e.stopPropagation()
 }
 
