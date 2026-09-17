@@ -186,7 +186,7 @@ async function migrateProtegerAvisosDesarrollador() {
 
     // Verificar si el trigger de DELETE ya existe
     const [triggers] = await pool.execute(
-      "SHOW TRIGGERS WHERE Trigger = 'proteger_avisos_desarrollador_before_delete'"
+      "SHOW TRIGGERS LIKE 'proteger_avisos_desarrollador_before_delete'"
     );
 
     if (triggers.length === 0) {
@@ -209,7 +209,7 @@ async function migrateProtegerAvisosDesarrollador() {
 
     // Verificar si el trigger de UPDATE ya existe
     const [updateTriggers] = await pool.execute(
-      "SHOW TRIGGERS WHERE Trigger = 'proteger_avisos_desarrollador_before_update'"
+      "SHOW TRIGGERS LIKE 'proteger_avisos_desarrollador_before_update'"
     );
 
     if (updateTriggers.length === 0) {

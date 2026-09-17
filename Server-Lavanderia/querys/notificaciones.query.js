@@ -182,7 +182,8 @@ const eliminarProblemaDeUsuario = async (id, usuarioId) => {
 
 const limpiarNotificaciones = async () => {
   await pool.query("DELETE FROM notificaciones_lecturas");
-  await pool.query("DELETE FROM notificaciones");
+  // Eliminar solo notificaciones que no sean avisos del desarrollador
+  await pool.query("DELETE FROM notificaciones WHERE NOT (tipo = 'aviso' AND LOWER(autor_nombre) = 'desarrollador')");
 };
 
 const eliminarNotificacion = async (id) => {

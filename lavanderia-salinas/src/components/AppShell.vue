@@ -78,7 +78,8 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
@@ -191,13 +192,14 @@
                   <ion-icon :icon="logoFacebook" />
                 </button>
                 <button class="banner-perfil-superior banner-perfil-superior-compacto" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
-                  <img v-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual.nombre}`" />
+                  <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual.nombre}`" />
                   <ion-icon v-else :icon="personCircleOutline" />
                 </button>
               </div>
               <button class="banner-home-btn banner-home-btn-compacta" @click="irA('/tabs/principal')">
                 <ion-icon :icon="homeOutline" />
-                <span>Home Nuevas updates</span>
+                <span>Home</span>
               </button>
 
               <div class="banner-compacta-reloj">
@@ -216,7 +218,11 @@
               </button>
 
               <div v-show="mostrarAccionesCompactas" class="banner-acciones banner-acciones-compactas">
-                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="abrirModalGasto">
+                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="IrAdeposito">
+                  <ion-icon :icon="businessOutline" />
+                  <span>Deposito</span>
+                </button>
+                <button v-if="!esOperador" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="abrirModalGasto">
                   <ion-icon :icon="cutOutline" />
                   <span>Gasto</span>
                 </button>
@@ -902,7 +908,7 @@
                   Marcar como leída
                 </button>
                 <button
-                  v-if="puedeEditarAviso(notificacion)"
+                  v-if="esAdministrador"
                   class="notificacion-editar"
                   @click="abrirModalEditarAviso(notificacion)"
                 >
@@ -1205,7 +1211,7 @@
           </div>
 
           <div v-else-if="estadoActualizacion === 'disponible'" class="actualizacion-info">
-            <p>Hay una nueva actualización disponible. Puedes instalarla ahora o verla después.</p>
+            <p>Hay una nueva actualización disponible. Debes instalarla para continuar.</p>
           </div>
           <div v-else-if="estadoActualizacion === 'error'" class="actualizacion-info">
           <p>No se pudo verificar la actualización.</p>
@@ -1260,6 +1266,7 @@ import { IonButton, IonContent, IonIcon, IonModal, IonPage, IonSpinner } from '@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logo.png'
+import imagenDesarrollador from '@/assets/perfilprogramador.png'
 import { useTurno } from '@/composables/useTurno'
 import { useCajaMovimientos } from '@/composables/useCajaMovimientos'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
@@ -2075,6 +2082,26 @@ const descargarReporteCierre = (cierre: any) => {
   const anchoUtil = ancho - margen * 2
   let y = 18
 
+  const formatearFecha = (fecha: string) => {
+    const date = new Date(fecha)
+    if (isNaN(date.getTime())) return fecha
+    return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const formatearHora = (fecha: string) => {
+    const date = new Date(fecha)
+    if (isNaN(date.getTime())) return fecha
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const formatearFechaHora = (fecha: string) => {
+    const date = new Date(fecha)
+    if (isNaN(date.getTime())) return fecha
+    const fechaStr = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const horaStr = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+    return `${fechaStr} ${horaStr}`
+  }
+
   const encabezado = () => {
     pdf.setFillColor(8, 26, 48)
     pdf.rect(0, 0, ancho, 34, 'F')
@@ -2090,7 +2117,7 @@ const descargarReporteCierre = (cierre: any) => {
     pdf.text(`CAJA #${cierre.numeroCaja}`, ancho - margen, 15, { align: 'right' })
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
-    pdf.text(new Date(cierre.cerradoAt).toLocaleDateString('es-ES'), ancho - margen, 23, { align: 'right' })
+    pdf.text(`Cerrado: ${formatearFecha(cierre.cerradoAt)}`, ancho - margen, 23, { align: 'right' })
     pdf.setTextColor(10, 31, 56)
     y = 43
   }
@@ -2122,61 +2149,72 @@ const descargarReporteCierre = (cierre: any) => {
     y += 9
   }
 
+  const dibujarCard = (etiqueta: string, valor: string, color: { fondo: number[], texto: number[] }, x: number, anchoCard: number) => {
+    const altoCard = 20
+    pdf.setFillColor(...color.fondo)
+    pdf.roundedRect(x, y, anchoCard, altoCard, 3, 3, 'F')
+    pdf.setTextColor(...color.texto)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(7)
+    pdf.text(etiqueta.toUpperCase(), x + 4, y + 7)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    pdf.text(valor, x + 4, y + 15)
+  }
+
   encabezado()
-  texto(`Responsable: ${cierre.usuario || '-'}    Inicio: ${cierre.horaInicio || '-'}    Cierre: ${new Date(cierre.cerradoAt).toLocaleTimeString('es-ES')}`, margen, anchoUtil, 9)
+  texto(`Responsable: ${cierre.usuario || '-'}    Inicio: ${formatearFechaHora(cierre.horaInicio || cierre.cerradoAt)}    Cierre: ${formatearFechaHora(cierre.cerradoAt)}`, margen, anchoUtil, 9)
   if (cierre.notas) texto(`Notas: ${cierre.notas}`, margen, anchoUtil, 8)
 
   tituloSeccion('Resumen de caja')
-  const resumen = [
-    ['Apertura', `$${Number(cierre.apertura || 0).toFixed(2)}`],
-    ['Efectivo dejado', `$${Number(cierre.saldoCierre || 0).toFixed(2)}`],
-    ['Cobrado', `$${Number(cierre.totales?.cobrado || 0).toFixed(2)}`],
-    ['Depósitos', `$${Number(cierre.totales?.depositos || 0).toFixed(2)}`],
-    ['Cancelaciones', `$${Number(cierre.totales?.cancelaciones || 0).toFixed(2)}`],
-    ['Total recaudado', `$${Number(cierre.totales?.recaudado || 0).toFixed(2)}`],
-    ['Diferencia', `$${Number(cierre.totales?.diferencia || 0).toFixed(2)}`]
+  nuevaPaginaSiNecesario(60)
+  
+  const cardWidth = (anchoUtil - 8) / 3
+  const cardGap = 4
+  const cards = [
+    { etiqueta: 'Apertura', valor: `$${Number(cierre.apertura || 0).toFixed(2)}`, color: { fondo: [52, 211, 153], texto: [255, 255, 255] } },
+    { etiqueta: 'Dejado en caja', valor: `$${Number(cierre.saldoCierre || 0).toFixed(2)}`, color: { fondo: [59, 130, 246], texto: [255, 255, 255] } },
+    { etiqueta: 'Cobrado', valor: `$${Number(cierre.totales?.cobrado || 0).toFixed(2)}`, color: { fondo: [16, 185, 129], texto: [255, 255, 255] } },
+    { etiqueta: 'Depósitos', valor: `$${Number(cierre.totales?.depositos || 0).toFixed(2)}`, color: { fondo: [245, 158, 11], texto: [255, 255, 255] } },
+    { etiqueta: 'Cancelaciones', valor: `$${Number(cierre.totales?.cancelaciones || 0).toFixed(2)}`, color: { fondo: [239, 68, 68], texto: [255, 255, 255] } },
+    { etiqueta: 'Gastos', valor: `$${Number(cierre.totales?.gastos || 0).toFixed(2)}`, color: { fondo: [139, 92, 246], texto: [255, 255, 255] } },
+    { etiqueta: 'Total recaudado', valor: `$${Number(cierre.totales?.recaudado || 0).toFixed(2)}`, color: { fondo: [8, 26, 48], texto: [255, 255, 255] } }
   ]
-  const resumenAncho = anchoUtil / 2
-  resumen.forEach(([etiqueta, valor], indice) => {
-    const columna = indice % 2
-    const fila = Math.floor(indice / 2)
-    if (columna === 0) nuevaPaginaSiNecesario(8)
-    const x = margen + columna * resumenAncho + 4
-    const yLinea = y + fila * 6
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(8)
-    pdf.text(`${etiqueta}:`, x, yLinea)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text(valor, x + resumenAncho - 34, yLinea, { align: 'right' })
-    if (columna === 1 || indice === resumen.length - 1) y = yLinea + 7
+
+  cards.forEach((card, indice) => {
+    const fila = Math.floor(indice / 3)
+    const columna = indice % 3
+    const x = margen + columna * (cardWidth + cardGap)
+    const yCard = y + fila * 24
+    dibujarCard(card.etiqueta, card.valor, card.color, x, cardWidth)
   })
+  
+  y += 56
 
   const gastos = (cierre.movimientos || []).filter((movimiento: any) => movimiento.tipo === 'gasto')
-  tituloSeccion(`Gastos del cierre (${gastos.length})`)
-  const altoGastos = Math.max(18, 13 + gastos.length * 7)
-  nuevaPaginaSiNecesario(altoGastos)
-  const gastoY = y - 5
-  pdf.setFillColor(255, 251, 235)
-  pdf.setDrawColor(245, 190, 72)
-  pdf.roundedRect(margen, gastoY, anchoUtil, altoGastos, 3, 3, 'FD')
-  pdf.setTextColor(146, 64, 14)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(11)
-  pdf.text(`Total de gastos: $${Number(cierre.totales?.gastos || 0).toFixed(2)}`, margen + 5, gastoY + 9)
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-  if (gastos.length === 0) {
-    pdf.text('No se registraron gastos en este cierre.', margen + 5, gastoY + 16)
-  } else {
+  if (gastos.length > 0) {
+    tituloSeccion(`Detalle de gastos (${gastos.length})`)
+    const altoGastos = Math.max(15, 10 + gastos.length * 6)
+    nuevaPaginaSiNecesario(altoGastos)
+    const gastoY = y - 5
+    pdf.setFillColor(255, 251, 235)
+    pdf.setDrawColor(245, 190, 72)
+    pdf.roundedRect(margen, gastoY, anchoUtil, altoGastos, 3, 3, 'FD')
+    pdf.setTextColor(146, 64, 14)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.text(`Total: $${Number(cierre.totales?.gastos || 0).toFixed(2)}`, margen + 5, gastoY + 7)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(7)
     gastos.forEach((gasto: any, indice: number) => {
-      const concepto = String(gasto.concepto || 'Gasto sin concepto').slice(0, 72)
-      pdf.text(`${concepto} · ${gasto.creadoAt || ''}`, margen + 5, gastoY + 16 + indice * 7)
+      const concepto = String(gasto.concepto || 'Gasto sin concepto').slice(0, 60)
+      pdf.text(`${concepto}`, margen + 5, gastoY + 13 + indice * 6)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(`-$${Number(gasto.monto || 0).toFixed(2)}`, ancho - margen - 5, gastoY + 16 + indice * 7, { align: 'right' })
+      pdf.text(`-$${Number(gasto.monto || 0).toFixed(2)}`, ancho - margen - 5, gastoY + 13 + indice * 6, { align: 'right' })
       pdf.setFont('helvetica', 'normal')
     })
+    y = gastoY + altoGastos + 6
   }
-  y = gastoY + altoGastos + 8
 
   tituloSeccion(`Ordenes registradas (${cierre.ordenes?.length || 0})`)
   const columnas = [
@@ -2236,7 +2274,7 @@ const descargarReporteCierre = (cierre: any) => {
   pdf.setFontSize(8)
   pdf.setTextColor(100, 116, 139)
   pdf.text('Documento generado desde Lavandería Salinas', margen, alto - 9)
-  pdf.save(`reporte-cierre-${cierre.numeroCaja}-${String(cierre.cerradoAt).slice(0, 10)}.pdf`)
+  pdf.save(`reporte-cierre-${cierre.numeroCaja}-${formatearFecha(cierre.cerradoAt).replace(/\//g, '-')}.pdf`)
 }
 
 watch(
@@ -2602,11 +2640,8 @@ const guardarEdicionAviso = async () => {
 }
 
 const puedeEditarAviso = (notificacion: NotificacionUsuario) => {
-  // Solo el autor o administradores pueden editar, excepto si el autor es el desarrollador
-  const esAutorDesarrollador = notificacion.autorNombre?.toLowerCase() === 'desarrollador'
-  if (esAutorDesarrollador) return false
-  
-  return esAdministrador || (notificacion.autorNombre === usuarioActual.value?.nombre)
+  // Solo los administradores pueden editar notificaciones/avisos
+  return esAdministrador
 }
 
 const insertarHtmlTagEditar = (tag: string, style = '') => {
