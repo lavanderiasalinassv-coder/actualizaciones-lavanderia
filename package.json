@@ -1,6 +1,6 @@
 {
   "name": "lavanderia-desktop",
-  "version": "3.2.9",
+  "version": "3.3.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {

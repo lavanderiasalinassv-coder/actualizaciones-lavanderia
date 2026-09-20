@@ -469,6 +469,29 @@ const ventaDelDiaTurnoActual = computed(() =>
     }
   }
 
+  const aplicarDescuento = async (id: string, tipo: 'porcentaje' | 'monto', valor: number) => {
+    const valorValido = Number.isFinite(valor) ? Math.max(0, Number(valor)) : 0
+    if (valorValido <= 0) return null
+
+    if (tipo === 'porcentaje' && (valorValido <= 0 || valorValido > 100)) {
+      error.value = 'El porcentaje debe estar entre 1 y 100.'
+      return null
+    }
+
+    try {
+      const respuesta = await api(`/ordenes/${id}/descuento`, {
+        method: 'POST',
+        body: JSON.stringify({ tipo, valor: valorValido, ...payloadUsuario() })
+      }) as Orden
+
+      return reemplazarOrden(respuesta)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'No se pudo aplicar el descuento.'
+      console.error('Error al aplicar descuento:', err)
+      return null
+    }
+  }
+
   return {
     ordenes,
     totalOrdenes,
@@ -496,6 +519,7 @@ const ventaDelDiaTurnoActual = computed(() =>
     cancelarOrden,
     restaurarOrden,
     eliminarOrden,
+    aplicarDescuento,
     cargando,
     error,
     generarId,

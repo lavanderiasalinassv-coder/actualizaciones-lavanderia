@@ -25,6 +25,7 @@ router.post("/:id/movimientos", controller.crearMovimiento);
 router.post("/:id/cancelar", controller.cancelar);
 router.post("/:id/restaurar", controller.restaurar);
 router.patch("/:id/cancelar", controller.cancelar); // compatibilidad con clientes anteriores
+router.post("/:id/descuento", controller.aplicarDescuento);
 
 router.delete("/:id", controller.eliminar);
 

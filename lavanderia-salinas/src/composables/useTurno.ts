@@ -13,6 +13,13 @@ export interface TurnoCaja {
   cerradoAt: string | null
 }
 
+export interface TurnoAntiguoVerificacion {
+  tieneTurnoAntiguoAbierto: boolean
+  mensaje: string
+  fechaInicio?: string
+  horaInicio?: string
+}
+
 export interface AbrirTurnoInput {
   usuario: string
   apertura: number
@@ -37,6 +44,15 @@ const api = async (ruta: string, opciones: RequestInit = {}) => {
   const datos = await respuesta.json().catch(() => null)
   if (!respuesta.ok) throw new Error(datos?.error ?? 'No se pudo comunicar con el servidor.')
   return datos as TurnoCaja
+}
+
+const apiVerificacion = async (ruta: string, opciones: RequestInit = {}) => {
+  const respuesta = await fetch(`${getApiBaseUrl()}${ruta}`, {
+    headers: { 'Content-Type': 'application/json' }, ...opciones
+  })
+  const datos = await respuesta.json().catch(() => null)
+  if (!respuesta.ok) throw new Error(datos?.error ?? 'No se pudo comunicar con el servidor.')
+  return datos as TurnoAntiguoVerificacion
 }
 
 const aplicarTurno = (datos: TurnoCaja) => Object.assign(turno, datos)
@@ -95,6 +111,15 @@ export function useTurno() {
     return turno
   }
 
+  const verificarTurnosAntiguosAbiertos = async () => {
+    try {
+      return await apiVerificacion('/turno/verificar-antiguos')
+    } catch (error) {
+      console.error('Error al verificar turnos antiguos:', error)
+      return { tieneTurnoAntiguoAbierto: false, mensaje: '' }
+    }
+  }
+
   return {
     turno,
     turnoAbierto: computed(() => turno.abierto),
@@ -104,6 +129,7 @@ export function useTurno() {
     abrirTurno,
     cerrarTurno,
     actualizarNotasTurno,
-    resetTurno
+    resetTurno,
+    verificarTurnosAntiguosAbiertos
   }
 }

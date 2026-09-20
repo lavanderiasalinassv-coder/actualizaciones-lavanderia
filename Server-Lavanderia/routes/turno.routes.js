@@ -5,6 +5,7 @@ const {
   cerrarTurnoCaja,
   actualizarNotasTurno,
   reiniciarTurno,
+  verificarTurnosAntiguos,
 } = require("../controllers/turno.controller");
 
 const router = Router();
@@ -14,5 +15,6 @@ router.post("/turno/abrir", abrirTurnoCaja);
 router.post("/turno/cerrar", cerrarTurnoCaja);
 router.put("/turno/notas", actualizarNotasTurno);
 router.post("/turno/reset", reiniciarTurno);
+router.get("/turno/verificar-antiguos", verificarTurnosAntiguos);
 
 module.exports = router;

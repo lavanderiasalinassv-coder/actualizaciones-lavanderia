@@ -918,8 +918,20 @@
                 <span class="notificacion-fecha">{{ new Date(notificacion.fecha).toLocaleDateString('es-ES') }}</span>
               </div>
 
-              <p class="notificacion-mensaje" v-html="notificacion.mensaje"></p>
-              <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
+              <p class="notificacion-mensaje" v-html="notificacion.mensaje" @click="manejarClickImagen($event)"></p>
+              <div v-if="notificacion.imagenUrl" class="notificacion-imagen-container" @click="abrirModalImagenGrande(notificacion.imagenUrl)">
+                <img :src="notificacion.imagenUrl" alt="Imagen del aviso" class="notificacion-imagen" />
+                <div class="notificacion-imagen-lupa">
+                  <ion-icon :icon="expandOutline" />
+                </div>
+              </div>
+              <div class="notificacion-footer">
+                <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
+                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)">
+                  <ion-icon :icon="expandOutline" />
+                  Ampliar imagen
+                </button>
+              </div>
 
               <div class="notificacion-acciones">
                 <button
@@ -976,9 +988,15 @@
           </div>
 
           <div class="aviso-inicial-mensaje-container">
-            <p class="aviso-inicial-mensaje" v-html="avisoInicial.mensaje"></p>
+            <p class="aviso-inicial-mensaje" v-html="avisoInicial.mensaje" @click="manejarClickImagen($event)"></p>
           </div>
-          <p v-if="avisoInicial.autorNombre" class="aviso-inicial-autor">Enviado por: {{ avisoInicial.autorNombre }}</p>
+          <div class="aviso-inicial-footer">
+            <p v-if="avisoInicial.autorNombre" class="aviso-inicial-autor">Enviado por: {{ avisoInicial.autorNombre }}</p>
+            <button v-if="avisoInicial.imagenUrl || tieneImagenEnMensaje(avisoInicial.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(avisoInicial)">
+              <ion-icon :icon="expandOutline" />
+              Ampliar imagen
+            </button>
+          </div>
           <span class="aviso-inicial-fecha">{{ new Date(avisoInicial.fecha).toLocaleDateString('es-ES') }}</span>
         </div>
 
@@ -1080,6 +1098,9 @@
               <button type="button" class="html-toolbar-btn" @click="insertarEmoji('📢')" title="Anuncio">
                 📢
               </button>
+              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAviso" title="Agregar imagen desde URL">
+                <ion-icon :icon="imageOutline" />
+              </button>
             </div>
             
             <div 
@@ -1093,7 +1114,7 @@
           
           <div v-if="mensajeAviso" class="aviso-preview-column">
             <p class="preview-label">Vista previa:</p>
-            <div class="preview-content preview-content-grande" v-html="mensajeAviso"></div>
+            <div class="preview-content preview-content-grande" v-html="mensajeAviso" @click="eliminarImagenPreview"></div>
           </div>
         </div>
         
@@ -1103,6 +1124,59 @@
             {{ enviandoAviso ? 'Enviando...' : 'Enviar aviso' }}
           </ion-button>
         </div>
+      </div>
+    </ion-modal>
+
+    <!-- Modal de imagen URL -->
+    <ion-modal :is-open="mostrarModalImagenAviso" class="modal-shell modal-imagen-url" @didDismiss="mostrarModalImagenAviso = false">
+      <div class="modal-contenido modal-imagen-url-contenido modal-fondo-blanco">
+        <div class="modal-header">
+          <div class="modal-header-left">
+            <div class="modal-header-icon">
+              <ion-icon :icon="imageOutline" />
+            </div>
+            <div>
+              <p class="modal-titulo">Agregar imagen</p>
+              <p class="modal-subtitulo">Pega la URL de la imagen</p>
+            </div>
+          </div>
+          <button class="modal-cerrar" @click="mostrarModalImagenAviso = false">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <label class="modal-label">URL de la imagen</label>
+        <input 
+          v-model="imagenAvisoUrl" 
+          class="modal-input-texto"
+          style="color: black; background-color: white;" 
+          type="url" 
+          placeholder="https://ejemplo.com/imagen.jpg" 
+        />
+        
+        <div v-if="imagenAvisoUrl" class="imagen-url-preview">
+          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" />
+          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <div class="modal-botones">
+          <ion-button class="btn-fantasma" @click="mostrarModalImagenAviso = false">Cancelar</ion-button>
+          <ion-button class="btn-primario" :disabled="!imagenAvisoUrl.trim()" @click="confirmarImagenAviso">
+            Agregar imagen
+          </ion-button>
+        </div>
+      </div>
+    </ion-modal>
+
+    <!-- Modal de imagen grande -->
+    <ion-modal :is-open="mostrarModalImagenGrande" class="modal-shell modal-imagen-grande" @didDismiss="mostrarModalImagenGrande = false">
+      <div class="modal-contenido modal-imagen-grande-contenido">
+        <button class="modal-cerrar-imagen-grande" @click="mostrarModalImagenGrande = false">
+          <ion-icon :icon="closeOutline" />
+        </button>
+        <img :src="imagenGrandeUrl" alt="Imagen en grande" class="imagen-grande" />
       </div>
     </ion-modal>
 
@@ -1199,7 +1273,7 @@
               id="aviso-editar-mensaje" 
               contenteditable="true" 
               class="modal-textarea modal-textarea-grande editor-textarea" 
-              placeholder="Escribe aquí... (Soporta HTML y emojis)"
+              placeholder="Escribe aquí..."
               @input="mensajeAvisoEditar = ($event.target as HTMLElement).innerHTML"
             ></div>
           </div>
@@ -1364,6 +1438,8 @@ import {
   manOutline,
   womanOutline,
   cloudDownloadOutline,
+  imageOutline,
+  expandOutline,
 } from 'ionicons/icons'
 
 let resizeObserver: ResizeObserver | null = null
@@ -1427,6 +1503,10 @@ const mostrarModalNotificaciones = ref(false)
 const mostrarModalAviso = ref(false)
 const mostrarModalAvisoInicial = ref(false)
 const mostrarModalEditarAviso = ref(false)
+const mostrarModalImagenAviso = ref(false)
+const imagenAvisoUrl = ref('')
+const imagenGrandeUrl = ref('')
+const mostrarModalImagenGrande = ref(false)
 const avisoParaEditar = ref<NotificacionUsuario | null>(null)
 const tituloAvisoEditar = ref('')
 const mensajeAvisoEditar = ref('')
@@ -1652,6 +1732,61 @@ const abrirModalAviso = async () => {
   }
   mostrarModalAviso.value = true
   mostrarMenuNotificaciones.value = false
+}
+
+const abrirModalImagenAviso = () => {
+  mostrarModalImagenAviso.value = true
+}
+
+const confirmarImagenAviso = () => {
+  if (!imagenAvisoUrl.value.trim()) return
+  // Insertar la etiqueta img en el mensaje
+  const imgTag = `<img src="${imagenAvisoUrl.value}" alt="Imagen del aviso" style="max-width: 100%; border-radius: 12px; margin: 12px 0;" />`
+  mensajeAviso.value += imgTag
+  imagenAvisoUrl.value = ''
+  mostrarModalImagenAviso.value = false
+}
+
+const eliminarImagenPreview = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (target.tagName === 'IMG') {
+    if (window.confirm('¿Eliminar esta imagen del aviso?')) {
+      target.remove()
+      mensajeAviso.value = (document.getElementById('aviso-mensaje') as HTMLElement).innerHTML
+    }
+  }
+}
+
+const abrirModalImagenGrande = (url: string) => {
+  imagenGrandeUrl.value = url
+  mostrarModalImagenGrande.value = true
+}
+
+const manejarClickImagen = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (target.tagName === 'IMG' && target instanceof HTMLImageElement) {
+    abrirModalImagenGrande(target.src)
+  }
+}
+
+const tieneImagenEnMensaje = (mensaje: string) => {
+  return mensaje.includes('<img')
+}
+
+const ampliarPrimeraImagen = (notificacion: NotificacionUsuario) => {
+  // Primero revisar imagenUrl
+  if (notificacion.imagenUrl) {
+    abrirModalImagenGrande(notificacion.imagenUrl)
+    return
+  }
+  
+  // Si no, buscar en el mensaje HTML
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = notificacion.mensaje
+  const img = tempDiv.querySelector('img')
+  if (img && img.src) {
+    abrirModalImagenGrande(img.src)
+  }
 }
 
 const abrirHistorialAvisos = async () => {
@@ -4912,6 +5047,180 @@ ion-content.shell-container {
   --height: auto;
 }
 
+.modal-imagen-url {
+  --width: min(480px, 90vw);
+  --height: auto;
+  --max-height: 80vh;
+  --border-radius: 20px;
+  --backdrop-opacity: 0.6;
+  --background: rgba(0, 0, 0, 0.4);
+}
+
+.modal-imagen-url-contenido {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.imagen-url-preview {
+  margin-top: 16px;
+  position: relative;
+  display: inline-block;
+}
+
+.imagen-url-preview-img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+}
+
+.imagen-url-preview-eliminar {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease;
+}
+
+.imagen-url-preview-eliminar:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.notificacion-imagen-container {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(79, 179, 224, 0.15);
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.notificacion-imagen-container:hover {
+  transform: scale(1.02);
+}
+
+.notificacion-imagen {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  display: block;
+}
+
+.notificacion-imagen-lupa {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.notificacion-imagen-lupa ion-icon {
+  font-size: 1.4rem;
+}
+
+.notificacion-imagen-container:hover .notificacion-imagen-lupa {
+  background: rgba(0, 0, 0, 0.8);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.modal-imagen-grande {
+  --width: 100vw;
+  --height: 100vh;
+  --max-width: 100vw;
+  --max-height: 100vh;
+  --border-radius: 0;
+  --backdrop-opacity: 0.95;
+  --background: rgba(0, 0, 0, 0.9);
+}
+
+.modal-imagen-grande-contenido {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  position: relative;
+}
+
+.modal-cerrar-imagen-grande {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.modal-cerrar-imagen-grande:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: white;
+  transform: scale(1.1);
+}
+
+.modal-cerrar-imagen-grande ion-icon {
+  font-size: 1.5rem;
+}
+
+.imagen-grande {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.imagen-btn {
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee) !important;
+  color: white !important;
+  border-color: #4fb3e0 !important;
+  font-size: 1rem;
+  padding: 10px 14px;
+  min-height: 40px;
+}
+
+.imagen-btn:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9) !important;
+  border-color: #22d3ee !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.35);
+}
+
 .modal-aviso-contenido {
   max-height: 85vh;
   overflow-y: auto;
@@ -5170,6 +5479,52 @@ ion-modal.modal-aviso-inicial::part(content) {
   font-size: 12px;
   font-style: italic;
   margin: 8px 0;
+}
+
+.aviso-inicial-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(79, 179, 224, 0.15);
+}
+
+.aviso-inicial-footer .btn-ampliar-imagen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
+}
+
+.aviso-inicial-footer .btn-ampliar-imagen:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
+}
+
+.aviso-inicial-footer .btn-ampliar-imagen ion-icon {
+  font-size: 1rem;
+}
+
+.aviso-inicial-mensaje img {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.aviso-inicial-mensaje img:hover {
+  transform: scale(1.02);
 }
 
 .aviso-inicial-botones {
@@ -5713,11 +6068,57 @@ ion-modal.modal-aviso-inicial::part(content) {
   line-height: 1.5;
 }
 
+.notificacion-mensaje img {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.notificacion-mensaje img:hover {
+  transform: scale(1.02);
+}
+
 .notificacion-autor {
   margin: 4px 0 8px 0;
   font-size: 12px;
   color: #9ca3af;
   font-style: italic;
+}
+
+.notificacion-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(79, 179, 224, 0.15);
+}
+
+.btn-ampliar-imagen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
+}
+
+.btn-ampliar-imagen:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
+}
+
+.btn-ampliar-imagen ion-icon {
+  font-size: 1rem;
 }
 
 .notificacion-acciones {

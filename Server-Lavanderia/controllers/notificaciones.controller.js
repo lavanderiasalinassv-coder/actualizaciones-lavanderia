@@ -113,6 +113,17 @@ const enviarAviso = async (req, res) => {
     .trim()
     .toLowerCase());
   const destinatarioId = req.body.destinatarioId || null;
+  const imagenUrl = req.body.imagenUrl || null;
+  
+  // Validar URL de imagen si se proporciona
+  if (imagenUrl) {
+    try {
+      new URL(imagenUrl);
+    } catch {
+      return res.status(400).json({ error: "La URL de la imagen no es válida." });
+    }
+  }
+  
   if (!titulo || !mensaje)
     return res
       .status(400)
@@ -125,6 +136,7 @@ const enviarAviso = async (req, res) => {
       mensaje,
       destinatarioRol,
       destinatarioId,
+      imagenUrl,
     }),
   );
 };
@@ -144,6 +156,16 @@ const editarAvisoHandler = async (req, res) => {
     .trim()
     .toLowerCase());
   const destinatarioId = req.body.destinatarioId || null;
+  const imagenUrl = req.body.imagenUrl || null;
+  
+  // Validar URL de imagen si se proporciona
+  if (imagenUrl) {
+    try {
+      new URL(imagenUrl);
+    } catch {
+      return res.status(400).json({ error: "La URL de la imagen no es válida." });
+    }
+  }
   
   if (!titulo || !mensaje)
     return res
@@ -157,6 +179,7 @@ const editarAvisoHandler = async (req, res) => {
     destinatarioId,
     usuarioId: usuario.id,
     esDesarrollador: esDesarrollador(req),
+    imagenUrl,
   });
   
   if (!avisoEditado)

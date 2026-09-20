@@ -16,6 +16,7 @@ const {
   eliminarOrden,
   registrarMovimiento,
   actualizarCamposOrden,
+  aplicarDescuentoOrden,
 } = require("../querys/orden.query");
 const { AppError } = require("../utils/errors");
 const { obtenerTurno } = require("../querys/turno.query");
@@ -563,6 +564,36 @@ const crearMovimiento = async (req, res) => {
   }
 };
 
+const aplicarDescuento = async (req, res) => {
+  try {
+    const { tipo, valor } = req.body;
+    const tiposValidos = ["porcentaje", "monto"];
+
+    if (!tipo || !tiposValidos.includes(tipo)) {
+      return res.status(400).json({ error: "Tipo de descuento inválido. Use 'porcentaje' o 'monto'." });
+    }
+
+    if (!Number.isFinite(Number(valor)) || Number(valor) <= 0) {
+      return res.status(400).json({ error: "El valor del descuento debe ser mayor a 0." });
+    }
+
+    if (tipo === "porcentaje" && (Number(valor) <= 0 || Number(valor) > 100)) {
+      return res.status(400).json({ error: "El porcentaje debe estar entre 1 y 100." });
+    }
+
+    const usuario = obtenerUsuarioAuditoria(req);
+    const orden = await aplicarDescuentoOrden(
+      req.params.id,
+      tipo,
+      Number(valor),
+      usuario,
+    );
+    res.status(200).json(orden);
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
 module.exports = {
   listarOrdenes,
   obtenerOrden,
@@ -581,4 +612,5 @@ module.exports = {
   eliminar,
   crearMovimiento,
   actualizarCampos,
+  aplicarDescuento,
 };

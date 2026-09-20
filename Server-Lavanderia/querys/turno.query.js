@@ -159,10 +159,50 @@ const resetTurno = async () => {
   return obtenerTurno();
 };
 
+const verificarTurnosAntiguosAbiertos = async () => {
+  const actual = await obtenerTurno();
+  if (!actual.abierto || !actual.horaInicio) {
+    return { tieneTurnoAntiguoAbierto: false, mensaje: "" };
+  }
+
+  const hoy = new Date();
+  const fechaTurno = new Date(actual.horaInicio);
+
+  // Comparar solo las fechas (ignorar hora)
+  const hoyFecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const turnoFecha = new Date(
+    fechaTurno.getFullYear(),
+    fechaTurno.getMonth(),
+    fechaTurno.getDate(),
+  );
+
+  // Si el turno es de un día anterior
+  if (turnoFecha < hoyFecha) {
+    const fechaFormateada = fechaTurno.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    return {
+      tieneTurnoAntiguoAbierto: true,
+      mensaje: `⚠️ El turno del día ${fechaFormateada} sigue abierto.`,
+      fechaInicio: fechaFormateada,
+      horaInicio: fechaTurno.toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }
+
+  return { tieneTurnoAntiguoAbierto: false, mensaje: "" };
+};
+
 module.exports = {
   obtenerTurno,
   abrirTurno,
   cerrarTurno,
   actualizarNotas,
   resetTurno,
+  verificarTurnosAntiguosAbiertos,
 };

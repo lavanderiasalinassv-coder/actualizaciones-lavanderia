@@ -497,6 +497,28 @@
                 <p v-else class="hint-texto-vacio">Sin cargos extra registrados.</p>
               </section>
 
+              <section v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada' && ordenSeleccionada.estado !== 'cancelada'" class="detalle-bloque">
+                <div class="seccion-titulo">
+                  <strong>🏷️ Descuentos</strong>
+                  <button class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalDescuento">
+                    + Aplicar descuento
+                  </button>
+                </div>
+
+                <div v-if="ordenSeleccionada.descuento > 0" class="servicios-lista">
+                  <article class="servicio-linea">
+                    <div>
+                      <strong>Descuento aplicado</strong>
+                      <span>{{ formatearFechaHora(ordenSeleccionada.updatedAt) }}</span>
+                    </div>
+                    <div class="linea-derecha">
+                      <strong v-if="puedeVerMontos">-${{ ordenSeleccionada.descuento.toFixed(2) }}</strong>
+                    </div>
+                  </article>
+                </div>
+                <p v-else class="hint-texto-vacio">Sin descuentos aplicados.</p>
+              </section>
+
               <section class="detalle-bloque">
                 <div class="seccion-titulo">
                   <strong>📸 Fotos</strong>
@@ -1053,6 +1075,78 @@
       </div>
     </ion-modal>
 
+    <ion-modal :is-open="mostrarModalDescuento" class="modal-confirmacion" @didDismiss="cerrarModalDescuento">
+      <div class="modal-confirmacion-contenido force-light">
+        <div class="modal-confirmacion-header">
+          <div class="modal-confirmacion-icon">%</div>
+          <div>
+            <p class="modal-confirmacion-titulo">Aplicar descuento</p>
+            <p class="modal-confirmacion-subtitulo">
+              Se aplicará un descuento a la orden {{ ordenSeleccionada?.numero ?? '' }}.
+            </p>
+          </div>
+        </div>
+
+        <label class="modal-label">Tipo de descuento</label>
+        <div class="descuento-tipo-selector">
+          <button
+            type="button"
+            class="descuento-tipo-btn"
+            :class="{ active: tipoDescuento === 'porcentaje' }"
+            @click="tipoDescuento = 'porcentaje'"
+          >
+            Porcentaje
+          </button>
+          <button
+            type="button"
+            class="descuento-tipo-btn"
+            :class="{ active: tipoDescuento === 'monto' }"
+            @click="tipoDescuento = 'monto'"
+          >
+            Monto fijo
+          </button>
+        </div>
+
+        <label class="modal-label">
+          {{ tipoDescuento === 'porcentaje' ? 'Porcentaje de descuento' : 'Monto de descuento' }}
+        </label>
+        <div class="modal-input-monto">
+          <span>{{ tipoDescuento === 'porcentaje' ? '%' : '$' }}</span>
+          <input
+            v-model.number="valorDescuento"
+            :type="tipoDescuento === 'porcentaje' ? 'number' : 'number'"
+            :min="tipoDescuento === 'porcentaje' ? 1 : 0.01"
+            :max="tipoDescuento === 'porcentaje' ? 100 : undefined"
+            :step="tipoDescuento === 'porcentaje' ? 1 : 0.01"
+            :placeholder="tipoDescuento === 'porcentaje' ? '0' : '0.00'"
+          />
+        </div>
+
+        <div v-if="ordenSeleccionada && valorDescuento > 0" class="descuento-preview">
+          <p>
+            <strong>Subtotal actual:</strong> ${{ ordenSeleccionada.subtotal.toFixed(2) }}
+          </p>
+          <p>
+            <strong>Descuento a aplicar:</strong> ${{ calcularDescuentoPreview().toFixed(2) }}
+          </p>
+          <p>
+            <strong>Total con descuento:</strong> ${{ (ordenSeleccionada.subtotal - calcularDescuentoPreview()).toFixed(2) }}
+          </p>
+        </div>
+
+        <div class="modal-confirmacion-botones">
+          <button class="btn-outline" @click="cerrarModalDescuento">Cancelar</button>
+          <button
+            class="btn-principal"
+            :disabled="valorDescuento <= 0 || peticionOrdenEnCurso || turnoCerrado"
+            @click="confirmarDescuento"
+          >
+            {{ peticionOrdenEnCurso ? 'Aplicando...' : 'Aplicar descuento' }}
+          </button>
+        </div>
+      </div>
+    </ion-modal>
+
     <ion-modal :is-open="mostrarModalRecepcion" class="modal-confirmacion" @didDismiss="cerrarModalRecepcion">
       <div class="modal-confirmacion-contenido force-light">
         <div class="modal-confirmacion-header">
@@ -1193,6 +1287,7 @@ const {
   restaurarOrden,
   eliminarOrden,
   registrarMovimiento,
+  aplicarDescuento,
 } = useOrdenes()
 
 const busqueda = ref('')
@@ -1339,6 +1434,9 @@ const notaRecepcionModal = ref('')
 const mostrarModalCargoExtra = ref(false)
 const descripcionCargoExtra = ref('')
 const montoCargoExtra = ref(0)
+const mostrarModalDescuento = ref(false)
+const tipoDescuento = ref<'porcentaje' | 'monto'>('porcentaje')
+const valorDescuento = ref(0)
 const enviandoCorreo = ref(false)
 const peticionOrdenEnCurso = ref(false)
 const mostrarModalComprobante = ref(false)
@@ -1909,6 +2007,58 @@ const eliminarFotoSeleccionada = async (index: number) => {
     await eliminarFoto(ordenSeleccionada.value.id, index)
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo eliminar la foto.')
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const abrirModalDescuento = () => {
+  if (!ordenSeleccionada.value || ordenSeleccionada.value.estado === 'cerrada' || ordenSeleccionada.value.estado === 'cancelada') return
+  tipoDescuento.value = 'porcentaje'
+  valorDescuento.value = 0
+  mostrarModalDescuento.value = true
+}
+
+const cerrarModalDescuento = () => {
+  mostrarModalDescuento.value = false
+  tipoDescuento.value = 'porcentaje'
+  valorDescuento.value = 0
+}
+
+const calcularDescuentoPreview = () => {
+  if (!ordenSeleccionada.value) return 0
+  const subtotal = ordenSeleccionada.value.subtotal
+  
+  if (tipoDescuento.value === 'porcentaje') {
+    const porcentaje = Math.max(0, Math.min(100, valorDescuento.value))
+    return Number((subtotal * (porcentaje / 100)).toFixed(2))
+  } else {
+    return Math.max(0, Math.min(subtotal, valorDescuento.value))
+  }
+}
+
+const confirmarDescuento = async () => {
+  if (!ordenSeleccionada.value || valorDescuento.value <= 0 || peticionOrdenEnCurso.value) return
+  if (ordenSeleccionada.value.estado === 'cerrada' || ordenSeleccionada.value.estado === 'cancelada') {
+    window.alert('No se puede aplicar descuento a una orden cerrada o cancelada.')
+    return
+  }
+  
+  peticionOrdenEnCurso.value = true
+  
+  try {
+    const resultado = await aplicarDescuento(ordenSeleccionada.value.id, tipoDescuento.value, valorDescuento.value)
+    if (resultado) {
+      cerrarModalDescuento()
+      const toast = await toastController.create({
+        message: 'Descuento aplicado correctamente.',
+        duration: 2500,
+        color: 'success'
+      })
+      await toast.present()
+    }
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo aplicar el descuento.')
   } finally {
     peticionOrdenEnCurso.value = false
   }
@@ -5068,6 +5218,59 @@ onBeforeUnmount(() => {
   outline: none;
   flex: 1;
   font-size: 1rem;
+  font-weight: 700;
+}
+
+.descuento-tipo-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.descuento-tipo-btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid #a9d8ee;
+  border-radius: 12px;
+  background: #fbfdfe;
+  color: #0a1f38;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.descuento-tipo-btn:hover {
+  background: #f0f8ff;
+}
+
+.descuento-tipo-btn.active {
+  background: #0a1f38;
+  color: #ffffff;
+  border-color: #0a1f38;
+}
+
+.descuento-preview {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+  border: 1px solid #a9d8ee;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.descuento-preview p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #0a1f38;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.descuento-preview strong {
   font-weight: 700;
 }
 
