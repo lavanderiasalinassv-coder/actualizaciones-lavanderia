@@ -1131,7 +1131,7 @@ const editarAvisoIndividual = async (notificacion: typeof notificacionesUsuario.
       mensaje.trim(),
       notificacion.destinatarioRol || 'todos',
       notificacion.destinatarioId,
-      imagenUrl.trim() || undefined
+      imagenUrl?.trim() || undefined
     )
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo editar el aviso.')
