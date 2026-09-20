@@ -490,9 +490,8 @@
               </div>
               <div class="notificacion-footer">
                 <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
-                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)">
+                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)" title="Ampliar imagen">
                   <ion-icon :icon="expandOutline" />
-                  Ampliar imagen
                 </button>
               </div>
 
@@ -700,9 +699,17 @@
           ></div>
         </div>
         
-        <div v-if="mensajeAviso" class="aviso-preview-column">
+        <div v-if="mensajeAviso || imagenesAviso.length > 0" class="aviso-preview-column">
           <p class="preview-label">Vista previa:</p>
-          <div class="preview-content preview-content-grande" v-html="mensajeAviso" @click="eliminarImagenPreview"></div>
+          <div class="preview-content preview-content-grande">
+            <div v-html="mensajeAviso"></div>
+            <div v-for="(imagen, index) in imagenesAviso" :key="index" class="preview-imagen-container">
+              <img :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
+              <button class="preview-imagen-eliminar" @click="eliminarImagenAviso(index)">
+                <ion-icon :icon="trashOutline" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="modal-botones">
@@ -733,16 +740,18 @@
         </div>
 
         <label class="modal-label">URL de la imagen</label>
-        <input 
-          v-model="imagenAvisoUrl" 
-          class="modal-input-texto" 
-          type="url" 
-          placeholder="https://ejemplo.com/imagen.jpg" 
+        <input
+          v-model="imagenAvisoUrl"
+          class="modal-input-texto"
+          type="url"
+          placeholder="https://ejemplo.com/imagen.jpg"
         />
-        
+
         <div v-if="imagenAvisoUrl" class="imagen-url-preview">
-          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" />
-          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''">
+          <p class="preview-info-text">Vista previa:</p>
+          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" @error="imagenError = true" @load="imagenError = false" />
+          <p v-if="imagenError" class="preview-error-text">No se pudo cargar la imagen. Verifica la URL.</p>
+          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''; imagenError = false">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
@@ -1067,6 +1076,8 @@ const mensajeAviso = ref('')
 const destinatarioAviso = ref('todos')
 const destinatarioAvisoId = ref('')
 const imagenAvisoUrl = ref('')
+const imagenesAviso = ref<string[]>([])
+const imagenError = ref(false)
 const mostrarModalImagenAviso = ref(false)
 const imagenGrandeUrl = ref('')
 const mostrarModalImagenGrande = ref(false)
@@ -1151,12 +1162,15 @@ const enviarAvisoDesdeModal = async () => {
   if (!tituloAviso.value.trim() || !mensajeAviso.value.trim() || enviandoAviso.value) return
   enviandoAviso.value = true
   try {
-    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined, imagenAvisoUrl.value || undefined)
+    // Enviar la primera imagen del array como imagenUrl
+    const imagenUrl = imagenesAviso.value.length > 0 ? imagenesAviso.value[0] : undefined
+    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined, imagenUrl)
     tituloAviso.value = ''
     mensajeAviso.value = ''
     destinatarioAviso.value = 'todos'
     destinatarioAvisoId.value = ''
     imagenAvisoUrl.value = ''
+    imagenesAviso.value = []
     mostrarModalAviso.value = false
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo enviar el aviso.')
@@ -1173,11 +1187,14 @@ const abrirModalImagenAviso = () => {
 
 const confirmarImagenAviso = () => {
   if (!imagenAvisoUrl.value.trim()) return
-  // Insertar la etiqueta img en el mensaje
-  const imgTag = `<img src="${imagenAvisoUrl.value}" alt="Imagen del aviso" style="max-width: 100%; border-radius: 12px; margin: 12px 0;" />`
-  mensajeAviso.value += imgTag
+  // Agregar la URL al array de imágenes
+  imagenesAviso.value.push(imagenAvisoUrl.value)
   imagenAvisoUrl.value = ''
   mostrarModalImagenAviso.value = false
+}
+
+const eliminarImagenAviso = (index: number) => {
+  imagenesAviso.value.splice(index, 1)
 }
 
 const eliminarImagenPreview = (event: MouseEvent) => {
@@ -3216,14 +3233,14 @@ const aplicarColor = () => {
 .btn-ampliar-imagen {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   background: linear-gradient(135deg, #4fb3e0, #22d3ee);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
@@ -3231,12 +3248,12 @@ const aplicarColor = () => {
 
 .btn-ampliar-imagen:hover {
   background: linear-gradient(135deg, #22d3ee, #0ea5e9);
-  transform: translateY(-2px);
+  transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
 }
 
 .btn-ampliar-imagen ion-icon {
-  font-size: 1rem;
+  font-size: 1.2rem;
 }
 
 .notificacion-acciones {
@@ -3933,6 +3950,23 @@ const aplicarColor = () => {
   margin-top: 16px;
   position: relative;
   display: inline-block;
+  width: 100%;
+}
+
+.preview-info-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6d829c;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.preview-error-text {
+  font-size: 0.9rem;
+  color: #ef4444;
+  margin: 8px 0;
+  font-weight: 500;
 }
 
 .imagen-url-preview-img {
@@ -3941,6 +3975,7 @@ const aplicarColor = () => {
   border-radius: 12px;
   border: 2px solid rgba(79, 179, 224, 0.25);
   box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+  display: block;
 }
 
 .imagen-url-preview-eliminar {

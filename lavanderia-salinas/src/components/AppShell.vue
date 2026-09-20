@@ -927,9 +927,8 @@
               </div>
               <div class="notificacion-footer">
                 <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
-                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)">
+                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)" title="Ampliar imagen">
                   <ion-icon :icon="expandOutline" />
-                  Ampliar imagen
                 </button>
               </div>
 
@@ -989,12 +988,17 @@
 
           <div class="aviso-inicial-mensaje-container">
             <p class="aviso-inicial-mensaje" v-html="avisoInicial.mensaje" @click="manejarClickImagen($event)"></p>
+            <div v-if="avisoInicial.imagenUrl" class="aviso-inicial-imagen-container" @click="abrirModalImagenGrande(avisoInicial.imagenUrl)">
+              <img :src="avisoInicial.imagenUrl" alt="Imagen del aviso" class="aviso-inicial-imagen" />
+              <div class="aviso-inicial-imagen-lupa">
+                <ion-icon :icon="expandOutline" />
+              </div>
+            </div>
           </div>
           <div class="aviso-inicial-footer">
             <p v-if="avisoInicial.autorNombre" class="aviso-inicial-autor">Enviado por: {{ avisoInicial.autorNombre }}</p>
-            <button v-if="avisoInicial.imagenUrl || tieneImagenEnMensaje(avisoInicial.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(avisoInicial)">
+            <button v-if="avisoInicial.imagenUrl || tieneImagenEnMensaje(avisoInicial.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(avisoInicial)" title="Ampliar imagen">
               <ion-icon :icon="expandOutline" />
-              Ampliar imagen
             </button>
           </div>
           <span class="aviso-inicial-fecha">{{ new Date(avisoInicial.fecha).toLocaleDateString('es-ES') }}</span>
@@ -1112,9 +1116,17 @@
             ></div>
           </div>
           
-          <div v-if="mensajeAviso" class="aviso-preview-column">
+          <div v-if="mensajeAviso || imagenesAviso.length > 0" class="aviso-preview-column">
             <p class="preview-label">Vista previa:</p>
-            <div class="preview-content preview-content-grande" v-html="mensajeAviso" @click="eliminarImagenPreview"></div>
+            <div class="preview-content preview-content-grande">
+              <div v-html="mensajeAviso"></div>
+              <div v-for="(imagen, index) in imagenesAviso" :key="index" class="preview-imagen-container">
+                <img :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
+                <button class="preview-imagen-eliminar" @click="eliminarImagenAviso(index)">
+                  <ion-icon :icon="trashOutline" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -1146,17 +1158,19 @@
         </div>
 
         <label class="modal-label">URL de la imagen</label>
-        <input 
-          v-model="imagenAvisoUrl" 
+        <input
+          v-model="imagenAvisoUrl"
           class="modal-input-texto"
-          style="color: black; background-color: white;" 
-          type="url" 
-          placeholder="https://ejemplo.com/imagen.jpg" 
+          style="color: black; background-color: white;"
+          type="url"
+          placeholder="https://ejemplo.com/imagen.jpg"
         />
-        
+
         <div v-if="imagenAvisoUrl" class="imagen-url-preview">
-          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" />
-          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''">
+          <p class="preview-info-text">Vista previa:</p>
+          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" @error="imagenError = true" @load="imagenError = false" />
+          <p v-if="imagenError" class="preview-error-text">No se pudo cargar la imagen. Verifica la URL.</p>
+          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''; imagenError = false">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
@@ -1267,6 +1281,9 @@
               <button type="button" class="html-toolbar-btn" @click="insertarEmojiEditar('📢')" title="Anuncio">
                 📢
               </button>
+              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAvisoEditar" title="Agregar imagen">
+                <ion-icon :icon="imageOutline" />
+              </button>
             </div>
             
             <div 
@@ -1278,9 +1295,17 @@
             ></div>
           </div>
           
-          <div v-if="mensajeAvisoEditar" class="aviso-preview-column">
+          <div v-if="mensajeAvisoEditar || imagenesAvisoEditar.length > 0" class="aviso-preview-column">
             <p class="preview-label">Vista previa:</p>
-            <div class="preview-content preview-content-grande" v-html="mensajeAvisoEditar"></div>
+            <div class="preview-content preview-content-grande">
+              <div v-html="mensajeAvisoEditar"></div>
+              <div v-for="(imagen, index) in imagenesAvisoEditar" :key="index" class="preview-imagen-container">
+                <img :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
+                <button class="preview-imagen-eliminar" @click="eliminarImagenAvisoEditar(index)">
+                  <ion-icon :icon="trashOutline" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -1292,6 +1317,52 @@
         </div>
       </div>
     </ion-modal>
+
+    <!-- Modal de imagen URL para editar -->
+    <ion-modal :is-open="mostrarModalImagenAvisoEditar" class="modal-shell modal-imagen-url" @didDismiss="mostrarModalImagenAvisoEditar = false">
+      <div class="modal-contenido modal-imagen-url-contenido modal-fondo-blanco">
+        <div class="modal-header">
+          <div class="modal-header-left">
+            <div class="modal-header-icon">
+              <ion-icon :icon="imageOutline" />
+            </div>
+            <div>
+              <p class="modal-titulo">Agregar imagen</p>
+              <p class="modal-subtitulo">Pega la URL de la imagen</p>
+            </div>
+          </div>
+          <button class="modal-cerrar" @click="mostrarModalImagenAvisoEditar = false">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <label class="modal-label">URL de la imagen</label>
+        <input
+          v-model="imagenAvisoUrlEditar"
+          class="modal-input-texto"
+          style="color: black; background-color: white;"
+          type="url"
+          placeholder="https://ejemplo.com/imagen.jpg"
+        />
+
+        <div v-if="imagenAvisoUrlEditar" class="imagen-url-preview">
+          <p class="preview-info-text">Vista previa:</p>
+          <img :src="imagenAvisoUrlEditar" alt="Vista previa" class="imagen-url-preview-img" @error="imagenErrorEditar = true" @load="imagenErrorEditar = false" />
+          <p v-if="imagenErrorEditar" class="preview-error-text">No se pudo cargar la imagen. Verifica la URL.</p>
+          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrlEditar = ''; imagenErrorEditar = false">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <div class="modal-botones">
+          <ion-button class="btn-fantasma" @click="mostrarModalImagenAvisoEditar = false">Cancelar</ion-button>
+          <ion-button class="btn-primario" :disabled="!imagenAvisoUrlEditar.trim()" @click="confirmarImagenAvisoEditar">
+            Agregar imagen
+          </ion-button>
+        </div>
+      </div>
+    </ion-modal>
+
     <ion-modal :is-open="mostrarModalActualizacion" class="modal-shell modal-actualizacion" :backdrop-dismiss="false" @didDismiss="cerrarModalActualizacion">
       <div class="modal-contenido modal-fondo-blanco">
         <div class="modal-header">
@@ -1504,6 +1575,7 @@ const mostrarModalAviso = ref(false)
 const mostrarModalAvisoInicial = ref(false)
 const mostrarModalEditarAviso = ref(false)
 const mostrarModalImagenAviso = ref(false)
+const mostrarModalImagenAvisoEditar = ref(false)
 const imagenAvisoUrl = ref('')
 const imagenGrandeUrl = ref('')
 const mostrarModalImagenGrande = ref(false)
@@ -1513,6 +1585,9 @@ const mensajeAvisoEditar = ref('')
 const destinatarioAvisoEditar = ref('todos')
 const destinatarioAvisoIdEditar = ref('')
 const enviandoAvisoEditar = ref(false)
+const imagenesAvisoEditar = ref<string[]>([])
+const imagenAvisoUrlEditar = ref('')
+const imagenErrorEditar = ref(false)
 const colorSeleccionado = ref('#000000')
 const colorSeleccionadoEditar = ref('#000000')
 const {
@@ -1710,6 +1785,8 @@ const mensajeAviso = ref('')
 const destinatarioAviso = ref('todos')
 const destinatarioAvisoId = ref('')
 const enviandoAviso = ref(false)
+const imagenesAviso = ref<string[]>([])
+const imagenError = ref(false)
 const contentAreaRef = ref<HTMLDivElement | null>(null)
 const navegando = ref(false)
 const esRecepcionista = computed(() => rol.value === 'recepcionista')
@@ -1740,11 +1817,14 @@ const abrirModalImagenAviso = () => {
 
 const confirmarImagenAviso = () => {
   if (!imagenAvisoUrl.value.trim()) return
-  // Insertar la etiqueta img en el mensaje
-  const imgTag = `<img src="${imagenAvisoUrl.value}" alt="Imagen del aviso" style="max-width: 100%; border-radius: 12px; margin: 12px 0;" />`
-  mensajeAviso.value += imgTag
+  // Agregar la URL al array de imágenes
+  imagenesAviso.value.push(imagenAvisoUrl.value)
   imagenAvisoUrl.value = ''
   mostrarModalImagenAviso.value = false
+}
+
+const eliminarImagenAviso = (index: number) => {
+  imagenesAviso.value.splice(index, 1)
 }
 
 const eliminarImagenPreview = (event: MouseEvent) => {
@@ -2721,11 +2801,15 @@ const enviarAvisoDesdeModal = async () => {
   if (!tituloAviso.value.trim() || !mensajeAviso.value.trim() || enviandoAviso.value) return
   enviandoAviso.value = true
   try {
-    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined)
+    // Enviar la primera imagen del array como imagenUrl
+    const imagenUrl = imagenesAviso.value.length > 0 ? imagenesAviso.value[0] : undefined
+    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined, imagenUrl)
     tituloAviso.value = ''
     mensajeAviso.value = ''
     destinatarioAviso.value = 'todos'
     destinatarioAvisoId.value = ''
+    imagenAvisoUrl.value = ''
+    imagenesAviso.value = []
     mostrarModalAviso.value = false
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo enviar el aviso.')
@@ -2832,7 +2916,20 @@ const abrirModalEditarAviso = (notificacion: NotificacionUsuario) => {
   mensajeAvisoEditar.value = notificacion.mensaje
   destinatarioAvisoEditar.value = notificacion.destinatarioRol || 'todos'
   destinatarioAvisoIdEditar.value = notificacion.destinatarioId || ''
+  // Cargar la imagen si existe
+  if (notificacion.imagenUrl) {
+    imagenesAvisoEditar.value = [notificacion.imagenUrl]
+  } else {
+    imagenesAvisoEditar.value = []
+  }
   mostrarModalEditarAviso.value = true
+  // Usar setTimeout para dar tiempo al modal de renderizarse completamente
+  setTimeout(() => {
+    const editor = document.getElementById('aviso-editar-mensaje') as HTMLElement
+    if (editor) {
+      editor.innerHTML = notificacion.mensaje
+    }
+  }, 100)
 }
 
 const guardarEdicionAviso = async () => {
@@ -2840,18 +2937,38 @@ const guardarEdicionAviso = async () => {
   
   enviandoAvisoEditar.value = true
   try {
-    await editarAviso(avisoParaEditar.value.id, tituloAvisoEditar.value, mensajeAvisoEditar.value, destinatarioAvisoEditar.value, destinatarioAvisoIdEditar.value || undefined)
+    // Enviar la primera imagen del array como imagenUrl
+    const imagenUrl = imagenesAvisoEditar.value.length > 0 ? imagenesAvisoEditar.value[0] : undefined
+    await editarAviso(avisoParaEditar.value.id, tituloAvisoEditar.value, mensajeAvisoEditar.value, destinatarioAvisoEditar.value, destinatarioAvisoIdEditar.value || undefined, imagenUrl)
     mostrarModalEditarAviso.value = false
     avisoParaEditar.value = null
     tituloAvisoEditar.value = ''
     mensajeAvisoEditar.value = ''
     destinatarioAvisoEditar.value = 'todos'
     destinatarioAvisoIdEditar.value = ''
+    imagenesAvisoEditar.value = []
+    imagenAvisoUrlEditar.value = ''
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo editar el aviso.')
   } finally {
     enviandoAvisoEditar.value = false
   }
+}
+
+const abrirModalImagenAvisoEditar = () => {
+  mostrarModalImagenAviso.value = true
+}
+
+const confirmarImagenAvisoEditar = () => {
+  if (!imagenAvisoUrlEditar.value.trim()) return
+  // Agregar la URL al array de imágenes
+  imagenesAvisoEditar.value.push(imagenAvisoUrlEditar.value)
+  imagenAvisoUrlEditar.value = ''
+  mostrarModalImagenAviso.value = false
+}
+
+const eliminarImagenAvisoEditar = (index: number) => {
+  imagenesAvisoEditar.value.splice(index, 1)
 }
 
 const puedeEditarAviso = (notificacion: NotificacionUsuario) => {
@@ -5069,6 +5186,23 @@ ion-content.shell-container {
   margin-top: 16px;
   position: relative;
   display: inline-block;
+  width: 100%;
+}
+
+.preview-info-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6d829c;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.preview-error-text {
+  font-size: 0.9rem;
+  color: #ef4444;
+  margin: 8px 0;
+  font-weight: 500;
 }
 
 .imagen-url-preview-img {
@@ -5077,6 +5211,7 @@ ion-content.shell-container {
   border-radius: 12px;
   border: 2px solid rgba(79, 179, 224, 0.25);
   box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+  display: block;
 }
 
 .imagen-url-preview-eliminar {
@@ -5371,6 +5506,43 @@ ion-content.shell-container {
   overflow-y: auto;
 }
 
+.preview-imagen-container {
+  margin-top: 12px;
+  position: relative;
+  display: inline-block;
+}
+
+.preview-imagen {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 12px;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+}
+
+.preview-imagen-eliminar {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease;
+}
+
+.preview-imagen-eliminar:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
 .modal-aviso-inicial {
   --width: min(460px, 92vw);
   --height: auto;
@@ -5490,17 +5662,58 @@ ion-modal.modal-aviso-inicial::part(content) {
   border-top: 1px solid rgba(79, 179, 224, 0.15);
 }
 
+.aviso-inicial-imagen-container {
+  margin-top: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(79, 179, 224, 0.15);
+  position: relative;
+  cursor: pointer;
+}
+
+.aviso-inicial-imagen {
+  max-width: 100%;
+  display: block;
+  border-radius: 12px;
+}
+
+.aviso-inicial-imagen-lupa {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.aviso-inicial-imagen-container:hover .aviso-inicial-imagen-lupa {
+  opacity: 1;
+}
+
+.aviso-inicial-imagen-container:hover .aviso-inicial-imagen {
+  filter: brightness(0.9);
+}
+
 .aviso-inicial-footer .btn-ampliar-imagen {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   background: linear-gradient(135deg, #4fb3e0, #22d3ee);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
@@ -5508,12 +5721,12 @@ ion-modal.modal-aviso-inicial::part(content) {
 
 .aviso-inicial-footer .btn-ampliar-imagen:hover {
   background: linear-gradient(135deg, #22d3ee, #0ea5e9);
-  transform: translateY(-2px);
+  transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
 }
 
 .aviso-inicial-footer .btn-ampliar-imagen ion-icon {
-  font-size: 1rem;
+  font-size: 1.2rem;
 }
 
 .aviso-inicial-mensaje img {
@@ -6098,14 +6311,14 @@ ion-modal.modal-aviso-inicial::part(content) {
 .btn-ampliar-imagen {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   background: linear-gradient(135deg, #4fb3e0, #22d3ee);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
@@ -6113,12 +6326,12 @@ ion-modal.modal-aviso-inicial::part(content) {
 
 .btn-ampliar-imagen:hover {
   background: linear-gradient(135deg, #22d3ee, #0ea5e9);
-  transform: translateY(-2px);
+  transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
 }
 
 .btn-ampliar-imagen ion-icon {
-  font-size: 1rem;
+  font-size: 1.2rem;
 }
 
 .notificacion-acciones {
