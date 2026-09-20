@@ -364,7 +364,14 @@ async function migrateEstadoListo() {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Configurar CORS para permitir imágenes externas
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-name', 'x-user-role'],
+  credentials: true
+}));
+
 app.use(express.json({ limit: "5mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -398,13 +405,19 @@ app.use("/api", saliConocimientoRoutes);
 app.use("/api", notificacionesRoutes);
 app.use("/api", ttsRoutes);
 app.use("/api", speechRoutes);
-app.get("/api/database-config", (_req, res) => {
-  res.json(leerConfiguracionBaseDatos());
-});
+
+// Middleware para agregar headers CORS a todas las respuestas
 app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-user-id, x-user-name, x-user-role");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   next();
+});
+
+app.get("/api/database-config", (_req, res) => {
+  res.json(leerConfiguracionBaseDatos());
 });
 
 app.get("/api/database-config/defaults", (_req, res) => {
