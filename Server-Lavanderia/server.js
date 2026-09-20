@@ -570,6 +570,7 @@ async function migrateNotificaciones() {
         leida TINYINT(1) NOT NULL DEFAULT 0,
         fecha_resolucion DATETIME NULL,
         creada_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        imagen_url TEXT NULL,
         PRIMARY KEY (id),
         INDEX idx_notificaciones_destinatario (destinatario_id, leida, creada_at),
         INDEX idx_notificaciones_tipo_estado (tipo, estado, creada_at)
@@ -585,6 +586,14 @@ async function migrateNotificaciones() {
         INDEX idx_notificaciones_lecturas_usuario (usuario_id, leida)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    
+    // Agregar columna imagen_url si no existe
+    const [columns] = await pool.query("SHOW COLUMNS FROM notificaciones LIKE 'imagen_url'");
+    if (columns.length === 0) {
+      await pool.query("ALTER TABLE notificaciones ADD COLUMN imagen_url TEXT NULL AFTER creada_at");
+      console.log("✓ Columna imagen_url agregada a notificaciones.");
+    }
+    
     console.log("✓ Tabla notificaciones verificada.");
   } catch (error) {
     console.error("No se pudo migrar notificaciones:", error.message);

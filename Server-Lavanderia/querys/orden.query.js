@@ -2443,6 +2443,68 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
   }
 };
 
+const aplicarDescuentoOrden = async (id, tipo, valor, usuario = "Sistema") => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    
+    const [[orden]] = await conn.query(
+      "SELECT * FROM ordenes WHERE id = ? FOR UPDATE",
+      [id],
+    );
+    if (!orden) throw new AppError("Orden no encontrada.", 404);
+    
+    if (orden.estado === "cerrada" || orden.estado === "Cerrada-Cancelada") {
+      throw new AppError("No se puede aplicar descuento a una orden cerrada.", 400);
+    }
+    
+    const subtotal = toNumber(orden.subtotal);
+    let descuentoAplicado = 0;
+    
+    if (tipo === "porcentaje") {
+      const porcentaje = Math.max(0, Math.min(100, Number(valor)));
+      descuentoAplicado = Number((subtotal * (porcentaje / 100)).toFixed(2));
+    } else if (tipo === "monto") {
+      descuentoAplicado = Math.max(0, Math.min(subtotal, Number(valor)));
+    } else {
+      throw new AppError("Tipo de descuento inválido. Use 'porcentaje' o 'monto'.", 400);
+    }
+    
+    const total = Math.max(0, Number((subtotal - descuentoAplicado).toFixed(2)));
+    const montoRecibido = toNumber(orden.monto_recibido);
+    const cambio = Math.max(0, Number((montoRecibido - total).toFixed(2)));
+    
+    const estadoPago = montoRecibido >= total && total > 0
+      ? "pagado"
+      : montoRecibido > 0
+        ? "anticipo"
+        : "porCobrar";
+    
+    await conn.execute(
+      `UPDATE ordenes 
+       SET descuento = ?, descuento_manual = ?, total = ?, cambio = ?, estado_pago = ?, updated_at = NOW() 
+       WHERE id = ?`,
+      [descuentoAplicado, descuentoAplicado, total, cambio, estadoPago, id],
+    );
+    
+    const textoTipo = tipo === "porcentaje" ? `${valor}%` : `$${Number(valor).toFixed(2)}`;
+    await registrarMovimientoConn(
+      conn,
+      id,
+      `Descuento aplicado: ${textoTipo} (-$${descuentoAplicado.toFixed(2)})`,
+      usuario,
+    );
+    
+    await conn.commit();
+    return await obtenerOrdenCompleta(id);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   formatearNumero,
   obtenerOrdenes,
@@ -2463,4 +2525,5 @@ module.exports = {
   registrarMovimiento,
   actualizarCamposOrden,
   construirTextoCambioCliente,
+  aplicarDescuentoOrden,
 };

@@ -96,6 +96,20 @@
     </div>
 
     <div class="home-body">
+      <!-- ───────────── Alerta de turno antiguo abierto ───────────── -->
+      <div v-if="alertaTurnoAntiguo" class="alerta-turno-antiguo">
+        <div class="alerta-turno-icono">
+          <ion-icon :icon="warningOutline" />
+        </div>
+        <div class="alerta-turno-contenido">
+          <p class="alerta-turno-titulo">⚠️ Caja sin cerrar</p>
+          <p class="alerta-turno-mensaje">{{ alertaTurnoAntiguo }}</p>
+        </div>
+        <button class="alerta-turno-cerrar" @click="alertaTurnoAntiguo = ''">
+          <ion-icon :icon="closeOutline" />
+        </button>
+      </div>
+
       <!-- ───────────── Sucursal ───────────── -->
       <div class="config-card sucursal-card">
         <div class="config-card-header">
@@ -467,8 +481,20 @@
                 <span class="notificacion-fecha">{{ new Date(notificacion.fecha).toLocaleDateString('es-ES') }}</span>
               </div>
 
-              <p class="notificacion-mensaje" v-html="notificacion.mensaje"></p>
-              <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
+              <p class="notificacion-mensaje" v-html="notificacion.mensaje" @click="manejarClickImagen($event)"></p>
+              <div v-if="notificacion.imagenUrl" class="notificacion-imagen-container" @click="abrirModalImagenGrande(notificacion.imagenUrl)">
+                <img :src="notificacion.imagenUrl" alt="Imagen del aviso" class="notificacion-imagen" />
+                <div class="notificacion-imagen-lupa">
+                  <ion-icon :icon="expandOutline" />
+                </div>
+              </div>
+              <div class="notificacion-footer">
+                <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
+                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)">
+                  <ion-icon :icon="expandOutline" />
+                  Ampliar imagen
+                </button>
+              </div>
 
               <div class="notificacion-acciones">
                 <button
@@ -660,6 +686,9 @@
             <button type="button" class="html-toolbar-btn" @click="insertarEmoji('📢')" title="Anuncio">
               📢
             </button>
+            <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAviso" title="Agregar imagen desde URL">
+              <ion-icon :icon="imageOutline" />
+            </button>
           </div>
           
           <div 
@@ -673,7 +702,7 @@
         
         <div v-if="mensajeAviso" class="aviso-preview-column">
           <p class="preview-label">Vista previa:</p>
-          <div class="preview-content preview-content-grande" v-html="mensajeAviso"></div>
+          <div class="preview-content preview-content-grande" v-html="mensajeAviso" @click="eliminarImagenPreview"></div>
         </div>
 
         <div class="modal-botones">
@@ -682,6 +711,58 @@
             {{ enviandoAviso ? 'Enviando...' : 'Enviar aviso' }}
           </ion-button>
         </div>
+      </div>
+    </ion-modal>
+
+    <!-- Modal de imagen URL -->
+    <ion-modal :is-open="mostrarModalImagenAviso" class="modal-shell modal-imagen-url" @didDismiss="mostrarModalImagenAviso = false">
+      <div class="modal-contenido modal-imagen-url-contenido modal-fondo-blanco">
+        <div class="modal-header">
+          <div class="modal-header-left">
+            <div class="modal-header-icon">
+              <ion-icon :icon="imageOutline" />
+            </div>
+            <div>
+              <p class="modal-titulo">Agregar imagen</p>
+              <p class="modal-subtitulo">Pega la URL de la imagen</p>
+            </div>
+          </div>
+          <button class="modal-cerrar" @click="mostrarModalImagenAviso = false">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <label class="modal-label">URL de la imagen</label>
+        <input 
+          v-model="imagenAvisoUrl" 
+          class="modal-input-texto" 
+          type="url" 
+          placeholder="https://ejemplo.com/imagen.jpg" 
+        />
+        
+        <div v-if="imagenAvisoUrl" class="imagen-url-preview">
+          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" />
+          <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </div>
+
+        <div class="modal-botones">
+          <ion-button class="btn-fantasma" @click="mostrarModalImagenAviso = false">Cancelar</ion-button>
+          <ion-button class="btn-primario" :disabled="!imagenAvisoUrl.trim()" @click="confirmarImagenAviso">
+            Agregar imagen
+          </ion-button>
+        </div>
+      </div>
+    </ion-modal>
+
+    <!-- Modal de imagen grande -->
+    <ion-modal :is-open="mostrarModalImagenGrande" class="modal-shell modal-imagen-grande" @didDismiss="mostrarModalImagenGrande = false">
+      <div class="modal-contenido modal-imagen-grande-contenido">
+        <button class="modal-cerrar-imagen-grande" @click="mostrarModalImagenGrande = false">
+          <ion-icon :icon="closeOutline" />
+        </button>
+        <img :src="imagenGrandeUrl" alt="Imagen en grande" class="imagen-grande" />
       </div>
     </ion-modal>
 
@@ -739,19 +820,23 @@ import {
   refreshOutline,
   notificationsOutline,
   bodyOutline,
+  warningOutline,
+  imageOutline,
   manOutline,
   womanOutline,
   megaphoneOutline,
   trashOutline,
+  expandOutline,
 } from 'ionicons/icons'
 
 const route = useRoute()
 const router = useRouter()
 const navegando = ref(false)
-const { turno, cargarTurno } = useTurno()
+const { turno, cargarTurno, verificarTurnosAntiguosAbiertos } = useTurno()
 const rutasQueRequierenTurno = new Set(['/tabs/home', '/tabs/ordenes'])
 const mostrarAvisoTurno = ref(false)
 const avisoCierreProximoMostrado = ref(false)
+const alertaTurnoAntiguo = ref('')
 const { empleadoActivo, asistenciaActiva, accesoOperativoBloqueado, funcionesBloqueadas } = useAccesoOperativo()
 
 const { apariencia } = useApariencia()
@@ -887,6 +972,13 @@ onMounted(() => {
       avisoCierreProximoMostrado.value = false
     }
   }, 1000)
+  
+  // Verificar si hay turnos antiguos abiertos
+  verificarTurnosAntiguosAbiertos().then(resultado => {
+    if (resultado.tieneTurnoAntiguoAbierto) {
+      alertaTurnoAntiguo.value = resultado.mensaje
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -974,6 +1066,10 @@ const tituloAviso = ref('')
 const mensajeAviso = ref('')
 const destinatarioAviso = ref('todos')
 const destinatarioAvisoId = ref('')
+const imagenAvisoUrl = ref('')
+const mostrarModalImagenAviso = ref(false)
+const imagenGrandeUrl = ref('')
+const mostrarModalImagenGrande = ref(false)
 const enviandoAviso = ref(false)
 
 const abrirMenuNotificaciones = () => {
@@ -1016,6 +1112,17 @@ const editarAvisoIndividual = async (notificacion: typeof notificacionesUsuario.
   if (titulo === null || !titulo.trim()) return
   const mensaje = window.prompt('Mensaje del aviso:', notificacion.mensaje)
   if (mensaje === null || !mensaje.trim()) return
+  const imagenUrl = window.prompt('URL de la imagen (opcional):', notificacion.imagenUrl || '')
+  
+  // Validar URL si se proporciona
+  if (imagenUrl && imagenUrl.trim()) {
+    try {
+      new URL(imagenUrl.trim())
+    } catch {
+      window.alert('La URL de la imagen no es válida.')
+      return
+    }
+  }
 
   try {
     await editarAviso(
@@ -1024,6 +1131,7 @@ const editarAvisoIndividual = async (notificacion: typeof notificacionesUsuario.
       mensaje.trim(),
       notificacion.destinatarioRol || 'todos',
       notificacion.destinatarioId,
+      imagenUrl.trim() || undefined
     )
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo editar el aviso.')
@@ -1043,16 +1151,74 @@ const enviarAvisoDesdeModal = async () => {
   if (!tituloAviso.value.trim() || !mensajeAviso.value.trim() || enviandoAviso.value) return
   enviandoAviso.value = true
   try {
-    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined)
+    await enviarAviso(tituloAviso.value, mensajeAviso.value, destinatarioAviso.value, destinatarioAvisoId.value || undefined, imagenAvisoUrl.value || undefined)
     tituloAviso.value = ''
     mensajeAviso.value = ''
     destinatarioAviso.value = 'todos'
     destinatarioAvisoId.value = ''
+    imagenAvisoUrl.value = ''
     mostrarModalAviso.value = false
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo enviar el aviso.')
   } finally {
     enviandoAviso.value = false
+  }
+}
+
+const abrirModalImagenAviso = () => {
+  console.log('abrirModalImagenAviso llamado')
+  mostrarModalImagenAviso.value = true
+  console.log('mostrarModalImagenAviso.value:', mostrarModalImagenAviso.value)
+}
+
+const confirmarImagenAviso = () => {
+  if (!imagenAvisoUrl.value.trim()) return
+  // Insertar la etiqueta img en el mensaje
+  const imgTag = `<img src="${imagenAvisoUrl.value}" alt="Imagen del aviso" style="max-width: 100%; border-radius: 12px; margin: 12px 0;" />`
+  mensajeAviso.value += imgTag
+  imagenAvisoUrl.value = ''
+  mostrarModalImagenAviso.value = false
+}
+
+const eliminarImagenPreview = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (target.tagName === 'IMG') {
+    if (window.confirm('¿Eliminar esta imagen del aviso?')) {
+      target.remove()
+      mensajeAviso.value = (document.getElementById('aviso-mensaje') as HTMLElement).innerHTML
+    }
+  }
+}
+
+const abrirModalImagenGrande = (url: string) => {
+  imagenGrandeUrl.value = url
+  mostrarModalImagenGrande.value = true
+}
+
+const manejarClickImagen = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (target.tagName === 'IMG' && target instanceof HTMLImageElement) {
+    abrirModalImagenGrande(target.src)
+  }
+}
+
+const tieneImagenEnMensaje = (mensaje: string) => {
+  return mensaje.includes('<img')
+}
+
+const ampliarPrimeraImagen = (notificacion: typeof notificacionesUsuario.value[number]) => {
+  // Primero revisar imagenUrl
+  if (notificacion.imagenUrl) {
+    abrirModalImagenGrande(notificacion.imagenUrl)
+    return
+  }
+  
+  // Si no, buscar en el mensaje HTML
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = notificacion.mensaje
+  const img = tempDiv.querySelector('img')
+  if (img && img.src) {
+    abrirModalImagenGrande(img.src)
   }
 }
 
@@ -1534,6 +1700,76 @@ const aplicarColor = () => {
   min-height: 100%;
   padding-bottom: 32px;
   color-scheme: light;
+}
+
+.alerta-turno-antiguo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  border: 1.5px solid #fdba74;
+  border-radius: 12px;
+  color: #9a4d00;
+}
+
+.alerta-turno-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #fdba74;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.alerta-turno-icono ion-icon {
+  font-size: 1.2rem;
+  color: #9a4d00;
+}
+
+.alerta-turno-contenido {
+  flex: 1;
+  min-width: 0;
+}
+
+.alerta-turno-titulo {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #9a4d00;
+}
+
+.alerta-turno-mensaje {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #c2410c;
+  line-height: 1.4;
+}
+
+.alerta-turno-cerrar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #9a4d00;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.alerta-turno-cerrar:hover {
+  background: rgba(251, 186, 116, 0.3);
+}
+
+.alerta-turno-cerrar ion-icon {
+  font-size: 1rem;
 }
 .home-banner-mobile {
   display: none;
@@ -2949,12 +3185,58 @@ const aplicarColor = () => {
   line-height: 1.6;
 }
 
+.notificacion-mensaje img {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.notificacion-mensaje img:hover {
+  transform: scale(1.02);
+}
+
 .notificacion-autor {
   margin: 6px 0 0;
   font-size: 12px;
   color: #000000 !important;
   font-style: italic;
   font-weight: 600;
+}
+
+.notificacion-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(79, 179, 224, 0.15);
+}
+
+.btn-ampliar-imagen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 179, 224, 0.3);
+}
+
+.btn-ampliar-imagen:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
+}
+
+.btn-ampliar-imagen ion-icon {
+  font-size: 1rem;
 }
 
 .notificacion-acciones {
@@ -3517,6 +3799,22 @@ const aplicarColor = () => {
   box-shadow: 0 6px 20px rgba(79, 179, 224, 0.25);
 }
 
+.imagen-btn {
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee) !important;
+  color: white !important;
+  border-color: #4fb3e0 !important;
+  font-size: 1rem;
+  padding: 10px 14px;
+  min-height: 40px;
+}
+
+.imagen-btn:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9) !important;
+  border-color: #22d3ee !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.35);
+}
+
 .color-picker-wrapper {
   position: relative;
   width: 40px;
@@ -3588,6 +3886,232 @@ const aplicarColor = () => {
 
 .preview-content-grande {
   min-height: 100px;
+}
+
+.preview-imagen-container {
+  margin-top: 12px;
+  position: relative;
+  display: inline-block;
+}
+
+.preview-imagen {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 12px;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+}
+
+.preview-imagen-eliminar {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease;
+}
+
+.preview-imagen-eliminar:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.imagen-btn {
+  position: relative;
+}
+
+.imagen-url-preview {
+  margin-top: 16px;
+  position: relative;
+  display: inline-block;
+}
+
+.imagen-url-preview-img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+}
+
+.imagen-url-preview-eliminar {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease;
+}
+
+.imagen-url-preview-eliminar:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.notificacion-imagen-container {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(79, 179, 224, 0.15);
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.notificacion-imagen-container:hover {
+  transform: scale(1.02);
+}
+
+.notificacion-imagen {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  display: block;
+}
+
+.notificacion-imagen-lupa {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.notificacion-imagen-lupa ion-icon {
+  font-size: 1.4rem;
+}
+
+.notificacion-imagen-container:hover .notificacion-imagen-lupa {
+  background: rgba(0, 0, 0, 0.8);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.modal-imagen-grande {
+  --width: 100vw;
+  --height: 100vh;
+  --max-width: 100vw;
+  --max-height: 100vh;
+  --border-radius: 0;
+  --backdrop-opacity: 0.95;
+  --background: rgba(0, 0, 0, 0.9);
+}
+
+.modal-imagen-grande-contenido {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  position: relative;
+}
+
+.modal-cerrar-imagen-grande {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.modal-cerrar-imagen-grande:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: white;
+  transform: scale(1.1);
+}
+
+.modal-cerrar-imagen-grande ion-icon {
+  font-size: 1.5rem;
+}
+
+.imagen-grande {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.btn-agregar-imagen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #4fb3e0, #22d3ee);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+}
+
+.btn-agregar-imagen:hover {
+  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.4);
+}
+
+.btn-agregar-imagen ion-icon {
+  font-size: 1.2rem;
+}
+
+.modal-imagen-url {
+  --width: min(480px, 90vw);
+  --height: auto;
+  --max-height: 80vh;
+  --border-radius: 20px;
+  --backdrop-opacity: 0.6;
+  --background: rgba(0, 0, 0, 0.4);
+}
+
+.modal-imagen-url-contenido {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 /* Estilos modernos para inputs y textareas en modales */
@@ -3712,6 +4236,22 @@ const aplicarColor = () => {
     padding: 8px 12px;
     font-size: 0.8rem;
     min-height: 36px;
+  }
+
+  .imagen-btn {
+    background: linear-gradient(135deg, #4fb3e0, #22d3ee) !important;
+    color: white !important;
+    border-color: #4fb3e0 !important;
+    font-size: 1rem;
+    padding: 10px 14px;
+    min-height: 40px;
+  }
+
+  .imagen-btn:hover {
+    background: linear-gradient(135deg, #22d3ee, #0ea5e9) !important;
+    border-color: #22d3ee !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(34, 211, 238, 0.35);
   }
 
   .color-picker-wrapper {

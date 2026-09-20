@@ -26,6 +26,7 @@ const mapNotificacion = (row) => ({
   fechaResolucion: row.fecha_resolucion
     ? new Date(row.fecha_resolucion).toISOString()
     : undefined,
+  imagenUrl: row.imagen_url,
 });
 
 const obtenerParaUsuario = async (usuarioId, rol) => {
@@ -106,12 +107,13 @@ const crearAviso = async ({
   mensaje,
   destinatarioRol,
   destinatarioId,
+  imagenUrl,
 }) => {
   const id = randomUUID();
   await pool.query(
     `INSERT INTO notificaciones
-      (id, tipo, destinatario_rol, destinatario_id, autor_id, autor_nombre, titulo, mensaje)
-     VALUES (?, 'aviso', ?, ?, ?, ?, ?, ?)`,
+      (id, tipo, destinatario_rol, destinatario_id, autor_id, autor_nombre, titulo, mensaje, imagen_url)
+     VALUES (?, 'aviso', ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       destinatarioRol || "todos",
@@ -120,6 +122,7 @@ const crearAviso = async ({
       autorNombre,
       titulo,
       mensaje,
+      imagenUrl || null,
     ],
   );
   const [rows] = await pool.query("SELECT * FROM notificaciones WHERE id = ?", [
@@ -130,7 +133,7 @@ const crearAviso = async ({
 
 const editarAviso = async (
   id,
-  { titulo, mensaje, destinatarioRol, destinatarioId, usuarioId, esDesarrollador },
+  { titulo, mensaje, destinatarioRol, destinatarioId, usuarioId, esDesarrollador, imagenUrl },
 ) => {
   const [rows] = await pool.query(
     `SELECT * FROM notificaciones WHERE id = ? AND tipo = 'aviso'`,
@@ -148,9 +151,9 @@ const editarAviso = async (
   
   await pool.query(
     `UPDATE notificaciones
-     SET titulo = ?, mensaje = ?, destinatario_rol = ?, destinatario_id = ?
+     SET titulo = ?, mensaje = ?, destinatario_rol = ?, destinatario_id = ?, imagen_url = ?
      WHERE id = ? AND tipo = 'aviso'`,
-    [titulo, mensaje, destinatarioRol, destinatarioId || null, id]
+    [titulo, mensaje, destinatarioRol, destinatarioId || null, imagenUrl || null, id]
   );
   
   const [updatedRows] = await pool.query("SELECT * FROM notificaciones WHERE id = ?", [id]);

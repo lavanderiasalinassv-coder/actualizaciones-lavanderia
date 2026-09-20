@@ -4,6 +4,7 @@ const {
   cerrarTurno,
   actualizarNotas,
   resetTurno,
+  verificarTurnosAntiguosAbiertos,
 } = require("../querys/turno.query");
 const { AppError } = require("../utils/errors");
 
@@ -71,10 +72,20 @@ const reiniciarTurno = async (_req, res) => {
   }
 };
 
+const verificarTurnosAntiguos = async (_req, res) => {
+  try {
+    const resultado = await verificarTurnosAntiguosAbiertos();
+    res.status(200).json(resultado);
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
 module.exports = {
   obtenerTurnoActual,
   abrirTurnoCaja,
   cerrarTurnoCaja,
   actualizarNotasTurno,
   reiniciarTurno,
+  verificarTurnosAntiguos,
 };

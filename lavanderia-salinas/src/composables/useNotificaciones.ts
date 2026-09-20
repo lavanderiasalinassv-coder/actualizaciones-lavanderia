@@ -26,6 +26,7 @@ export interface NotificacionUsuario {
   autorNombre?: string
   destinatarioRol?: string
   destinatarioId?: string
+  imagenUrl?: string
 }
 
 interface NotificacionApi {
@@ -43,6 +44,7 @@ interface NotificacionApi {
   fechaResolucion?: string
   destinatarioRol?: string
   destinatarioId?: string
+  imagenUrl?: string
 }
 
 const problemasReportados = ref<ProblemaReportado[]>([])
@@ -137,7 +139,8 @@ export function useNotificaciones() {
           autorId: aviso.autorId,
           autorNombre: aviso.autorNombre,
           destinatarioRol: aviso.destinatarioRol,
-          destinatarioId: aviso.destinatarioId
+          destinatarioId: aviso.destinatarioId,
+          imagenUrl: aviso.imagenUrl
         }))
         await cargarProblemas()
       } catch (error) {
@@ -160,7 +163,8 @@ export function useNotificaciones() {
         autorId: aviso.autorId,
         autorNombre: aviso.autorNombre,
         destinatarioRol: aviso.destinatarioRol,
-        destinatarioId: aviso.destinatarioId
+        destinatarioId: aviso.destinatarioId,
+        imagenUrl: aviso.imagenUrl
       }))
       await cargarProblemas()
     } catch (error) {
@@ -186,7 +190,8 @@ export function useNotificaciones() {
         autorId: aviso.autorId,
         autorNombre: aviso.autorNombre,
         destinatarioRol: aviso.destinatarioRol,
-        destinatarioId: aviso.destinatarioId
+        destinatarioId: aviso.destinatarioId,
+        imagenUrl: aviso.imagenUrl
       }))
     } finally {
       cargando.value = false
@@ -211,16 +216,16 @@ export function useNotificaciones() {
     return problema
   }
 
-  const enviarAviso = (titulo: string, mensaje: string, destinatarioRol = 'todos', destinatarioId?: string) =>
+  const enviarAviso = (titulo: string, mensaje: string, destinatarioRol = 'todos', destinatarioId?: string, imagenUrl?: string) =>
     solicitar('/notificaciones/avisos', {
       method: 'POST',
-      body: JSON.stringify({ titulo, mensaje, destinatarioRol, destinatarioId })
+      body: JSON.stringify({ titulo, mensaje, destinatarioRol, destinatarioId, imagenUrl })
     })
 
-  const editarAviso = async (avisoId: string, titulo: string, mensaje: string, destinatarioRol = 'todos', destinatarioId?: string) => {
+  const editarAviso = async (avisoId: string, titulo: string, mensaje: string, destinatarioRol = 'todos', destinatarioId?: string, imagenUrl?: string) => {
     const avisoEditado = await solicitar(`/notificaciones/avisos/${avisoId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ titulo, mensaje, destinatarioRol, destinatarioId })
+      body: JSON.stringify({ titulo, mensaje, destinatarioRol, destinatarioId, imagenUrl })
     })
     // Actualizar el aviso en la lista local
     const index = notificacionesUsuario.value.findIndex(n => n.id === avisoId)
@@ -232,7 +237,8 @@ export function useNotificaciones() {
         autorId: avisoEditado.autorId,
         autorNombre: avisoEditado.autorNombre,
         destinatarioRol: avisoEditado.destinatarioRol,
-        destinatarioId: avisoEditado.destinatarioId
+        destinatarioId: avisoEditado.destinatarioId,
+        imagenUrl: avisoEditado.imagenUrl
       }
     }
 
