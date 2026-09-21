@@ -1,5 +1,14 @@
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+const RESOURCES_PATH = process.env.RESOURCES_PATH;
+const EMPAQUETADO = !!RESOURCES_PATH;
+
+// Cargar .env desde la ubicación correcta según si está empaquetado o no
+if (EMPAQUETADO) {
+  require("dotenv").config({ path: path.join(RESOURCES_PATH, "backend", ".env") });
+} else {
+  require("dotenv").config({ path: path.join(__dirname, ".env") });
+}
+
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
@@ -38,8 +47,6 @@ const saliConocimientoRoutes = require("./routes/saliConocimiento.routes");
 const notificacionesRoutes = require("./routes/notificaciones.routes");
 const ttsRoutes = require("./routes/tts.routes");
 const speechRoutes = require("./routes/speech.routes");
-const RESOURCES_PATH = process.env.RESOURCES_PATH;
-const EMPAQUETADO = !!RESOURCES_PATH;
 
 const FRONTEND_DIST_PATH = EMPAQUETADO
   ? path.join(RESOURCES_PATH, "backend", "frontend", "dist")

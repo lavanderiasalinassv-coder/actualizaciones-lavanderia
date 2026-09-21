@@ -669,11 +669,12 @@ const manejarBotonBurbujita = () => {
 }
 
 const cerrar = () => {
-  if (enviando.value) return
+  // Permitir cerrar incluso cuando está enviando (para poder cerrar si tarda mucho)
   conversacionPorVoz.value = false
   cancelarEnvioVoz = true
   detenerVoz()
   detenerMicrofono()
+  enviando.value = false
   abierto.value = false
   lateral.value = false
 }
@@ -783,6 +784,9 @@ const enviar = async (esPorVoz = false) => {
   pregunta.value = ''
   enviando.value = true
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 segundos timeout
+    
     const respuesta = await fetch(`${getApiBaseUrl()}/ayuda-ia`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -791,8 +795,11 @@ const enviar = async (esPorVoz = false) => {
         historial,
         usuario: { nombre: nombreUsuario.value, rol: rol.value || 'usuario' },
         vista: vistaActual.value,
-      })
+      }),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     const datos = await respuesta.json()
     if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo consultar la ayuda.')
     
@@ -804,7 +811,14 @@ const enviar = async (esPorVoz = false) => {
     // el contenido completo siempre queda visible y bien formateado en el chat.
     if (responderConVoz) void hablarTexto(respuestaTexto, mensajes.value.length - 1)
   } catch (error) {
-    const mensajeError = error instanceof Error ? error.message : 'No se pudo conectar con la ayuda.'
+    let mensajeError = 'No se pudo conectar con la ayuda.'
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        mensajeError = 'La consulta tardó demasiado. Intenta de nuevo o reformula tu pregunta.'
+      } else {
+        mensajeError = error.message
+      }
+    }
     const responderConVoz = esPorVoz && conversacionPorVoz.value
     mensajes.value.push({ rol: 'assistant', texto: mensajeError })
     if (responderConVoz) void hablarTexto(mensajeError, mensajes.value.length - 1)
