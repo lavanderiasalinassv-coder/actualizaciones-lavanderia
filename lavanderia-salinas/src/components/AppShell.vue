@@ -2349,8 +2349,8 @@ const eliminarCierreDesdeHistorial = async (cierre: any) => {
   mostrarConfirmacionEliminarCierre.value = true
 }
 
-const cerrarConfirmacionEliminarCierre = (forzar = false) => {
-  if (eliminandoCierre.value && !forzar) return
+const cerrarConfirmacionEliminarCierre = (forzar?: boolean | Event) => {
+  if (eliminandoCierre.value && forzar !== true) return
   mostrarConfirmacionEliminarCierre.value = false
   cierrePendienteEliminar.value = null
 }
