@@ -16,7 +16,7 @@ const { execFile } = require("child_process");
 const mysql = require("mysql2/promise");
 const { pool } = require("./database/MySQLConexion");
 const {
-  DEFAULT_DATABASE_CONFIG,
+  leerConfiguracionPredeterminada,
   leerConfiguracionBaseDatos,
   validarConfiguracionBaseDatos,
   guardarConfiguracionBaseDatos,
@@ -429,7 +429,7 @@ app.get("/api/database-config", (_req, res) => {
 });
 
 app.get("/api/database-config/defaults", (_req, res) => {
-  res.json(DEFAULT_DATABASE_CONFIG);
+  res.json(leerConfiguracionPredeterminada());
 });
 
 app.post("/api/database-config/test", async (req, res) => {
@@ -518,6 +518,23 @@ app.get("/test-db", async (req, res) => {
       error: "Error al consultar la base de datos",
       detalles: error.message,
     });
+  }
+});
+
+// Used by the startup splash screen to verify that the API and database are ready.
+app.get("/api/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true, server: true, database: true });
+  } catch (error) {
+    const mensajesPorCodigo = {
+      ECONNREFUSED: "La base de datos rechazó la conexión. Verifica que MySQL esté iniciado y que host y puerto sean correctos.",
+      ETIMEDOUT: "Se agotó el tiempo de conexión con la base de datos. Verifica la red y que el servidor de MySQL esté disponible.",
+      ER_ACCESS_DENIED_ERROR: "MySQL rechazó las credenciales configuradas. Verifica el usuario y la contraseña.",
+      ER_BAD_DB_ERROR: "La base de datos configurada no existe. Verifica el nombre de la base de datos.",
+    };
+    const message = mensajesPorCodigo[error.code] || "El servidor está activo, pero ocurrió un error al consultar la base de datos. Revisa su configuración y los registros del servidor.";
+    res.status(503).json({ ok: false, server: true, database: false, message });
   }
 });
 
@@ -626,14 +643,33 @@ app.listen(PORT, async () => {
   console.log(`📡 Servidor ejecutándose`);
   console.log(`=========================================================`);
 
-  await migratePaymentColumns();
-  await migrateDireccionEntrega();
-  await migrateCatalogoClasificacionPrendas();
-  await migrateUnidadesMedida();
-  await migratePrecisionInventario();
-  await migrateEstadoListo();
-  await migrateOrdenMovimientosAuditoria();
-  await migrateHorasAjustadas();
-  await migratePerfilImagen();
-  await migrateNotificaciones();
+  try {
+    await pool.query("SELECT 1");
+  } catch (error) {
+    console.error(
+      `Base de datos no disponible (${error.code || "ERROR"}). El servidor seguirá activo para permitir corregir la configuración.`,
+    );
+    return;
+  }
+
+  const migraciones = [
+    ["columnas de pago", migratePaymentColumns],
+    ["dirección de entrega", migrateDireccionEntrega],
+    ["clasificación de prendas", migrateCatalogoClasificacionPrendas],
+    ["unidades de medida", migrateUnidadesMedida],
+    ["precisión de inventario", migratePrecisionInventario],
+    ["estado listo", migrateEstadoListo],
+    ["auditoría de movimientos", migrateOrdenMovimientosAuditoria],
+    ["horas ajustadas", migrateHorasAjustadas],
+    ["perfil de imagen", migratePerfilImagen],
+    ["notificaciones", migrateNotificaciones],
+  ];
+
+  for (const [nombre, migrar] of migraciones) {
+    try {
+      await migrar();
+    } catch (error) {
+      console.error(`No se pudo completar la migración de ${nombre}:`, error.message);
+    }
+  }
 });

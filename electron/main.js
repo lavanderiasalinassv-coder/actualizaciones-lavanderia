@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, shell, session } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const fs = require("fs");
 const path = require("path");
-const { execFile } = require("child_process");
+const { spawn } = require("child_process");
+const https = require("https");
 
 let backendCargado = false;
 let ventanaPrincipal = null;
@@ -149,6 +150,124 @@ ipcMain.handle("buscar-actualizaciones", async () => {
 
 ipcMain.handle("obtener-version-aplicacion", () => app.getVersion());
 
+const repoGithub = {
+  owner: "lavanderiasalinassv-coder",
+  repo: "actualizaciones-lavanderia",
+};
+
+function obtenerRaizProyecto() {
+  if (app.isPackaged) return null;
+  const raiz = app.getAppPath();
+  return fs.existsSync(path.join(raiz, "package.json")) && fs.existsSync(path.join(raiz, "electron"))
+    ? raiz
+    : null;
+}
+
+ipcMain.handle("puede-publicar-actualizacion", () => Boolean(obtenerRaizProyecto()));
+
+function leerTokenGithub(raiz) {
+  const rutaEnv = path.join(raiz, ".env");
+  if (!fs.existsSync(rutaEnv)) return "";
+  const linea = fs.readFileSync(rutaEnv, "utf8").split(/\r?\n/).find((lineaEnv) => /^\s*GH_TOKEN\s*=/.test(lineaEnv));
+  if (!linea) return "";
+  return linea.replace(/^\s*GH_TOKEN\s*=\s*/, "").replace(/\s+#.*$/, "").trim().replace(/^(['"])(.*)\1$/, "$2");
+}
+
+function consultarVersionPublicada(version) {
+  return new Promise((resolve, reject) => {
+    const request = https.get({
+      hostname: "api.github.com",
+      path: `/repos/${repoGithub.owner}/${repoGithub.repo}/releases/tags/v${encodeURIComponent(version)}`,
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Lavanderia-Desktop" },
+    }, (response) => {
+      response.resume();
+      if (response.statusCode === 200) return resolve(true);
+      if (response.statusCode === 404) return resolve(false);
+      reject(new Error(`GitHub respondió con estado ${response.statusCode || "desconocido"}.`));
+    });
+    request.setTimeout(15000, () => request.destroy(new Error("La consulta a GitHub excedió el tiempo límite.")));
+    request.on("error", reject);
+  });
+}
+
+ipcMain.handle("comprobar-version-publicacion", async () => {
+  const raiz = obtenerRaizProyecto();
+  if (!raiz) return { available: false, reason: "Abre la aplicación desde el proyecto de desarrollo para publicar." };
+  const version = require(path.join(raiz, "package.json")).version;
+  const publicada = await consultarVersionPublicada(version);
+  return { available: true, version, publicada };
+});
+
+ipcMain.handle("publicar-actualizacion", async () => {
+  const raiz = obtenerRaizProyecto();
+  if (!raiz) throw new Error("La publicación solo está disponible al abrir la aplicación desde el proyecto de desarrollo.");
+  const version = require(path.join(raiz, "package.json")).version;
+  if (await consultarVersionPublicada(version)) {
+    throw new Error(`La versión ${version} ya existe como publicación en GitHub. Actualiza package.json antes de publicar.`);
+  }
+  const token = leerTokenGithub(raiz);
+  if (!token) throw new Error("No se encontró GH_TOKEN en el archivo .env del proyecto.");
+
+  return new Promise((resolve, reject) => {
+    const proceso = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "electron:publish"], {
+      cwd: raiz,
+      env: { ...process.env, GH_TOKEN: token },
+      windowsHide: true,
+      shell: process.platform === "win32",
+    });
+    let salida = "";
+    let progreso = 5;
+    let finalizado = false;
+    const emitir = (texto, porcentaje = progreso) => {
+      progreso = Math.max(progreso, Math.min(100, porcentaje));
+      if (ventanaPrincipal && !ventanaPrincipal.isDestroyed()) {
+        ventanaPrincipal.webContents.send("progreso-publicacion", {
+          texto: texto.replaceAll(token, "[oculto]").trim(),
+          porcentaje: progreso,
+        });
+      }
+    };
+    const timeout = setTimeout(() => proceso.kill(), 30 * 60 * 1000);
+    const procesarSalida = (fragmento) => {
+      salida = (salida + fragmento.toString()).slice(-12000);
+      const lineas = salida.split(/\r?\n/);
+      salida = lineas.pop() || "";
+      for (const linea of lineas) {
+        const texto = linea.replaceAll(token, "[oculto]").trim();
+        if (!texto) continue;
+        let porcentaje = progreso;
+        const porcentajePublicado = texto.match(/\b(\d{1,3})%/);
+        if (/upload|release|github/i.test(texto) && porcentajePublicado) {
+          porcentaje = 60 + Math.round(Number(porcentajePublicado[1]) * 0.39);
+        } else if (/vite build|building|compiling/i.test(texto)) porcentaje = 25;
+        else if (/electron-builder|packaging|building nsis/i.test(texto)) porcentaje = 48;
+        else if (/publish|upload/i.test(texto)) porcentaje = 60;
+        emitir(texto.slice(-240), porcentaje);
+      }
+    };
+    proceso.stdout.on("data", procesarSalida);
+    proceso.stderr.on("data", procesarSalida);
+    proceso.on("error", (error) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeout);
+      reject(new Error(`No se pudo iniciar la publicación: ${error.message}`));
+    });
+    proceso.on("close", (codigo) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeout);
+      if (codigo !== 0) {
+        const detalle = salida.replaceAll(token, "[oculto]").slice(-2000);
+        emitir(`Error al publicar (código ${codigo ?? "desconocido"}). ${detalle}`, progreso);
+        return reject(new Error(`No se pudo publicar la versión ${version}. ${detalle}`));
+      }
+      emitir(`Publicación de la versión ${version} completada.`, 100);
+      resolve({ version });
+    });
+  });
+});
+
 ipcMain.handle("reiniciar-electron", () => {
   for (const ventana of BrowserWindow.getAllWindows()) {
     ventana.removeAllListeners("close");
@@ -159,6 +278,14 @@ ipcMain.handle("reiniciar-electron", () => {
     execPath: process.execPath,
   });
   app.exit(0);
+});
+
+ipcMain.handle("obtener-configuracion-base-datos-predeterminada", () => {
+  const archivoConfiguracion = app.isPackaged
+    ? path.join(process.resourcesPath, "backend", "database", "databaseConfig.js")
+    : path.join(__dirname, "..", "Server-Lavanderia", "database", "databaseConfig.js");
+  const { leerConfiguracionPredeterminada } = require(archivoConfiguracion);
+  return leerConfiguracionPredeterminada();
 });
 
 ipcMain.handle("abrir-carpeta-respaldo", async () => {

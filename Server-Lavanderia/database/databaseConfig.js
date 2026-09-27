@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const dotenv = require("dotenv");
 
 const CONFIG_FIELDS = ["host", "port", "user", "password", "database"];
 const DEFAULT_DATABASE_CONFIG = {
@@ -10,6 +11,29 @@ const DEFAULT_DATABASE_CONFIG = {
   database: process.env.DB_NAME || "defaultdb",
 };
 const fallbackPath = path.join(__dirname, "database.json");
+
+function leerConfiguracionPredeterminada() {
+  const envPath = process.env.RESOURCES_PATH
+    ? path.join(process.env.RESOURCES_PATH, "backend", ".env")
+    : path.join(__dirname, "..", ".env");
+  let valoresEnv = {};
+
+  try {
+    if (fs.existsSync(envPath)) {
+      valoresEnv = dotenv.parse(fs.readFileSync(envPath));
+    }
+  } catch (error) {
+    console.warn("No se pudo volver a leer el archivo .env para restaurar la configuración de base de datos:", error.message);
+  }
+
+  return normalizarConfiguracion({
+    host: valoresEnv.DB_HOST || process.env.DB_HOST || DEFAULT_DATABASE_CONFIG.host,
+    port: valoresEnv.DB_PORT || process.env.DB_PORT || DEFAULT_DATABASE_CONFIG.port,
+    user: valoresEnv.DB_USER || process.env.DB_USER || DEFAULT_DATABASE_CONFIG.user,
+    password: valoresEnv.DB_PASSWORD ?? process.env.DB_PASSWORD ?? DEFAULT_DATABASE_CONFIG.password,
+    database: valoresEnv.DB_NAME || process.env.DB_NAME || DEFAULT_DATABASE_CONFIG.database,
+  });
+}
 
 function getDatabaseConfigPath() {
   return process.env.DATABASE_CONFIG_PATH || fallbackPath;
@@ -65,6 +89,7 @@ function guardarConfiguracionBaseDatos(configuracion) {
 module.exports = {
   CONFIG_FIELDS,
   DEFAULT_DATABASE_CONFIG,
+  leerConfiguracionPredeterminada,
   leerConfiguracionBaseDatos,
   validarConfiguracionBaseDatos,
   guardarConfiguracionBaseDatos,

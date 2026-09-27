@@ -95,14 +95,31 @@ const restablecerPredeterminados = async () => {
   mensaje.value = ''
   error.value = false
   try {
-    const respuesta = await fetch(`${API_LOCAL_URL}/database-config/defaults`)
-    const resultado = await respuesta.json()
-    if (!respuesta.ok) throw new Error(resultado.message)
+    const electronAPI = (window as Window & {
+      electronAPI?: {
+        obtenerConfiguracionBaseDatosPredeterminada?: () => Promise<ConfiguracionBaseDatos>
+      }
+    }).electronAPI
+
+    let resultado: ConfiguracionBaseDatos
+    if (electronAPI?.obtenerConfiguracionBaseDatosPredeterminada) {
+      resultado = await electronAPI.obtenerConfiguracionBaseDatosPredeterminada()
+    } else {
+      const respuesta = await fetch(`${API_LOCAL_URL}/database-config/defaults`)
+      const contenido = await respuesta.json()
+      if (!respuesta.ok) throw new Error(contenido.message || 'No se pudieron leer los valores predeterminados.')
+      resultado = contenido
+    }
+
     Object.assign(formulario, resultado)
     mensaje.value = 'Credenciales predeterminadas cargadas. Guarda para aplicarlas.'
   } catch (e) {
     error.value = true
-    mensaje.value = e instanceof Error ? e.message : 'No se pudieron cargar las credenciales predeterminadas.'
+    mensaje.value = e instanceof TypeError && /fetch/i.test(e.message)
+      ? `No se pudo contactar el backend local en ${API_LOCAL_URL}. En Electron, reinicia la aplicación y vuelve a intentar.`
+      : e instanceof Error
+        ? e.message
+        : 'No se pudieron cargar las credenciales predeterminadas.'
   } finally { procesando.value = false }
 }
 

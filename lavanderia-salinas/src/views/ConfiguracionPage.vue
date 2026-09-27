@@ -7,6 +7,14 @@
           <h2>Configuración</h2>
           <p>Selecciona una sección para administrar el sistema.</p>
         </div>
+        <button
+          v-if="esDesarrollador && puedePublicar"
+          class="actualizacion-trigger"
+          type="button"
+          @click="abrirModalPublicacion"
+        >
+          Actualización
+        </button>
       </header>
 
       <nav class="configuracion-menu" aria-label="Opciones de configuración">
@@ -92,6 +100,39 @@
         </button>
       </nav>
 
+      <ion-modal :is-open="modalPublicacionAbierto" :backdrop-dismiss="!publicando" @didDismiss="modalPublicacionAbierto = false">
+        <div class="publicacion-modal">
+          <div class="publicacion-modal-header">
+            <div>
+              <p class="configuracion-eyebrow">Herramientas de desarrollador</p>
+              <h3>Actualización</h3>
+            </div>
+            <button class="publicacion-cerrar" type="button" aria-label="Cerrar" :disabled="publicando" @click="modalPublicacionAbierto = false">×</button>
+          </div>
+          <p v-if="estadoPublicacion === 'lista'">Versión local: <strong>{{ versionLocal }}</strong>. {{ versionYaPublicada ? 'Esta versión ya está publicada.' : 'La versión todavía no está publicada.' }}</p>
+          <p v-else-if="mensajePublicacion && !publicando">{{ mensajePublicacion }}</p>
+          <p v-else>Comprueba la versión o inicia su compilación y publicación en GitHub.</p>
+
+          <div v-if="publicando || estadoPublicacion === 'exito'" class="publicacion-progreso" role="status" aria-live="polite">
+            <div class="publicacion-progreso-etiqueta"><span>{{ textoProgreso }}</span><strong>{{ porcentajeProgreso }}%</strong></div>
+            <div class="publicacion-barra"><span :style="{ width: `${porcentajeProgreso}%` }" /></div>
+            <div class="publicacion-consola" aria-label="Salida del proceso de publicación">
+              <p v-for="(linea, indice) in consolaPublicacion" :key="indice">{{ linea }}</p>
+            </div>
+          </div>
+          <p v-if="estadoPublicacion === 'error'" class="publicacion-error">{{ mensajePublicacion }}</p>
+
+          <div class="publicacion-acciones">
+            <ion-button fill="outline" :disabled="publicando || comprobando" @click="comprobarVersion">
+              {{ comprobando ? 'Comprobando…' : 'Comprobar versión' }}
+            </ion-button>
+            <ion-button :disabled="publicando || comprobando || versionYaPublicada || !versionLocal" color="primary" @click="publicarVersion">
+              {{ publicando ? 'Publicando…' : 'Publicar' }}
+            </ion-button>
+          </div>
+        </div>
+      </ion-modal>
+
       <ion-modal :is-open="modalAbierto" @didDismiss="cerrarModal">
         <div class="modal-clave-contenido">
           <div class="modal-header">
@@ -134,7 +175,7 @@
 
 <script setup lang="ts">
 import { IonButton, IonIcon, IonModal } from '@ionic/vue'
-import { ref, nextTick, onMounted, computed } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import { useSesion } from '@/composables/useSesion'
@@ -155,6 +196,13 @@ const ADMIN_PASSWORD = '592647'
 
 const router = useRouter()
 const { esAdministrador, usuarioActual } = useSesion()
+type ElectronPublicacionAPI = {
+  puedePublicarActualizacion?: () => Promise<boolean>
+  comprobarVersionPublicacion?: () => Promise<{ available: boolean; reason?: string; version?: string; publicada?: boolean }>
+  publicarActualizacion?: () => Promise<{ version: string }>
+  onProgresoPublicacion?: (callback: (detalle: { texto: string; porcentaje: number }) => void) => () => void
+}
+const electronAPI = (window as Window & { electronAPI?: ElectronPublicacionAPI }).electronAPI
 
 const esDesarrollador = computed(() => {
   const nombre = usuarioActual.value?.nombre?.toLowerCase() || ''
@@ -167,6 +215,67 @@ const rutaDestino = ref('')
 const passwordInput = ref('')
 const errorPassword = ref(false)
 const passwordRef = ref<HTMLInputElement | null>(null)
+const estadoPublicacion = ref<'inicial' | 'lista' | 'error' | 'exito'>('inicial')
+const versionLocal = ref('')
+const versionYaPublicada = ref(false)
+const comprobando = ref(false)
+const publicando = ref(false)
+const mensajePublicacion = ref('')
+const puedePublicar = ref(false)
+const modalPublicacionAbierto = ref(false)
+const porcentajeProgreso = ref(0)
+const textoProgreso = ref('Preparando publicación…')
+const consolaPublicacion = ref<string[]>([])
+let quitarListenerProgreso: (() => void) | undefined
+
+const abrirModalPublicacion = () => {
+  modalPublicacionAbierto.value = true
+  estadoPublicacion.value = 'inicial'
+  versionLocal.value = ''
+  versionYaPublicada.value = false
+  mensajePublicacion.value = ''
+  porcentajeProgreso.value = 0
+  consolaPublicacion.value = []
+}
+
+const comprobarVersion = async () => {
+  if (!electronAPI?.comprobarVersionPublicacion) return
+  comprobando.value = true
+  mensajePublicacion.value = ''
+  try {
+    const resultado = await electronAPI.comprobarVersionPublicacion()
+    if (!resultado.available) throw new Error(resultado.reason || 'La publicación no está disponible.')
+    versionLocal.value = resultado.version || ''
+    versionYaPublicada.value = Boolean(resultado.publicada)
+    estadoPublicacion.value = 'lista'
+  } catch (error) {
+    estadoPublicacion.value = 'error'
+    mensajePublicacion.value = error instanceof Error ? error.message : 'No se pudo consultar GitHub.'
+  } finally {
+    comprobando.value = false
+  }
+}
+
+const publicarVersion = async () => {
+  if (!electronAPI?.publicarActualizacion || versionYaPublicada.value) return
+  publicando.value = true
+  mensajePublicacion.value = 'Compilando y enviando la publicación a GitHub. Esto puede tardar varios minutos.'
+  porcentajeProgreso.value = 5
+  textoProgreso.value = 'Iniciando compilación…'
+  consolaPublicacion.value = ['Iniciando npm run electron:publish']
+  try {
+    const resultado = await electronAPI.publicarActualizacion()
+    estadoPublicacion.value = 'exito'
+    versionLocal.value = resultado.version
+    versionYaPublicada.value = true
+    mensajePublicacion.value = `La versión ${resultado.version} se publicó correctamente.`
+  } catch (error) {
+    estadoPublicacion.value = 'error'
+    mensajePublicacion.value = error instanceof Error ? error.message : 'No se pudo publicar la actualización.'
+  } finally {
+    publicando.value = false
+  }
+}
 
 const irA = (ruta: string) => {
   void router.replace(ruta).catch(() => {})
@@ -201,7 +310,16 @@ const validarPassword = () => {
 }
 
 onMounted(async () => {
-  // esDesarrollador es ahora un computed, no necesita ser cargado desde el servidor
+  puedePublicar.value = Boolean(await electronAPI?.puedePublicarActualizacion?.().catch(() => false))
+  quitarListenerProgreso = electronAPI?.onProgresoPublicacion?.(({ texto, porcentaje }) => {
+    porcentajeProgreso.value = porcentaje
+    textoProgreso.value = texto
+    if (texto) consolaPublicacion.value = [...consolaPublicacion.value.slice(-39), texto]
+  })
+})
+
+onBeforeUnmount(() => {
+  quitarListenerProgreso?.()
 })
 </script>
 
@@ -213,7 +331,45 @@ onMounted(async () => {
   color-scheme: light;
 }
 
+.actualizacion-trigger {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.actualizacion-trigger:hover { background: #dbeafe; }
+.publicacion-modal {
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 20px;
+  background: #fff;
+}
+.publicacion-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.publicacion-modal h3 { margin: 4px 0; color: #172554; font-size: 1.15rem; font-weight: 800; }
+.publicacion-modal > p { margin: 0; color: #475569; line-height: 1.5; }
+.publicacion-cerrar { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #f1f5f9; color: #334155; font-size: 1.4rem; cursor: pointer; }
+.publicacion-cerrar:disabled { opacity: 0.5; cursor: default; }
+.publicacion-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.publicacion-progreso { display: grid; gap: 8px; min-width: 0; }
+.publicacion-progreso-etiqueta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #334155; font-size: 0.82rem; }
+.publicacion-barra { height: 9px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.publicacion-barra span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #38bdf8); transition: width 250ms ease; }
+.publicacion-consola { max-height: 150px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: #0f172a; color: #cbd5e1; font: 0.72rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.publicacion-consola p { margin: 0; overflow-wrap: anywhere; }
+.publicacion-error { color: #b91c1c !important; }
+
 .configuracion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 2px 0;
 }
 

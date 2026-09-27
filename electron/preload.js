@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   reiniciarElectron: () => ipcRenderer.invoke("reiniciar-electron"),
+  obtenerConfiguracionBaseDatosPredeterminada: () =>
+    ipcRenderer.invoke("obtener-configuracion-base-datos-predeterminada"),
   abrirCarpetaRespaldo: () => ipcRenderer.invoke("abrir-carpeta-respaldo"),
   abrirWhatsAppDesktop: (url) =>
     ipcRenderer.invoke("abrir-whatsapp-desktop", url),
@@ -23,4 +25,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("descargar-e-instalar-actualizacion"),
   buscarActualizaciones: () => ipcRenderer.invoke("buscar-actualizaciones"),
   obtenerVersionAplicacion: () => ipcRenderer.invoke("obtener-version-aplicacion"),
+  comprobarVersionPublicacion: () => ipcRenderer.invoke("comprobar-version-publicacion"),
+  publicarActualizacion: () => ipcRenderer.invoke("publicar-actualizacion"),
+  puedePublicarActualizacion: () => ipcRenderer.invoke("puede-publicar-actualizacion"),
+  onProgresoPublicacion: (callback) => {
+    const listener = (_event, detalle) => callback(detalle);
+    ipcRenderer.on("progreso-publicacion", listener);
+    return () => ipcRenderer.removeListener("progreso-publicacion", listener);
+  },
 });

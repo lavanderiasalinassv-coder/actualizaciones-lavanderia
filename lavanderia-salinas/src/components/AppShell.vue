@@ -116,6 +116,15 @@
 
               <div class="banner-centro">
                 <div class="banner-logo-marco">
+                  <div class="banner-logo-estrellas" aria-hidden="true">
+                    <span class="estrella-logo estrella-logo-1">✦</span>
+                    <span class="estrella-logo estrella-logo-2">✧</span>
+                    <span class="estrella-logo estrella-logo-3">✦</span>
+                    <span class="estrella-logo estrella-logo-4">✧</span>
+                    <span class="estrella-logo estrella-logo-5">✦</span>
+                    <span class="estrella-logo estrella-logo-6">✧</span>
+                    <span class="estrella-logo estrella-logo-7">✦</span>
+                  </div>
                   <img :src="logoActual" alt="Lavandería Salinas" class="banner-logo-grande" @error="usarLogoLocal" />
                 </div>
                 <div class="banner-centro-copy">
@@ -3590,6 +3599,7 @@ ion-content.shell-container {
 
 /* Marco del logo: se desvanece más rápido que el tamaño. */
 .banner-logo-marco {
+  position: relative;
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -3606,6 +3616,44 @@ ion-content.shell-container {
   flex-shrink: 0;
   border-radius: 16px;
   object-fit: contain;
+}
+
+.banner-logo-estrellas {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.estrella-logo {
+  position: absolute;
+  bottom: 5%;
+  color: #fff2a6;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  text-shadow: 0 0 5px rgba(255, 235, 145, 0.95), 0 0 12px rgba(255, 255, 255, 0.7);
+  animation: estrella-logo-asciende 3.4s ease-out infinite;
+}
+
+.estrella-logo-1 { left: 17%; --deriva-estrella: -12px; animation-delay: 0s; }
+.estrella-logo-2 { left: 29%; --deriva-estrella: 9px; animation-delay: .8s; animation-duration: 3.8s; }
+.estrella-logo-3 { left: 43%; --deriva-estrella: -7px; animation-delay: 1.6s; }
+.estrella-logo-4 { left: 57%; --deriva-estrella: 12px; animation-delay: .4s; animation-duration: 3.7s; }
+.estrella-logo-5 { left: 69%; --deriva-estrella: -10px; animation-delay: 2s; }
+.estrella-logo-6 { left: 79%; --deriva-estrella: 7px; animation-delay: 1.2s; animation-duration: 3.9s; }
+.estrella-logo-7 { left: 35%; --deriva-estrella: 5px; animation-delay: 2.5s; animation-duration: 3.6s; }
+
+@keyframes estrella-logo-asciende {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.45) rotate(0deg); }
+  12% { opacity: .9; }
+  70% { opacity: .62; }
+  100% { opacity: 0; transform: translate3d(var(--deriva-estrella), -145px, 0) scale(1.15) rotate(38deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estrella-logo { animation: none; opacity: 0; }
 }
 
 .banner-centro-copy {

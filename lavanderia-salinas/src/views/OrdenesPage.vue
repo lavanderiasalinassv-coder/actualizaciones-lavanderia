@@ -366,6 +366,26 @@
                 <ion-icon v-else :icon="mailOutline" />
               </button>
               <button
+                v-if="ordenSeleccionada"
+                class="btn-icono"
+                type="button"
+                title="Imprimir ticket de orden"
+                aria-label="Imprimir ticket de orden"
+                @click="imprimirTicketOrden(ordenSeleccionada)"
+              >
+                <ion-icon :icon="printOutline" />
+              </button>
+              <button
+                v-if="ordenSeleccionada"
+                class="btn-icono"
+                type="button"
+                title="Imprimir ticket de prendas"
+                aria-label="Imprimir ticket de prendas"
+                @click="imprimirTicketPrendas(ordenSeleccionada)"
+              >
+                <ion-icon :icon="shirtOutline" />
+              </button>
+              <button
                 v-if="esAdministrador && !esOperador"
                 class="btn-icono peligro"
                 :disabled="peticionOrdenEnCurso || eliminandoOrdenIndividual"
@@ -919,6 +939,7 @@
             </div>
           </div>
 
+          <template v-if="!extraAgregadoEnModal">
           <label class="modal-label">Descripción</label>
           <input
             v-model="descripcionCargoExtra"
@@ -939,6 +960,23 @@
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Agregar' }}
             </button>
           </div>
+          </template>
+          <section v-else class="extra-notificacion" aria-live="polite">
+            <p class="extra-guardado">Cargo extra agregado a la orden {{ ordenSeleccionada?.numero }}.</p>
+            <p v-if="mensajeNotificacionExtra" class="extra-contacto-ayuda" aria-live="polite">{{ mensajeNotificacionExtra }}</p>
+            <button v-if="!mostrarOpcionesNotificacion" class="btn-principal" type="button" @click="mostrarOpcionesNotificacion = true">Notificar al cliente</button>
+            <template v-else>
+              <p class="extra-notificacion-titulo">¿Cómo deseas notificarle?</p>
+              <div class="modal-confirmacion-botones">
+                <button class="btn-outline" type="button" :disabled="!ordenSeleccionada?.correo || enviandoCorreo" @click="notificarExtraPorCorreo">{{ enviandoCorreo ? 'Enviando...' : 'Vía correo' }}</button>
+                <button class="btn-principal" type="button" :disabled="!ordenSeleccionada?.telefono" @click="notificarExtraPorWhatsApp">Vía WhatsApp</button>
+              </div>
+              <p v-if="!ordenSeleccionada?.correo || !ordenSeleccionada?.telefono" class="extra-contacto-ayuda">
+                {{ !ordenSeleccionada?.correo ? 'La orden no tiene correo registrado. ' : '' }}{{ !ordenSeleccionada?.telefono ? 'La orden no tiene teléfono registrado.' : '' }}
+              </p>
+            </template>
+            <button class="btn-outline" type="button" @click="cerrarModalCargoExtra">Listo</button>
+          </section>
         </div>
       </ion-modal>
 
@@ -997,6 +1035,7 @@
             </div>
           </div>
 
+          <template v-if="!extraAgregadoEnModal">
           <input
             v-model="busquedaProducto"
             class="modal-input-texto"
@@ -1026,11 +1065,28 @@
           </div>
 
           <div class="modal-confirmacion-botones">
-            <button class="btn-outline" @click="cerrarModalAgregarProducto">Listo</button>
+            <button class="btn-outline" @click="cerrarModalAgregarProducto">Cancelar</button>
             <button class="btn-principal" :disabled="!hayServiciosSeleccionados || peticionOrdenEnCurso || turnoCerrado" @click="agregarServiciosSeleccionados">
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Agregar seleccionados' }}
             </button>
           </div>
+          </template>
+          <section v-else class="extra-notificacion" aria-live="polite">
+            <p class="extra-guardado">Servicio extra agregado a la orden {{ ordenSeleccionada?.numero }}.</p>
+            <p v-if="mensajeNotificacionExtra" class="extra-contacto-ayuda" aria-live="polite">{{ mensajeNotificacionExtra }}</p>
+            <button v-if="!mostrarOpcionesNotificacion" class="btn-principal" type="button" @click="mostrarOpcionesNotificacion = true">Notificar al cliente</button>
+            <template v-else>
+              <p class="extra-notificacion-titulo">¿Cómo deseas notificarle?</p>
+              <div class="modal-confirmacion-botones">
+                <button class="btn-outline" type="button" :disabled="!ordenSeleccionada?.correo || enviandoCorreo" @click="notificarExtraPorCorreo">{{ enviandoCorreo ? 'Enviando...' : 'Vía correo' }}</button>
+                <button class="btn-principal" type="button" :disabled="!ordenSeleccionada?.telefono" @click="notificarExtraPorWhatsApp">Vía WhatsApp</button>
+              </div>
+              <p v-if="!ordenSeleccionada?.correo || !ordenSeleccionada?.telefono" class="extra-contacto-ayuda">
+                {{ !ordenSeleccionada?.correo ? 'La orden no tiene correo registrado. ' : '' }}{{ !ordenSeleccionada?.telefono ? 'La orden no tiene teléfono registrado.' : '' }}
+              </p>
+            </template>
+            <button class="btn-outline" type="button" @click="cerrarModalAgregarProducto">Listo</button>
+          </section>
         </div>
       </ion-modal>
 
@@ -1251,6 +1307,7 @@ import { useTurno } from '@/composables/useTurno'
 import { useSesion } from '@/composables/useSesion'
 import { enviarCorreoNotificacion } from '@/composables/useCorreo'
 import { enviarFacturaOrdenPorCorreo, generarHtmlFacturaOrden } from '@/composables/Usepedido'
+import { imprimirTicketOrden, imprimirTicketPrendas } from '@/utils/documentosOrden'
 import {
   checkmarkCircleOutline,
   closeOutline,
@@ -1271,6 +1328,8 @@ import {
   lockClosedOutline,
   banOutline,
   warningOutline,
+  printOutline,
+  shirtOutline,
 } from 'ionicons/icons'
 const route = useRoute()
 const router = useRouter()
@@ -1453,6 +1512,10 @@ const notaRecepcionModal = ref('')
 const mostrarModalCargoExtra = ref(false)
 const descripcionCargoExtra = ref('')
 const montoCargoExtra = ref(0)
+const extraAgregadoEnModal = ref(false)
+const tipoExtraAgregado = ref<'cargo' | 'servicio' | null>(null)
+const mostrarOpcionesNotificacion = ref(false)
+const mensajeNotificacionExtra = ref('')
 const mostrarModalDescuento = ref(false)
 const tipoDescuento = ref<'porcentaje' | 'monto'>('porcentaje')
 const valorDescuento = ref(0)
@@ -1480,6 +1543,10 @@ const cerrarModalComprobante = () => {
 
 const abrirModalCargoExtra = () => {
   if (ordenSeleccionada.value?.estado === 'cancelada') return
+  extraAgregadoEnModal.value = false
+  tipoExtraAgregado.value = null
+  mostrarOpcionesNotificacion.value = false
+  mensajeNotificacionExtra.value = ''
   descripcionCargoExtra.value = ''
   montoCargoExtra.value = 0
   mostrarModalCargoExtra.value = true
@@ -1497,6 +1564,10 @@ const productosFiltrados = computed(() => {
 
 const abrirModalAgregarProducto = () => {
   if (ordenSeleccionada.value?.estado === 'cancelada') return
+  extraAgregadoEnModal.value = false
+  tipoExtraAgregado.value = null
+  mostrarOpcionesNotificacion.value = false
+  mensajeNotificacionExtra.value = ''
   busquedaProducto.value = ''
   cantidadesServicios.value = {}
   mostrarModalAgregarProducto.value = true
@@ -1505,6 +1576,10 @@ const abrirModalAgregarProducto = () => {
 const cerrarModalAgregarProducto = () => {
   mostrarModalAgregarProducto.value = false
   cantidadesServicios.value = {}
+  extraAgregadoEnModal.value = false
+  tipoExtraAgregado.value = null
+  mostrarOpcionesNotificacion.value = false
+  mensajeNotificacionExtra.value = ''
 }
 
 const cantidadServicio = (id: string) => cantidadesServicios.value[id] ?? 0
@@ -1526,9 +1601,13 @@ const agregarServiciosSeleccionados = async () => {
       const servicio = servicios.value.find((item) => item.id === id)
       if (servicio && cantidad > 0) {
         await agregarItemAOrden(ordenSeleccionada.value.id, servicio, cantidad)
+        extraAgregadoEnModal.value = true
+        tipoExtraAgregado.value = 'servicio'
       }
     }
-    cerrarModalAgregarProducto()
+    cantidadesServicios.value = {}
+    busquedaProducto.value = ''
+    mostrarOpcionesNotificacion.value = false
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudieron agregar los servicios.')
   } finally {
@@ -1581,6 +1660,10 @@ const confirmarQuitarItem = async () => {
 
 const cerrarModalCargoExtra = () => {
   mostrarModalCargoExtra.value = false
+  extraAgregadoEnModal.value = false
+  tipoExtraAgregado.value = null
+  mostrarOpcionesNotificacion.value = false
+  mensajeNotificacionExtra.value = ''
 }
 
 const confirmarCargoExtra = async () => {
@@ -1589,7 +1672,10 @@ const confirmarCargoExtra = async () => {
 
   try {
     await agregarCargoExtra(ordenSeleccionada.value.id, descripcionCargoExtra.value, montoCargoExtra.value)
-    cerrarModalCargoExtra()
+    extraAgregadoEnModal.value = true
+    tipoExtraAgregado.value = 'cargo'
+    mostrarOpcionesNotificacion.value = false
+    mensajeNotificacionExtra.value = ''
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo agregar el cargo extra.')
   } finally {
@@ -1622,7 +1708,11 @@ const enviarEmail = async () => {
   }
 }
 
-const crearFacturaCorreo = (orden: Orden) => ({
+const avisoExtraAgregado = (orden: Orden) => tipoExtraAgregado.value === 'cargo'
+  ? `Se ha agregado un cargo extra a tu orden ${orden.numero}.`
+  : `Se han agregado servicios extra a tu orden ${orden.numero}.`
+
+const crearFacturaCorreo = (orden: Orden, avisoActualizacion?: string) => ({
   numero: orden.numero,
   nombreCliente: orden.nombreCliente,
   createdAt: orden.createdAt,
@@ -1637,8 +1727,37 @@ const crearFacturaCorreo = (orden: Orden) => ({
   detallesPrendas: orden.detallesPrendas,
   estado: orden.estado,
   estadoPago: orden.estadoPago,
-  montoRecibido: orden.montoRecibido
+  montoRecibido: orden.montoRecibido,
+  cargosExtra: orden.cargosExtra,
+  avisoActualizacion
 })
+
+const notificarExtraPorCorreo = async () => {
+  const orden = ordenSeleccionada.value
+  if (!orden?.correo || enviandoCorreo.value) return
+  enviandoCorreo.value = true
+  mensajeNotificacionExtra.value = ''
+  try {
+    await enviarFacturaOrdenPorCorreo(crearFacturaCorreo(orden, avisoExtraAgregado(orden)))
+    mensajeNotificacionExtra.value = `Factura actualizada enviada a ${orden.correo}.`
+    const toast = await toastController.create({ message: 'Factura actualizada enviada por correo.', duration: 2500, color: 'success' })
+    await toast.present()
+  } catch (error) {
+    mensajeNotificacionExtra.value = error instanceof Error ? error.message : 'No se pudo enviar la factura por correo.'
+  } finally {
+    enviandoCorreo.value = false
+  }
+}
+
+const notificarExtraPorWhatsApp = () => {
+  const orden = ordenSeleccionada.value
+  if (!orden?.telefono) return
+  const mensaje = construirMensajeWhatsApp(avisoExtraAgregado(orden))
+  if (!mensaje) return
+  const numero = `${orden.codigoPais}${orden.telefono}`.replace(/\D/g, '')
+  window.dispatchEvent(new CustomEvent('whatsapp-compose', { detail: { phone: numero, message: mensaje } }))
+  mensajeNotificacionExtra.value = 'Se abrió WhatsApp con el resumen actualizado de la orden.'
+}
 
 const ordenPerteneceATurnoActivo = (orden: Orden) => {
   if (esAdministrador.value) return true
@@ -2558,7 +2677,7 @@ const formatearFechaCorta = (valor: string) =>
     year: 'numeric'
   })
 
-const construirMensajeWhatsApp = () => {
+const construirMensajeWhatsApp = (avisoActualizacion = '') => {
   const orden = ordenSeleccionada.value
   if (!orden) return ''
 
@@ -2593,7 +2712,10 @@ const construirMensajeWhatsApp = () => {
     ? orden.items.map((item) => lineaItem(item)).join('\n')
     : 'Sin servicios registrados'
 
-  const descuento = Math.max(0, orden.subtotal - orden.total)
+  const descuento = Math.max(0, Number(orden.descuento) || 0)
+  const cargosExtra = orden.cargosExtra.length
+    ? orden.cargosExtra.map((cargo) => `${cargo.descripcion}: ${formatoMonto(cargo.monto)}`).join('\n')
+    : ''
   const entrega = orden.fechaEntrega
     ? textoEntrega(orden)
     : 'Te avisaremos cuando esté lista para recoger.'
@@ -2601,6 +2723,7 @@ const construirMensajeWhatsApp = () => {
   return [
     '🧺 *LAVANDERÍA SALINAS* 🧺',
     '🎟️ *TICKET DE ORDEN*',
+    avisoActualizacion ? `📢 *${avisoActualizacion}*` : '',
     '----------',
     '📋 DATOS DE LA ORDEN',
     `ORDEN  : ${orden.numero}`,
@@ -2611,10 +2734,13 @@ const construirMensajeWhatsApp = () => {
     '🧼 *SERVICIOS*',
     servicios,
     orden.detallesPrendas ? `DETALLES: ${orden.detallesPrendas}` : '',
+    cargosExtra ? '-------*CARGOS EXTRA*--------' : '',
+    cargosExtra,
     '----------',
     '💰 *RESUMEN DE PAGO*',
     lineaTotal('Subtotal', orden.subtotal),
     lineaTotal('Descuento', -descuento),
+    ...(orden.cargosExtra.length ? [lineaTotal('Cargos extra', orden.cargosExtra.reduce((total, cargo) => total + Number(cargo.monto || 0), 0))] : []),
     '----------',
     lineaTotal('TOTAL', orden.total),
     lineaTotal('Recibido', orden.montoRecibido),
@@ -5032,6 +5158,22 @@ onBeforeUnmount(() => {
 .modal-confirmacion-botones button {
   flex: 1;
 }
+
+.extra-notificacion {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #eff6ff, #f8fbff);
+}
+.extra-notificacion > p { margin: 0; }
+.extra-guardado { color: #166534; font-weight: 700; }
+.extra-notificacion-titulo { color: #1e3a8a; font-weight: 700; }
+.extra-contacto-ayuda { color: #64748b; font-size: .82rem; line-height: 1.4; }
+.extra-notificacion > .btn-principal,
+.extra-notificacion > .btn-outline { min-height: 42px; }
 
 .motivo-intervencion-modal-texto {
   margin: 0;

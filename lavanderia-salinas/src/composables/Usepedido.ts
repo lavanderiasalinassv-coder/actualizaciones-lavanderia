@@ -51,6 +51,8 @@ export interface FacturaOrdenCorreo {
   subtotal: number
   descuento: number
   items: Array<{ nombre: string; precio: number; cantidad: number; clasificacionPrendas?: ClasificacionPrendas }>
+  cargosExtra?: Array<{ descripcion: string; monto: number; fecha?: string }>
+  avisoActualizacion?: string
   correo: string
   fechaEntregaActiva: boolean
   fechaEntregaTexto: string
@@ -161,6 +163,14 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
       : '#d97706'
   
   const prendasRecibidas = Number(orden.cantidadPrendas || 0)
+  const cargosExtra = orden.cargosExtra ?? []
+  const totalCargosExtra = cargosExtra.reduce((suma, cargo) => suma + Math.max(0, Number(cargo.monto) || 0), 0)
+  const cargosExtraHtml = cargosExtra.length
+    ? `<div style="margin-top:18px;"><h3 style="margin:0 0 10px;font-size:1.2rem;color:#123a66;">Cargos extra</h3><table role="presentation" style="width:100%;border-collapse:collapse;">${cargosExtra.map((cargo) => `<tr><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;">${escaparHtml(cargo.descripcion)}</td><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;text-align:right;">$${(Number(cargo.monto) || 0).toFixed(2)}</td></tr>`).join('')}</table></div>`
+    : ''
+  const avisoActualizacionHtml = orden.avisoActualizacion
+    ? `<div style="margin:14px 0;padding:12px 16px;border-left:4px solid #168276;border-radius:8px;background:#eef8f5;color:#155e55;font-size:1rem;font-weight:700;">${escaparHtml(orden.avisoActualizacion)}</div>`
+    : ''
 
   const itemsHtml = orden.items
     .map(
@@ -218,6 +228,8 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
               </tr>
             </table>
 
+            ${avisoActualizacionHtml}
+
             <div style="background:#f3fbfa;border:1px solid #cdebe6;border-radius:10px;padding:19px 22px;margin:18px 0;font-size:1.18rem;">
               <div><strong style="color:#123a66;">Orden ${escaparHtml(orden.numero)}</strong></div>
               <p style="margin:8px 0 0;">Cliente: ${escaparHtml(orden.nombreCliente)}</p>
@@ -246,9 +258,12 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
               </table>
             </div>
 
+            ${cargosExtraHtml}
+
             <table role="presentation" style="width:330px;margin:22px 0 0 auto;padding:12px 16px;border:1px solid #c9d9e8;border-radius:8px;background:#f8fbfe;border-collapse:collapse;">
               <tr><td style="padding:7px 0;font-size:1rem;">Subtotal</td><td style="padding:7px 0;font-size:1rem;text-align:right;">$${subtotal.toFixed(2)}</td></tr>
               <tr><td style="padding:7px 0;font-size:1rem;">Descuentos</td><td style="padding:7px 0;font-size:1rem;text-align:right;">-$${descuento.toFixed(2)}</td></tr>
+              ${totalCargosExtra ? `<tr><td style="padding:7px 0;font-size:1rem;">Cargos extra</td><td style="padding:7px 0;font-size:1rem;text-align:right;">+$${totalCargosExtra.toFixed(2)}</td></tr>` : ''}
               ${orden.esFacturaFinal ? '' : `<tr><td style="padding:7px 0;font-size:1rem;">Anticipo</td><td style="padding:7px 0;font-size:1rem;text-align:right;">-$${montoRecibido.toFixed(2)}</td></tr>`}
               <tr>
                 <td style="padding-top:12px;border-top:1px solid #9ab6ce;color:#123a66;font-size:1.3rem;font-weight:800;">${orden.esFacturaFinal ? 'Total pagado' : 'Total'}</td>

@@ -1657,7 +1657,7 @@ const agregarCargoExtra = async (
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
 
-    const descripcionLimpio = (descripcion || "").trim() || "Cargo extra";
+    const descripcionLimpia = (descripcion || "").trim() || "Cargo extra";
 
     const pad = (valor) => String(valor).padStart(2, "0");
     const ahora = new Date();
@@ -1665,7 +1665,7 @@ const agregarCargoExtra = async (
 
     await conn.execute(
       "INSERT INTO orden_cargos_extra (id, orden_id, descripcion, monto, fecha) VALUES (?,?,?,?,?)",
-      [randomUUID(), id, descripcionLimpio, montoValido, fechaLocalMySQL],
+      [randomUUID(), id, descripcionLimpia, montoValido, fechaLocalMySQL],
     );
 
     const [cargos] = await conn.query(

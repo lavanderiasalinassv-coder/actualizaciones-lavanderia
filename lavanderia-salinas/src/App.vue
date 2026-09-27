@@ -156,7 +156,7 @@ const segundosRestantes = ref(TIEMPO_AVISO_SEG)
 let timerAviso: ReturnType<typeof setTimeout> | null = null
 let timerCuentaRegresiva: ReturnType<typeof setInterval> | null = null
 
-const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/login', '/verificacion-2fa'])
+const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/', '/login', '/verificacion-2fa'])
 const rutaProtegida = computed(() => !RUTAS_SIN_CONTROL_INACTIVIDAD.has(route.path))
 
 // Estilos dinámicos para ajustar la app cuando hay paneles laterales abiertos

@@ -9,7 +9,7 @@ import { combinarFechaHoraCentroamerica } from '@/composables/useFechas'
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
-    redirect: '/login'
+    component: () => import('@/views/splash.vue')
   },
   {
     path: '/login',
@@ -173,6 +173,9 @@ const esAdministrador = (rol: string) =>
   rol === 'administrador' || rol === 'admin'
 
 router.beforeEach(async (to) => {
+  // Always run the startup connection check before continuing to login.
+  if (to.path === '/') return true
+
   const rolActual = obtenerRolActual()
   if (rolActual === 'operador' && !rutasPermitidasOperador.has(to.path)) {
     return { path: '/tabs/principal' }

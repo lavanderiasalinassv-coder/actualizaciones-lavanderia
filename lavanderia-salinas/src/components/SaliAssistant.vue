@@ -230,6 +230,7 @@ import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useSaliAiConfig } from '@/composables/useSaliAiConfig'
 import { obtenerTranscriptor, decodificarAudioParaWhisper } from '@/composables/useTranscripcionLocal'
+import { useOrdenes } from '@/composables/useOrdenes'
 
 type Mensaje = { rol: 'user' | 'assistant', texto: string }
 
@@ -237,6 +238,7 @@ const { usuarioActual, rol, esAdministrador } = useSesion()
 const { funcionesBloqueadas } = useAccesoOperativo()
 const asistenteBloqueado = computed(() => !esAdministrador.value && funcionesBloqueadas.value)
 const { vozSeleccionada } = useSaliAiConfig()
+const { ordenes, cargarOrdenes } = useOrdenes()
 const route = useRoute()
 const abierto = ref(false)
 const lateral = ref(false)
@@ -784,6 +786,23 @@ const enviar = async (esPorVoz = false) => {
   pregunta.value = ''
   enviando.value = true
   try {
+    const solicitudPdfOrden = /\bpdf\b/i.test(texto)
+      ? texto.match(/\borden(?:\s*(?:n(?:ú|u)mero)?\.?)?\s*#?\s*(\d{1,8})\b/i)
+      : null
+    if (solicitudPdfOrden) {
+      await cargarOrdenes()
+      const numeroSolicitado = Number(solicitudPdfOrden[1])
+      const orden = ordenes.value.find((item) => Number(String(item.numero).replace(/\D/g, '')) === numeroSolicitado)
+      if (!orden) throw new Error(`No encontré la orden #${solicitudPdfOrden[1]}. Comprueba el número e inténtalo de nuevo.`)
+      const { descargarPdfOrden } = await import('@/utils/documentosOrden')
+      descargarPdfOrden(orden)
+      const respuestaPdf = `Listo. Generé el PDF con la información de la orden ${orden.numero} y comenzó la descarga.`
+      const responderConVoz = esPorVoz && conversacionPorVoz.value
+      mensajes.value.push({ rol: 'assistant', texto: respuestaPdf })
+      if (responderConVoz) void hablarTexto(respuestaPdf, mensajes.value.length - 1)
+      return
+    }
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 segundos timeout
     
