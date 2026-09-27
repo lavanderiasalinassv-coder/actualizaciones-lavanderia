@@ -40,14 +40,17 @@ const manejarRespuesta = async <T,>(res: Response): Promise<T> => {
 
 const promociones = ref<Promocion[]>([])
 const cargando = ref(false)
+const error = ref<string | null>(null)
 
 const cargarPromociones = async (): Promise<void> => {
   cargando.value = true
+  error.value = null
   try {
     const res = await fetch(apiUrl())
     promociones.value = await manejarRespuesta<Promocion[]>(res)
-  } catch {
+  } catch (err) {
     promociones.value = []
+    error.value = err instanceof Error ? err.message : 'No se pudieron cargar las promociones.'
   } finally {
     cargando.value = false
   }
@@ -149,6 +152,7 @@ export const usePromociones = () => {
   return {
     promociones,
     cargando,
+    error,
     cargarPromociones,
     crearPromocion,
     actualizarPromocion,

@@ -403,12 +403,19 @@
           </div>
 
           <div class="cierres-lista">
-            <div v-if="cierresFiltrados.length === 0" class="cierres-vacio">
+            <div v-if="cargandoCierres" class="cierres-vacio" role="status">
+              <p class="cierres-vacio-texto">Cargando cierres...</p>
+            </div>
+            <div v-else-if="errorCierres" class="cierres-vacio" role="alert">
+              <p class="cierres-vacio-texto">{{ errorCierres }}</p>
+              <button type="button" class="cierre-ver-ordenes" @click="cargarCierres">Reintentar</button>
+            </div>
+            <div v-else-if="cierresFiltrados.length === 0" class="cierres-vacio">
               <ion-icon :icon="listOutline" class="cierres-vacio-icon" />
               <p class="cierres-vacio-texto">No hay cierres registrados</p>
             </div>
 
-            <div v-else class="cierres-box">
+            <div v-else class="cierres-box cierres-box-historial">
               <div v-for="cierre in cierresFiltrados" :key="cierre.id" class="cierre-item">
                 <div class="cierre-header">
                   <div class="cierre-info">
@@ -520,6 +527,13 @@
         </div>
 
         <div class="cierres-contenido">
+          <div v-if="cargandoDetalleCierre" class="cierres-vacio" role="status">
+            <p class="cierres-vacio-texto">Cargando detalle del cierre...</p>
+          </div>
+          <div v-else-if="errorDetalleCierre" class="cierres-vacio" role="alert">
+            <p class="cierres-vacio-texto">{{ errorDetalleCierre }}</p>
+          </div>
+          <template v-else>
           <div v-if="cierreSeleccionado" class="cierre-resumen-grid">
             <div class="cierre-resumen-card card-emerald">
               <span>Total recaudado</span>
@@ -590,6 +604,7 @@
               </div>
             </div>
           </div>
+          </template>
 
         </div>
       </div>
@@ -1445,14 +1460,6 @@
       </div>
     </ion-modal>
 
-    <!-- Panel Navegador -->
-    <NavegadorPannel
-      :abierto="mostrarPanelNavegador"
-      @cerrar="cerrarNavegador"
-      @modo-cambio="panelNavegadorLateral = $event"
-      @lado-cambio="panelLado = $event"
-    />
-
   </ion-page>
 </template>
 
@@ -1476,7 +1483,6 @@ import { useNotificaciones, type NotificacionUsuario } from '@/composables/useNo
 import { usePanelRedes } from '@/composables/usePanelRedes'
 import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import { jsPDF } from 'jspdf'
-import NavegadorPannel from '@/components/NavegadorPannel.vue'
 const { validarSesion } = useSesion()
 const mensajeErrorActualizacion = ref('')
 
@@ -1532,6 +1538,16 @@ watch(ultimaOrdenCreada, (orden) => {
 
   notificacionOrdenNumero.value = orden.numero
   notificacionOrdenVisible.value = true
+
+  nextTick(() => {
+    const contenido = contentAreaRef.value
+    if (!contenido) return
+    bannerOffsetPx.value = 0
+    squeeze.value = 0
+    bannerColapsado = false
+    ultimoScrollTop = 0
+    contenido.scrollTo({ top: 0, behavior: 'smooth' })
+  })
 
   if (notificacionOrdenTimer) clearTimeout(notificacionOrdenTimer)
   notificacionOrdenTimer = setTimeout(() => {
@@ -1591,22 +1607,9 @@ const imagenErrorEditar = ref(false)
 const colorSeleccionado = ref('#000000')
 const colorSeleccionadoEditar = ref('#000000')
 const {
-  mostrarPanelWhatsapp,
-  mostrarPanelFacebook,
-  mostrarPanelNavegador,
-  urlWhatsappInicial,
-  panelWhatsappLateral,
-  panelFacebookLateral,
-  panelNavegadorLateral,
-  panelLado,
-  panelLateralAbierto,
-  ladoPanelActivo,
   abrirWhatsapp: abrirWhatsappPanel,
   abrirFacebook,
-  abrirNavegador,
-  cerrarWhatsapp,
-  cerrarFacebook,
-  cerrarNavegador
+  abrirNavegador
 } = usePanelRedes()
 
 const abrirWhatsapp = () => {
@@ -1880,15 +1883,6 @@ const abrirHistorialAvisos = async () => {
   }
 }
 
-const actualizarEspacioPanel = (activo: boolean) => {
-  document.documentElement.classList.toggle('app-panel-lateral-activo', activo)
-  document.documentElement.classList.toggle('app-panel-lateral-izquierda', activo && panelLado.value === 'izquierda')
-}
-
-watch([mostrarPanelWhatsapp, mostrarPanelFacebook, mostrarPanelNavegador, panelWhatsappLateral, panelFacebookLateral, panelNavegadorLateral, panelLado], ([whatsappAbierto, facebookAbierto, navegadorAbierto, whatsappLateral, facebookLateral, navegadorLateral]) => {
-  actualizarEspacioPanel(Boolean((whatsappAbierto && whatsappLateral) || (facebookAbierto && facebookLateral) || (navegadorAbierto && navegadorLateral)))
-}, { immediate: true })
-
 const limpiarNotificacionesDesdeMenu = async () => {
   mostrarMenuNotificaciones.value = false
   if (!window.confirm('Se eliminarán todos los avisos y reportes de la tabla. ¿Deseas continuar?')) return
@@ -2154,8 +2148,6 @@ onUnmounted(() => {
   window.removeEventListener('resize', medirBanner)
   resizeObserver?.disconnect()   // ← AGREGAR esta línea
   if (intervaloNotificaciones) clearInterval(intervaloNotificaciones)
-  document.documentElement.classList.remove('app-panel-lateral-activo')
-  document.documentElement.classList.remove('app-panel-lateral-izquierda')
 })
 
 const fechaLarga = computed(() =>
@@ -2267,6 +2259,11 @@ const motivoGasto = ref('')
 const turnoIdGasto = ref('')
 const registrarGastoAntiguo = ref(false)
 const montoCierre = ref(0)
+const cierresResumenShell = ref<any[]>([])
+const cargandoCierres = ref(false)
+const errorCierres = ref('')
+const cargandoDetalleCierre = ref(false)
+const errorDetalleCierre = ref('')
 const cierreSeleccionado = ref<any>(null)
 const ordenSeleccionadaCierre = ref<any>(null)
 const cierrePendienteEliminar = ref<any>(null)
@@ -2289,7 +2286,7 @@ const turnosParaGasto = computed(() => {
       etiqueta: `Caja #${turno.numeroCaja} (actual)`
     })
   }
-  for (const cierre of historialCierres.value) {
+  for (const cierre of cierresResumenShell.value) {
     if (cierre.turnoId === turno.id) continue
     lista.push({
       id: cierre.turnoId,
@@ -2329,10 +2326,21 @@ const finDelDia = (fecha: Date) => {
 }
 
 const cargarCierres = async () => {
+  if (cargandoCierres.value) return
+  cargandoCierres.value = true
+  errorCierres.value = ''
   try {
-    await cargarHistorial()
+    const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja?resumen=1`, {
+      signal: AbortSignal.timeout(20000)
+    })
+    const datos = await respuesta.json().catch(() => null)
+    if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo cargar el historial de cierres.')
+    cierresResumenShell.value = Array.isArray(datos) ? datos : []
   } catch (error) {
     console.error('Error al cargar cierres:', error)
+    errorCierres.value = error instanceof Error ? error.message : 'No se pudieron cargar los cierres.'
+  } finally {
+    cargandoCierres.value = false
   }
 }
 
@@ -2341,8 +2349,8 @@ const eliminarCierreDesdeHistorial = async (cierre: any) => {
   mostrarConfirmacionEliminarCierre.value = true
 }
 
-const cerrarConfirmacionEliminarCierre = () => {
-  if (eliminandoCierre.value) return
+const cerrarConfirmacionEliminarCierre = (forzar = false) => {
+  if (eliminandoCierre.value && !forzar) return
   mostrarConfirmacionEliminarCierre.value = false
   cierrePendienteEliminar.value = null
 }
@@ -2354,11 +2362,12 @@ const confirmarEliminarCierre = async () => {
 
   try {
     await eliminarCierre(cierre.id)
+    cierresResumenShell.value = cierresResumenShell.value.filter((item) => item.id !== cierre.id)
     if (cierreSeleccionado.value?.id === cierre.id) {
       cierreSeleccionado.value = null
       mostrarModalOrdenesCierre.value = false
     }
-    cerrarConfirmacionEliminarCierre()
+    cerrarConfirmacionEliminarCierre(true)
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo eliminar el cierre.')
   } finally {
@@ -2366,7 +2375,20 @@ const confirmarEliminarCierre = async () => {
   }
 }
 
-const descargarReporteCierre = (cierre: any) => {
+const descargarReporteCierre = async (cierre: any) => {
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja/${cierre.id}`, {
+      signal: AbortSignal.timeout(20000)
+    })
+    const datos = await respuesta.json().catch(() => null)
+    if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo cargar el cierre para generar el PDF.')
+    generarReporteCierrePdf(datos)
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo descargar el reporte del cierre.')
+  }
+}
+
+const generarReporteCierrePdf = (cierre: any) => {
   const pdf = new jsPDF({ unit: 'mm', format: 'letter' })
   const ancho = pdf.internal.pageSize.getWidth()
   const alto = pdf.internal.pageSize.getHeight()
@@ -2581,7 +2603,7 @@ const cierresFiltrados = computed(() => {
   const desde = fechaDesde.value ? inicioDelDia(new Date(`${fechaDesde.value}T00:00:00`)) : null
   const hasta = fechaHasta.value ? finDelDia(new Date(`${fechaHasta.value}T00:00:00`)) : null
 
-  return historialCierres.value.filter((cierre) => {
+  return cierresResumenShell.value.filter((cierre) => {
     const pasaEstado =
       filtroCierresActivo.value === 'todos' ||
       cierre.deposito?.estado === filtroCierresActivo.value
@@ -2604,14 +2626,29 @@ watch(mostrarModalCierres, (abierto) => {
 
 watch(mostrarModalGasto, (abierto) => {
   if (!abierto) return
+  void cargarCierres()
   registrarGastoAntiguo.value = false
   turnoIdGasto.value = turno.id || ''
 })
 
-const verOrdenesCierre = (cierre: any) => {
-  cierreSeleccionado.value = cierre
+const verOrdenesCierre = async (cierre: any) => {
+  cierreSeleccionado.value = null
   ordenSeleccionadaCierre.value = null
+  cargandoDetalleCierre.value = true
+  errorDetalleCierre.value = ''
   mostrarModalOrdenesCierre.value = true
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja/${cierre.id}`, {
+      signal: AbortSignal.timeout(20000)
+    })
+    const datos = await respuesta.json().catch(() => null)
+    if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo cargar el detalle del cierre.')
+    cierreSeleccionado.value = datos
+  } catch (error) {
+    errorDetalleCierre.value = error instanceof Error ? error.message : 'No se pudo cargar el detalle del cierre.'
+  } finally {
+    cargandoDetalleCierre.value = false
+  }
 }
 
 const abrirGastosCierre = () => {
@@ -2632,6 +2669,7 @@ const eliminarGastoCierre = async (gasto: any) => {
   try {
     await eliminarGasto(gasto.id)
     await cargarHistorial()
+    await cargarCierres()
     const cierreActualizado = historialCierres.value.find((cierre) => cierre.id === cierreSeleccionado.value?.id)
     if (cierreActualizado) cierreSeleccionado.value = cierreActualizado
   } catch (error) {
@@ -3163,6 +3201,27 @@ const getIconoLavanderia = (id: string) => {
   }
 }
 
+@media (min-width: 701px) {
+  :global(html.app-panel-lateral-activo ion-app ion-modal) {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 30vw !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  :global(html.app-panel-lateral-activo.app-panel-lateral-izquierda ion-app ion-modal) {
+    left: 30vw !important;
+    right: 0 !important;
+  }
+
+  :global(html.app-panel-lateral-activo ion-app ion-modal::part(content)) {
+    max-width: calc(100% - 24px) !important;
+  }
+}
+
 .shell-root {
   width: 100%;
   height: 100%;
@@ -3218,7 +3277,8 @@ const getIconoLavanderia = (id: string) => {
 @keyframes shell-logo-pulse { 50% { transform: scale(0.92); opacity: 0.72; } }
 
 ion-content.shell-container {
-  --background: var(--app-shell-color);
+  --background: #dce8ec;
+  --background: color-mix(in srgb, var(--app-shell-color) 84%, #b4cdd4);
   --padding-top: 0;
   --padding-bottom: 0;
   height: 100dvh;
@@ -3994,8 +4054,8 @@ ion-content.shell-container {
   --width: 100vw;
   --border-radius: 0;
   --background: transparent;
-  --backdrop-opacity: 0.18;
-  --ion-backdrop-opacity: 0.18;
+  --backdrop-opacity: 0.38;
+  --ion-backdrop-opacity: 0.38;
 }
 
 .modal-cierres-grande::part(content) {
@@ -4011,12 +4071,18 @@ ion-content.shell-container {
 }
 
 .modal-cierres-grande ion-backdrop {
-  --backdrop-opacity: 0.18;
-  background: rgba(0, 0, 0, .18);
-  backdrop-filter: none;
+  --backdrop-opacity: 0.38;
+  background: rgba(13, 35, 53, .38);
+  backdrop-filter: blur(5px);
 }
 
 .modal-cierres-contenido {
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(119, 185, 190, 0.2), transparent 42%),
+    radial-gradient(ellipse at 100% 10%, rgba(121, 153, 194, 0.16), transparent 38%),
+    linear-gradient(150deg, #f5f9fa 0%, #e5eef1 100%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(115%);
   max-height: calc(100dvh - 28px); /* antes tenía además "height: calc(100dvh - 28px);" -> quítala */
   width: min(1080px, calc(100vw - 24px));
   margin: 14px auto;
@@ -4059,11 +4125,11 @@ ion-content.shell-container {
 }
 
 .filtro-fecha-campo input {
-  border: 1.5px solid #a9d8ee;
+  border: 1.5px solid rgba(83, 127, 146, 0.24);
   border-radius: 10px;
   padding: 9px 10px;
   color: #0a1f38;
-  background: #ffffff;
+  background: rgba(235, 243, 246, 0.92);
   font-weight: 600;
 }
 
@@ -4139,25 +4205,38 @@ ion-content.shell-container {
   gap: 12px;
   max-height: 100%;
   overflow-y: auto;
-  padding-right: 8px;
+  padding: 2px 8px 8px 2px;
+}
+
+.cierres-box-historial {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  align-content: start;
+  gap: 14px;
 }
 
 .cierre-item {
-  border: 1.5px solid #fbc500;
-  border-radius: 12px;
-  background: #a026261a;
+  position: relative;
+  border: 1px solid rgba(74, 119, 140, 0.2);
+  border-left: 4px solid #59a9a5;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(248, 251, 252, 0.94), rgba(218, 233, 238, 0.9));
   color: #0a1f38;
-  font-weight: bold;
-  padding: 16px;
+  font-weight: 600;
+  min-width: 0;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  transition: all 0.2s ease;
+  gap: 10px;
+  box-shadow: 0 8px 20px rgba(28, 58, 75, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .cierre-item:hover {
-  border-color: #4fb3e0;
-  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.1);
+  border-color: rgba(54, 137, 145, 0.44);
+  border-left-color: #327d85;
+  box-shadow: 0 12px 26px rgba(28, 58, 75, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform: translateY(-2px);
 }
 
 .cierre-header {
@@ -4174,9 +4253,18 @@ ion-content.shell-container {
 }
 
 .cierre-numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(47, 126, 134, 0.16);
+  border-radius: 10px;
   font-weight: 800;
-  color: #0a1f38;
+  color: #24666d;
   font-size: 0.95rem;
+  background: rgba(116, 190, 187, 0.2);
 }
 
 .cierre-fecha {
@@ -4192,14 +4280,23 @@ ion-content.shell-container {
 
 .cierre-detalles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .cierre-detalle {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(76, 112, 128, 0.11);
+  border-radius: 11px;
+  background: rgba(237, 245, 247, 0.68);
+}
+
+.cierre-detalle > span:last-child {
+  overflow-wrap: anywhere;
 }
 
 .detalle-label {
@@ -5975,17 +6072,14 @@ ion-modal.modal-aviso-inicial::part(content) {
 }
 
 .estado-pendiente {
-  background: rgba(217, 119, 6, 0.2);
   color: #d97706;
 }
 
 .estado-en_proceso {
-  background: rgba(79, 179, 224, 0.2);
   color: #4fb3e0;
 }
 
 .estado-resuelto {
-  background: rgba(22, 163, 74, 0.2);
   color: #16a34a;
 }
 

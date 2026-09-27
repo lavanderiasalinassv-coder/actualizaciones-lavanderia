@@ -315,7 +315,7 @@
                 <span>Fecha</span>
                 <span>Estado</span>
                 <span>Pago</span>
-                <span class="alinear-derecha">Total</span>
+                <span class="alinear-derecha">{{ criterioFechaReporte === 'pago' || criterioFechaReporte === 'anticipo' ? 'Pagado en el rango' : 'Total' }}</span>
               </div>
 
               <button
@@ -330,7 +330,7 @@
                   <span v-if="tieneAnticiposHuerfanos(orden) || orden.turnoHuerfano" class="alerta-orden">!</span>
                 </strong>
                 <span>{{ orden.nombreCliente }}</span>
-                <span>{{ formatearFechaCorta(orden.createdAt) }}</span>
+                <span>{{ formatearFechaCorta(fechaVisibleReporte(orden)) }}</span>
                 <span class="pill" :class="`estado-${orden.estado}`">{{ textoEstado(orden.estado) }}</span>
                 <span
                   class="pill"
@@ -338,7 +338,7 @@
                 >
                   {{ (orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? '' : textoEstadoPago(orden.estadoPago) }}
                 </span>
-                <strong class="alinear-derecha">${{ orden.total.toFixed(2) }}</strong>
+                <strong class="alinear-derecha">${{ montoVisibleReporte(orden).toFixed(2) }}</strong>
               </button>
 
               <div v-if="ordenesReporteFiltradas.length === 0" class="historial-vacio">
@@ -710,6 +710,7 @@ import { useCajaMovimientos } from '@/composables/useCajaMovimientos'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
 import {
   fechaHoyCentroamerica,
+  fechaISOaCentroamerica,
   finFechaCentroamericaUTC,
   formatearFechaCentroamerica,
   inicioFechaCentroamericaUTC
@@ -766,6 +767,7 @@ const esAdministrador = computed(() => {
 onMounted(() => {
   void cargarOrdenes()
   void cargarTurno()
+  void cargarHistorial().catch((error) => console.error('Error al cargar historial de cierres:', error))
 
   try {
     const usuarioGuardado = localStorage.getItem('usuario')
@@ -880,24 +882,43 @@ const ayudaFechaReporte = computed(() => ({
 
 const movimientosDePago = (orden: Orden) =>
   orden.movimientos
-    .filter((movimiento) => /^Pago actualizado a pagado(?:\s|$)/i.test(movimiento.texto.trim()))
+    .filter((movimiento) => /^(?:Pago actualizado a pagado|Se registr[oó] (?:el pago final|un anticipo))/i.test(movimiento.texto.trim()))
     .map((movimiento) => movimiento.fecha)
 
+const fechasPagosRegistrados = (orden: Orden) => {
+  const fechasAnticipos = orden.anticipos.map((anticipo) => anticipo.fecha)
+  return fechasAnticipos.length > 0 ? fechasAnticipos : movimientosDePago(orden)
+}
+
+const diaFechaReporte = (valor: string) => {
+  const fechaMySQL = /^(\d{4}-\d{2}-\d{2})(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)?$/.exec(valor)
+  return fechaMySQL?.[1] || fechaISOaCentroamerica(valor)
+}
+
+const fechaEstaEnRangoReporte = (valor: string) => {
+  const dia = diaFechaReporte(valor)
+  return dia >= fechaDesde.value && dia <= fechaHasta.value
+}
+
 const fechasDelReporte = (orden: Orden) => {
-  if (criterioFechaReporte.value === 'pago') {
-    return movimientosDePago(orden).length > 0 ? movimientosDePago(orden) : [orden.createdAt]
-  }
-  if (criterioFechaReporte.value === 'anticipo') {
-    return orden.estadoPago === 'anticipo'
-      ? orden.anticipos.map((anticipo) => anticipo.fecha)
-      : []
-  }
+  if (criterioFechaReporte.value === 'pago' || criterioFechaReporte.value === 'anticipo') return fechasPagosRegistrados(orden)
   if (criterioFechaReporte.value === 'entrega') return orden.entregadoAt ? [orden.entregadoAt] : []
   return [orden.createdAt]
 }
 
-const fechaVisibleReporte = (orden: Orden) =>
-  fechasDelReporte(orden).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || orden.createdAt
+const fechaVisibleReporte = (orden: Orden) => {
+  const fechas = fechasDelReporte(orden)
+  if (criterioFechaReporte.value === 'pago' || criterioFechaReporte.value === 'anticipo') {
+    const diaPago = fechas
+      .map(diaFechaReporte)
+      .filter((dia) => dia >= fechaDesde.value && dia <= fechaHasta.value)
+      .sort((a, b) => b.localeCompare(a))[0]
+    if (!diaPago) return orden.createdAt
+    const [year, month, day] = diaPago.split('-').map(Number)
+    return new Date(Date.UTC(year, month - 1, day, 18)).toISOString()
+  }
+  return fechas.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || orden.createdAt
+}
 
 const extraerTipoGasto = (concepto: string) => {
   if (!concepto) return { tipo: '', motivo: '' }
@@ -966,15 +987,16 @@ const ordenesReporteFiltradas = computed(() => {
 
   return ordenes.value
     .filter((orden) => {
-      const fechas = fechasDelReporte(orden).map((fecha) => new Date(fecha).getTime())
-      const coincideFecha = fechas.some((fecha) => fecha >= desde && fecha <= hasta)
-      let coincideEstado = filtroEstadoReportes.value === 'todos'
+      const fechas = fechasDelReporte(orden)
+      const esFiltroDePago = criterioFechaReporte.value === 'pago' || criterioFechaReporte.value === 'anticipo'
+      const coincideFecha = esFiltroDePago
+        ? fechas.some(fechaEstaEnRangoReporte)
+        : fechas.map((fecha) => new Date(fecha).getTime()).some((fecha) => fecha >= desde && fecha <= hasta)
+      const coincideEstado = esFiltroDePago || filtroEstadoReportes.value === 'todos'
         ? true
         : filtroEstadoReportes.value === 'cerradas'
           ? orden.estado === 'cerrada' || orden.estado === 'Cerrada-Cancelada'
           : orden.estado === filtroEstadoReportes.value
-      if (criterioFechaReporte.value === 'pago') coincideEstado = orden.estadoPago === 'pagado'
-      if (criterioFechaReporte.value === 'anticipo') coincideEstado = orden.estadoPago === 'anticipo'
       const telefono = orden.telefono.replace(/\D/g, '')
       const coincideBusqueda = !consulta || [orden.numero, orden.nombreCliente, orden.telefono]
         .join(' ')
@@ -997,10 +1019,36 @@ const totalEntregadosReporte = computed(() =>
     .reduce((total, orden) => total + Number(orden.total || 0), 0)
 )
 
+const montoPagadoEnRangoReporte = (orden: Orden) => {
+  const anticiposEnRango = orden.anticipos
+    .filter((anticipo) => fechaEstaEnRangoReporte(anticipo.fecha))
+    .reduce((suma, anticipo) => suma + Number(anticipo.monto || 0), 0)
+  if (orden.anticipos.length > 0) return anticiposEnRango
+
+  return orden.movimientos
+    .filter((movimiento) => fechaEstaEnRangoReporte(movimiento.fecha))
+    .filter((movimiento) => fechasDelReporte(orden).includes(movimiento.fecha))
+    .reduce((suma, movimiento) => {
+      const monto = /\$\s*([\d,]+(?:\.\d{1,2})?)/.exec(movimiento.texto)?.[1]
+      return suma + (monto ? Number(monto.replace(/,/g, '')) : 0)
+    }, 0)
+}
+
+const montoVisibleReporte = (orden: Orden) =>
+  criterioFechaReporte.value === 'pago' || criterioFechaReporte.value === 'anticipo'
+    ? montoPagadoEnRangoReporte(orden)
+    : Number(orden.total || 0)
+
 const totalCobradosReporte = computed(() =>
   ordenesReporteFiltradas.value
-    .filter((orden) => orden.estado !== 'cancelada' && orden.estado !== 'Cerrada-Cancelada')
-    .reduce((total, orden) => total + Number(orden.montoRecibido || 0), 0)
+    .reduce((total, orden) => {
+      if (criterioFechaReporte.value !== 'pago' && criterioFechaReporte.value !== 'anticipo') {
+        return total + (orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada'
+          ? 0
+          : Number(orden.montoRecibido || 0))
+      }
+      return total + montoPagadoEnRangoReporte(orden)
+    }, 0)
 )
 
 const saldoPendienteOrden = (orden: { total: number; montoRecibido: number }) =>

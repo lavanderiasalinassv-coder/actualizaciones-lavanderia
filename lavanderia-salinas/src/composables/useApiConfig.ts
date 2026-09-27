@@ -35,12 +35,9 @@ const cargarConfiguracion = () => {
   const urlOnlineGuardada = localStorage.getItem(API_ONLINE_URL_STORAGE_KEY) || API_ONLINE_DEFAULT_URL
   apiOnline.value = normalizarUrl(urlOnlineGuardada)
 
-  // La web siempre usa el servidor; solo Electron puede usar la API local.
   const destinoGuardado = localStorage.getItem(API_DESTINO_STORAGE_KEY) as ApiDestino | null
 
-  if (!esElectron()) {
-    destinoActual.value = 'servidor'
-  } else if (destinoGuardado === 'servidor' || destinoGuardado === 'local') {
+  if (destinoGuardado === 'servidor' || destinoGuardado === 'local') {
     destinoActual.value = destinoGuardado
   } else {
     destinoActual.value = destinoPorDefecto()
@@ -54,17 +51,22 @@ const cargarConfiguracion = () => {
 export const getApiBaseUrl = () => {
   cargarConfiguracion()
 
-  if (!esElectron() || destinoActual.value === 'servidor') {
+  if (destinoActual.value === 'servidor') {
     return normalizarUrl(apiOnline.value || API_ONLINE_DEFAULT_URL)
   }
 
   return API_LOCAL_URL
 }
 
+export const getApiOnlineBaseUrl = () => {
+  cargarConfiguracion()
+  return normalizarUrl(apiOnline.value || API_ONLINE_DEFAULT_URL)
+}
+
 export const guardarApiConfig = (destino: ApiDestino, urlOnline?: string) => {
   cargarConfiguracion()
 
-  const destinoGuardado: ApiDestino = esElectron() ? destino : 'servidor'
+  const destinoGuardado = destino
 
   // Si envían una nueva URL online, se normaliza y actualiza
   if (urlOnline) {

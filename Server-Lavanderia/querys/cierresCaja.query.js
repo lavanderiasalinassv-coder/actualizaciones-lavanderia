@@ -26,6 +26,63 @@ const listarCierres = async () => {
   }));
 };
 
+const listarCierresResumen = async () => {
+  const [rows] = await pool.query(
+    `SELECT id, turno_id, numero_caja, cerrado_at,
+            JSON_UNQUOTE(JSON_EXTRACT(resumen, '$.usuario')) AS usuario,
+            JSON_EXTRACT(resumen, '$.apertura') AS apertura,
+            JSON_EXTRACT(resumen, '$.saldoCierre') AS saldo_cierre,
+            JSON_EXTRACT(resumen, '$.totales') AS totales,
+            estado_deposito, monto_depositado, motivo_diferencia, revisado_at
+       FROM cierres_caja
+      ORDER BY cerrado_at DESC`,
+  );
+  return rows.map((row) => {
+    const totales = parsearResumen(row.totales);
+    const cobrado = Number(totales.cobrado ?? totales.ventas ?? 0);
+    const depositos = Number(totales.depositos ?? 0);
+    const cancelaciones = Number(totales.cancelaciones ?? 0);
+    const gastos = Number(totales.gastos ?? 0);
+    const recaudado = Number(totales.recaudado ?? cobrado - cancelaciones - gastos);
+    return {
+      id: row.id,
+      turnoId: row.turno_id,
+      numeroCaja: Number(row.numero_caja || 0),
+      cerradoAt: row.cerrado_at,
+      usuario: row.usuario || "Sistema",
+      apertura: Number(row.apertura || 0),
+      saldoCierre: Number(row.saldo_cierre || 0),
+      totales: { ...totales, cobrado, depositos, cancelaciones, gastos, recaudado },
+      ordenes: [],
+      movimientos: [],
+      deposito: {
+        estado: row.estado_deposito,
+        monto: row.monto_depositado == null ? null : Number(row.monto_depositado),
+        motivo: row.motivo_diferencia,
+        revisadoAt: row.revisado_at,
+      },
+    };
+  });
+};
+
+const obtenerCierre = async (id) => {
+  const [[row]] = await pool.query(
+    `SELECT resumen, estado_deposito, monto_depositado, motivo_diferencia, revisado_at
+       FROM cierres_caja WHERE id = ? LIMIT 1`,
+    [id],
+  );
+  if (!row) return null;
+  return {
+    ...parsearResumen(row.resumen),
+    deposito: {
+      estado: row.estado_deposito,
+      monto: row.monto_depositado == null ? null : Number(row.monto_depositado),
+      motivo: row.motivo_diferencia,
+      revisadoAt: row.revisado_at,
+    },
+  };
+};
+
 const crearCierre = async (resumen) => {
   const [existentes] = await pool.query(
     "SELECT id, resumen FROM cierres_caja WHERE turno_id = ? LIMIT 1",
@@ -90,6 +147,8 @@ const eliminarCierre = async (id) => {
 
 module.exports = {
   listarCierres,
+  listarCierresResumen,
+  obtenerCierre,
   crearCierre,
   revisarDeposito,
   eliminarCierre,

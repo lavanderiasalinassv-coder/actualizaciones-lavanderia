@@ -19,26 +19,33 @@
       </div>
 
       <div class="exito-acciones">
-        <button class="action-btn" @click="imprimirTicketOrden">
-          <ion-icon :icon="printOutline" />
-          Imprimir ticket
-        </button>
-        <button class="action-btn" @click="imprimirEtiquetaPrendas">
-          <ion-icon :icon="pricetagOutline" />
-          Etiqueta de prendas
-        </button>
-        <button class="action-btn verde" @click="enviarWhatsApp">
-          <ion-icon :icon="logoWhatsapp" />
-          Enviar por WhatsApp
-        </button>
-        <button class="action-btn morado" @click="abrirModalCorreo">
-          <ion-icon :icon="mailOutline" />
-          Enviar por correo
-        </button>
-        <button class="action-btn principal new-order-btn" @click="nuevaOrden">
+        <div class="acciones-grupo">
+          <span class="acciones-etiqueta">Imprimir</span>
+          <button class="action-btn accion-compacta" title="Imprimir ticket" aria-label="Imprimir ticket" @click="imprimirTicketOrden">
+            <ion-icon :icon="printOutline" /><span>Ticket</span>
+          </button>
+          <button class="action-btn accion-compacta" title="Imprimir etiqueta de prendas" aria-label="Imprimir etiqueta de prendas" @click="imprimirEtiquetaPrendas">
+            <ion-icon :icon="pricetagOutline" /><span>Etiqueta</span>
+          </button>
+        </div>
+        <div class="acciones-grupo">
+          <span class="acciones-etiqueta">Compartir</span>
+          <button class="action-btn verde accion-compacta" title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp" @click="enviarWhatsApp">
+            <ion-icon :icon="logoWhatsapp" /><span>WhatsApp</span>
+          </button>
+          <button class="action-btn morado accion-compacta" title="Enviar por correo" aria-label="Enviar por correo" @click="abrirModalCorreo">
+            <ion-icon :icon="mailOutline" /><span>Correo</span>
+          </button>
+        </div>
+        <div class="acciones-grupo acciones-grupo-principal">
+          <button class="action-btn accion-compacta boton-ordenes" title="Ir a órdenes" aria-label="Ir a órdenes" @click="irAOrdenes">
+            <ion-icon :icon="listOutline" /><span>Ver Órdenes</span>
+          </button>
+          <button class="action-btn principal new-order-btn accion-compacta" title="Crear otra orden" aria-label="Crear otra orden" @click="nuevaOrden">
           <ion-icon :icon="refreshOutline" />
-          Nueva orden
-        </button>
+            <span>Nueva orden</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -223,7 +230,9 @@
                         >
                           <span class="promo-emoji">🎉</span>
                           <strong>{{ promo.nombre }}</strong>
-                          <span>{{ textoValorPromocion(promo) }}</span>
+                          <span class="promo-valor">{{ textoValorPromocion(promo) }}</span>
+                          <span class="promo-aplica">{{ textoAplicaPromocion(promo) }}</span>
+                          <span v-if="promo.descripcion" class="promo-descripcion">{{ promo.descripcion }}</span>
                         </button>
                       </div>
                       <p v-else class="promo-empty">No hay promociones para este cliente.</p>
@@ -250,7 +259,7 @@
             <div class="buscador-row">
               <div class="search-bar">
                 <ion-icon :icon="searchOutline" />
-                <input v-model="busqueda" type="text" placeholder="Buscar productos..." />
+                <input v-model="busqueda" type="text" placeholder="Buscar productos o categorías..." />
               </div>
               <button class="ghost-btn" @click="irA('/tabs/productos')">Administrar servicios</button>
             </div>
@@ -258,13 +267,30 @@
             <div v-if="busquedaActiva" class="resultados-busqueda">
               <div class="resultados-busqueda-cabecera">
                 <div>
-                  <strong>Servicios encontrados</strong>
+                  <strong>Resultados encontrados</strong>
                   <span>{{ totalResultadosBusqueda }} coincidencia{{ totalResultadosBusqueda === 1 ? '' : 's' }} para “{{ busqueda.trim() }}”</span>
                 </div>
                 <button type="button" class="limpiar-busqueda" @click="busqueda = ''">Limpiar</button>
               </div>
 
-              <div v-if="resultadosBusquedaPorCategoria.length === 0" class="estado-vacio">
+              <div v-if="categoriasEncontradas.length" class="categorias-resultados">
+                <button
+                  v-for="categoria in categoriasEncontradas"
+                  :key="categoria.id"
+                  type="button"
+                  class="categoria-resultado"
+                  @click="abrirCategoriaDesdeBusqueda(categoria.id)"
+                >
+                  <span class="categoria-chip" :style="{ background: categoria.color }"></span>
+                  <span class="categoria-resultado-info">
+                    <strong>{{ categoria.nombre }}</strong>
+                    <small>{{ categoria.cantidad }} servicio{{ categoria.cantidad === 1 ? '' : 's' }}</small>
+                  </span>
+                  <ion-icon :icon="chevronForwardOutline" />
+                </button>
+              </div>
+
+              <div v-if="categoriasEncontradas.length === 0 && resultadosBusquedaPorCategoria.length === 0" class="estado-vacio">
                 <ion-icon :icon="searchOutline" class="estado-icono" />
                 <p class="estado-titulo">No encontramos servicios parecidos</p>
                 <p class="estado-texto">Prueba con otro nombre o una palabra más corta.</p>
@@ -703,7 +729,7 @@
                   <button type="button" class="ghost-btn" @click="retrocederPaso">
                     Atrás
                   </button>
-                <button type="button" class="primary-btn" :disabled="!puedeCrearOrden || creandoOrden" @click="crearOrdenConCliente">
+                <button type="button" class="primary-btn" :disabled="!puedeCrearOrden || creandoOrden" @click.once="crearOrdenConCliente">
                   {{ creandoOrden ? 'Creando...' : 'Crear orden' }}
                 </button>
               </div>
@@ -882,6 +908,7 @@ import {
   imageOutline,
   mailOutline,
   logoWhatsapp,
+  listOutline,
   printOutline,
   pricetagOutline,
   refreshOutline,
@@ -893,6 +920,7 @@ import {
 } from 'ionicons/icons'
 
 const router = useRouter()
+const irAOrdenes = () => router.push('/tabs/ordenes')
 const { servicios, categorias: categoriasCatalogo, cargarCatalogo } = useCatalogo()
 const { obtenerPromocionesAplicables } = usePromociones()
 const { clientesConEstado } = useClientes()
@@ -1064,7 +1092,17 @@ const resultadosBusquedaPorCategoria = computed(() => {
     .filter((grupo) => grupo.servicios.length > 0)
 })
 
+const categoriasEncontradas = computed(() => {
+  const consulta = normalizarTextoBusqueda(busqueda.value)
+  if (!consulta) return []
+
+  return categoriasConConteo.value.filter((categoria) =>
+    normalizarTextoBusqueda(categoria.nombre).includes(consulta)
+  )
+})
+
 const totalResultadosBusqueda = computed(() =>
+  categoriasEncontradas.value.length +
   resultadosBusquedaPorCategoria.value.reduce((total, grupo) => total + grupo.servicios.length, 0)
 )
 
@@ -1159,6 +1197,15 @@ const textoValorPromocion = (promo: Promocion) =>
   promo.tipoDescuento === 'porcentaje'
     ? `${Number(promo.valor).toFixed(2)}%`
     : `$${Number(promo.valor).toFixed(2)}`
+const textoAplicaPromocion = (promo: Promocion) => {
+  if (promo.tipoClienteAplica === 'registrados') return 'Aplica a clientes registrados'
+  if (promo.tipoClienteAplica === 'recurrentes') {
+    return promo.minOrdenes
+      ? `Aplica a recurrentes (${promo.minOrdenes}+ órdenes)`
+      : 'Aplica a clientes recurrentes'
+  }
+  return 'Aplica a todos los clientes'
+}
 
 const descuentoManualMonto = computed(() => {
   const valor = Number(pedido.descuentoManual || 0)
@@ -1405,6 +1452,11 @@ const abrirCategoria = (categoriaId: string) => {
   vistaServicios.value = 'productos'
 }
 
+const abrirCategoriaDesdeBusqueda = (categoriaId: string) => {
+  busqueda.value = ''
+  abrirCategoria(categoriaId)
+}
+
 const volverACategorias = () => {
   vistaServicios.value = 'categorias'
   productoSlideIndex.value = 0
@@ -1511,7 +1563,13 @@ const crearOrdenConCliente = async () => {
       return
     }
 
-    await enviarConfirmacionCorreo(resultado?.orden)
+    // Enviar correo de forma asíncrona sin bloquear la confirmación
+    enviarConfirmacionCorreo(resultado?.orden).catch(error => {
+      console.error('No se pudo enviar la confirmación por correo:', error)
+    })
+  } catch (error) {
+    console.error('Error al crear orden:', error)
+    window.alert('Hubo un error al crear la orden. Por favor intenta nuevamente.')
   } finally {
     creandoOrden.value = false
   }
@@ -2258,6 +2316,63 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.exito-acciones {
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+  gap: 12px;
+}
+
+.acciones-grupo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(18, 58, 102, 0.09);
+  border-radius: 16px;
+  background: rgba(245, 249, 252, 0.72);
+}
+
+.acciones-etiqueta {
+  width: 100%;
+  color: #8293a7;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.accion-compacta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.accion-compacta ion-icon {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+}
+
+.boton-ordenes {
+  background: #e8f0f8;
+  color: #123a66;
+}
+
+.acciones-grupo-principal {
+  border: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+
 /* ============================================================
    BOTONES
    ============================================================ */
@@ -2352,6 +2467,8 @@ onMounted(() => {
    PANTALLA DE ÉXITO
    ============================================================ */
 .orden-exito {
+  width: min(100%, 980px);
+  margin-inline: auto;
   padding: 24px;
   display: grid;
   gap: 18px;
@@ -2369,6 +2486,31 @@ onMounted(() => {
   color: #16a34a;
   font-size: 34px;
   box-shadow: 0 10px 22px rgba(22, 163, 74, 0.12);
+  animation: exito-pop 2.6s ease-in-out infinite;
+}
+
+.exito-icono ion-icon {
+  animation: check-salto 2.6s ease-in-out infinite;
+}
+
+@keyframes exito-pop {
+  0%, 20%, 100% { transform: translateY(0) scale(1); }
+  6% { transform: translateY(-7px) scale(1.08); }
+  12% { transform: translateY(1px) scale(0.98); }
+  16% { transform: translateY(0) scale(1.02); }
+}
+
+@keyframes check-salto {
+  0%, 20%, 100% { transform: translateY(0) rotate(0) scale(1); }
+  7% { transform: translateY(-5px) rotate(-7deg) scale(1.12); }
+  14% { transform: translateY(1px) rotate(3deg) scale(0.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exito-icono,
+  .exito-icono ion-icon {
+    animation: none;
+  }
 }
 
 .exito-titulo {
@@ -2918,9 +3060,21 @@ onMounted(() => {
   color: #0a1f38;
 }
 
-.promo-card span:last-child {
+.promo-card .promo-valor {
   color: #123a66;
   font-weight: 900;
+}
+
+.promo-card .promo-aplica,
+.promo-card .promo-descripcion {
+  color: #60758d;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.promo-card .promo-descripcion {
+  padding-top: 5px;
+  border-top: 1px solid rgba(10, 31, 56, 0.08);
 }
 
 /* ============================================================
@@ -2991,6 +3145,64 @@ onMounted(() => {
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+}
+
+.categorias-resultados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.categoria-resultado {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-radius: 13px;
+  background: #fff;
+  color: #123a66;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.categoria-resultado:hover {
+  transform: translateY(-1px);
+  background: #f5f9fc;
+  box-shadow: 0 6px 16px rgba(10, 31, 56, 0.08);
+}
+
+.categoria-resultado .categoria-chip {
+  width: 10px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+
+.categoria-resultado-info {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.categoria-resultado-info strong {
+  overflow: hidden;
+  color: #0a1f38;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoria-resultado-info small {
+  color: #6d829c;
+  font-size: 0.78rem;
+}
+
+.categoria-resultado > ion-icon {
+  flex: 0 0 auto;
+  color: #8293a7;
 }
 
 .grupo-resultados {

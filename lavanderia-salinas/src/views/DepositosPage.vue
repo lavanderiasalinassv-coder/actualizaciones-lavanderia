@@ -1,6 +1,12 @@
 <template>
   <AppShell>
     <div class="depositos-page">
+      <div v-if="cargandoDepositos" class="depositos-loading-overlay" role="status" aria-live="polite">
+        <div class="depositos-loading-card">
+          <ion-spinner name="crescent" />
+          <span>Cargando depósitos...</span>
+        </div>
+      </div>
       <header class="depositos-header">
         <div>
           <h1>Depósitos</h1>
@@ -64,7 +70,8 @@
           <input id="comprobante-deposito" type="file" accept="image/*" :disabled="!turno.abierto || subiendoComprobante" @change="subirComprobante" />
           <a v-if="comprobanteUrl" class="comprobante-link" :href="comprobanteUrl" target="_blank" rel="noreferrer">🔎 Ver comprobante cargado</a>
 
-          <button class="guardar-btn" type="submit" :disabled="!turno.abierto || !puedeGuardar">
+          <button class="guardar-btn" type="submit" :disabled="!turno.abierto || !puedeGuardar || guardandoDeposito">
+            <ion-spinner v-if="guardandoDeposito" name="crescent" />
             <span>{{ editandoId ? '💾' : '💸' }}</span>
             {{ editandoId ? 'Actualizar depósito' : 'Guardar depósito' }}
           </button>
@@ -129,7 +136,9 @@
 
           <div class="modal-botones-deposito">
             <button type="button" class="cancelar-btn" @click="cancelarEdicion">Cancelar</button>
-            <button class="guardar-btn" type="submit" :disabled="!puedeGuardar">💾 Guardar cambios</button>
+            <button class="guardar-btn" type="submit" :disabled="!puedeGuardar || guardandoDeposito">
+              <ion-spinner v-if="guardandoDeposito" name="crescent" />💾 Guardar cambios
+            </button>
           </div>
         </form>
       </ion-modal>
@@ -187,8 +196,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonModal, onIonViewWillEnter } from '@ionic/vue'
-import { computed, ref } from 'vue'
+import { IonModal, IonSpinner, onIonViewWillEnter } from '@ionic/vue'
+import { computed, ref, watch } from 'vue'
 import AppShell from '@/components/AppShell.vue'
 import { useCajaMovimientos, type MovimientoCaja } from '@/composables/useCajaMovimientos'
 import { useTurno } from '@/composables/useTurno'
@@ -213,6 +222,10 @@ const cierresDelDepositoEditado = ref<string[]>([])
 const comprobanteUrl = ref('')
 const subiendoComprobante = ref(false)
 const mostrarRevision = ref(false)
+const cargandoDepositos = ref(false)
+const guardandoDeposito = ref(false)
+let cargaInicialTerminada = false
+let cargaDepositosEnCurso = false
 const revisionResultado = ref<'depositado' | 'diferente' | 'pendiente'>('depositado')
 const montoDepositadoReal = ref<number | null>(null)
 const motivoDiferencia = ref('')
@@ -238,10 +251,27 @@ const totalNominaPendiente = computed(() => empleadosConPago.value.reduce((total
 const montoRevision = computed(() => netoDisponible.value)
 const puedeConfirmarRevision = computed(() => revisionResultado.value !== 'diferente' || Number(montoDepositadoReal.value) >= 0)
 
+watch([cierres, empleados, depositos], () => {
+  const hayDatosVisibles = cierres.value.length > 0 || empleados.value.length > 0 || depositos.value.length > 0
+  if (hayDatosVisibles) {
+    cargaInicialTerminada = true
+    cargandoDepositos.value = false
+  }
+})
+
 onIonViewWillEnter(async () => {
-  await refrescarPersonal()
-  await cargarHistorial()
-  if (!esCajero.value && cierresPendientesDeposito.value.length) mostrarRevision.value = true
+  if (cargaDepositosEnCurso) return
+  cargaDepositosEnCurso = true
+  const hayDatosVisibles = cierres.value.length > 0 || empleados.value.length > 0 || depositos.value.length > 0
+  cargandoDepositos.value = !cargaInicialTerminada && !hayDatosVisibles
+  try {
+    await Promise.allSettled([refrescarPersonal(), cargarHistorial()])
+    cargaInicialTerminada = true
+    if (!esCajero.value && cierresPendientesDeposito.value.length) mostrarRevision.value = true
+  } finally {
+    cargandoDepositos.value = false
+    cargaDepositosEnCurso = false
+  }
 })
 
 const formatearFecha = (valor: string) => new Date(valor).toLocaleString('es-ES', {
@@ -265,9 +295,19 @@ const guardarDeposito = async () => {
     concepto: `${concepto.value.trim() || 'Depósito a banco'}${cierresDelDepositoEditado.value.length ? ` [CIERRES:${cierresDelDepositoEditado.value.join(',')}]` : ''}`,
     comprobanteUrl: comprobanteUrl.value || undefined
   }
-  const creado = editandoId.value
-    ? await editarDeposito(editandoId.value, datos)
-    : await registrarDeposito(datos)
+  guardandoDeposito.value = true
+  let creado: MovimientoCaja | null = null
+  try {
+    creado = editandoId.value
+      ? await editarDeposito(editandoId.value, datos)
+      : await registrarDeposito(datos)
+  } catch (error) {
+    mensaje.value = error instanceof Error ? error.message : 'No se pudo guardar el depósito.'
+    esError.value = true
+    return
+  } finally {
+    guardandoDeposito.value = false
+  }
 
   if (!creado) {
     mensaje.value = 'Escribe un monto válido para continuar.'
@@ -412,6 +452,9 @@ const confirmarRevision = async () => {
 
 <style scoped>
 .depositos-page { display: grid; gap: 22px; min-height: 100%; color: #0a1f38; }
+.depositos-loading-overlay { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: rgba(8, 26, 48, .42); }
+.depositos-loading-card { display: flex; align-items: center; gap: 12px; padding: 20px 26px; border-radius: 14px; background: #fff; color: #123a66; font-weight: 800; box-shadow: 0 12px 36px rgba(8, 26, 48, .22); }
+.depositos-loading-card ion-spinner, .guardar-btn ion-spinner { width: 22px; height: 22px; --color: #168b83; }
 .depositos-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 8px 2px 0; }
 .eyebrow { margin: 0 0 5px; color: #168b83; font-size: .74rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 h1, h2, p { margin: 0; }

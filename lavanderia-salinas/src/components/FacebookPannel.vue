@@ -9,8 +9,8 @@
           </div>
         </div>
         <div class="facebook-panel-actions">
-          <button type="button" title="Colocar a la izquierda" aria-label="Colocar Facebook a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><ion-icon :icon="arrowBackOutline" /></button>
-          <button type="button" title="Colocar a la derecha" aria-label="Colocar Facebook a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><ion-icon :icon="arrowForwardOutline" /></button>
+          <button type="button" title="Colocar a la izquierda" aria-label="Colocar Facebook a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><span class="panel-placement-icon panel-placement-left" aria-hidden="true"><i></i></span></button>
+          <button type="button" title="Colocar a la derecha" aria-label="Colocar Facebook a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><span class="panel-placement-icon panel-placement-right" aria-hidden="true"><i></i></span></button>
           <button type="button" :title="lateral ? 'Abrir Facebook centrado' : 'Volver Facebook al lateral'" :aria-label="lateral ? 'Abrir Facebook centrado' : 'Volver Facebook al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
           <button type="button" title="Recargar Facebook" aria-label="Recargar Facebook" @click="recargarWebview"><ion-icon :icon="refreshOutline" /></button>
           <button class="facebook-panel-close" type="button" aria-label="Cerrar Facebook" title="Cerrar Facebook" @click="$emit('cerrar')"><ion-icon :icon="closeOutline" /></button>
@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
 import { IonIcon } from '@ionic/vue'
-import { arrowBackOutline, arrowForwardOutline, closeOutline, contractOutline, expandOutline, logoFacebook, refreshOutline } from 'ionicons/icons'
+import { closeOutline, contractOutline, expandOutline, logoFacebook, refreshOutline } from 'ionicons/icons'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{ abierto: boolean }>()
@@ -272,6 +272,10 @@ const recargarWebview = () => {
 .facebook-panel-actions { display: flex; align-items: center; gap: 4px; }
 .facebook-panel-actions button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 .facebook-panel-actions button:hover, .facebook-panel-actions button.activa { background: rgba(255,255,255,.16); }
+.panel-placement-icon { position: relative; display: block; box-sizing: border-box; width: 17px; height: 17px; border: 1.5px solid currentColor; border-radius: 3px; }
+.panel-placement-icon::after { content: ''; position: absolute; top: 2px; bottom: 2px; width: 4px; border-radius: 1px; background: currentColor; }
+.panel-placement-left::after { left: 2px; }
+.panel-placement-right::after { right: 2px; }
 
 .facebook-panel-body {
   position: relative;

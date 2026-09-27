@@ -80,6 +80,7 @@ export interface CierreTurnoResumen {
 
 const historialCierres = ref<CierreTurnoResumen[]>([])
 let cierreEnCurso = false
+let cargaHistorialEnCurso: Promise<void> | null = null
 
 const generarId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -221,11 +222,19 @@ const fueCanceladaEnTurno = (
   return orden.turnoId === turnoId
 }
 
-const cargarHistorial = async () => {
-  const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja`)
-  if (!respuesta.ok) throw new Error('No se pudo cargar el historial de cierres.')
-  const datos = await respuesta.json()
-  historialCierres.value = Array.isArray(datos) ? datos.map(normalizarCierre) : []
+const cargarHistorial = () => {
+  if (cargaHistorialEnCurso) return cargaHistorialEnCurso
+  cargaHistorialEnCurso = (async () => {
+    const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja`, {
+      signal: AbortSignal.timeout(30000)
+    })
+    if (!respuesta.ok) throw new Error('No se pudo cargar el historial de cierres.')
+    const datos = await respuesta.json()
+    historialCierres.value = Array.isArray(datos) ? datos.map(normalizarCierre) : []
+  })().finally(() => {
+    cargaHistorialEnCurso = null
+  })
+  return cargaHistorialEnCurso
 }
 
 const eliminarCierre = async (id: string) => {
@@ -235,8 +244,6 @@ const eliminarCierre = async (id: string) => {
   historialCierres.value = historialCierres.value.filter((cierre) => cierre.id !== id)
   return resultado
 }
-void cargarHistorial().catch(() => {})
-
 export function useHistorialCierres() {
   const { turno, cerrarTurno } = useTurno()
   const { ordenes, cargarOrdenes, cambiarEstado } = useOrdenes()
@@ -251,10 +258,12 @@ export function useHistorialCierres() {
 
   const registrarCierreTurno = async (saldoCierre: number, notas?: string, fecha?: string, usuarioRol?: string) => {
     if (cierreEnCurso || !turno.abierto || !turno.id) return null
-    if (historialCierres.value.some((cierre) => cierre.turnoId === turno.id)) return null
     cierreEnCurso = true
 
     try {
+      // ReportesPage ya carga el historial al abrirse. Evita repetir aquí
+      // esa consulta, que puede tardar hasta 30 s y no es necesaria para cerrar.
+      if (historialCierres.value.some((cierre) => cierre.turnoId === turno.id)) return null
       const saldoFinal = redondear(saldoCierre)
     const cierreMovimiento = saldoFinal > 0
       ? await registrarCierre({
@@ -413,7 +422,9 @@ export function useHistorialCierres() {
     )
 
     await cerrarTurno(saldoFinal, fecha, usuarioRol)
-    await cargarOrdenes()
+    // La orden ya se cerró en el servidor. Actualiza la lista en segundo
+    // plano para que una carga lenta de órdenes no retrase la confirmación.
+    void cargarOrdenes()
     await limpiarMovimientosDelTurno(turnoCerradoId)
       return cierreGuardado
     } finally {

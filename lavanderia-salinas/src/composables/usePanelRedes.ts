@@ -4,31 +4,38 @@ const mostrarPanelWhatsapp = ref(false)
 const mostrarPanelFacebook = ref(false)
 const mostrarPanelNavegador = ref(false)
 const urlWhatsappInicial = ref('')
+const solicitudCargaWhatsapp = ref(0)
 const panelWhatsappLateral = ref(true)
 const panelFacebookLateral = ref(true)
 const panelNavegadorLateral = ref(true)
 const panelLado = ref<'izquierda' | 'derecha'>('derecha')
 
 export function usePanelRedes() {
-  const abrirWhatsapp = (urlInicial = '') => {
+  const cerrarTodosLosPaneles = () => {
+    mostrarPanelWhatsapp.value = false
     mostrarPanelFacebook.value = false
+    mostrarPanelNavegador.value = false
+  }
+
+  const abrirWhatsapp = (urlInicial = '') => {
+    const yaEstabaAbierto = mostrarPanelWhatsapp.value
+    cerrarTodosLosPaneles()
     panelWhatsappLateral.value = true
     panelLado.value = 'derecha' // Siempre derecha por defecto
     urlWhatsappInicial.value = urlInicial
     mostrarPanelWhatsapp.value = true
+    if (yaEstabaAbierto) solicitudCargaWhatsapp.value += 1
   }
 
   const abrirFacebook = () => {
-    mostrarPanelWhatsapp.value = false
-    mostrarPanelNavegador.value = false
+    cerrarTodosLosPaneles()
     panelFacebookLateral.value = true
     panelLado.value = 'derecha' // Siempre derecha por defecto
     mostrarPanelFacebook.value = true
   }
 
   const abrirNavegador = () => {
-    mostrarPanelWhatsapp.value = false
-    mostrarPanelFacebook.value = false
+    cerrarTodosLosPaneles()
     panelNavegadorLateral.value = true
     panelLado.value = 'derecha' // Siempre derecha por defecto
     mostrarPanelNavegador.value = true
@@ -69,6 +76,7 @@ export function usePanelRedes() {
     mostrarPanelFacebook,
     mostrarPanelNavegador,
     urlWhatsappInicial,
+    solicitudCargaWhatsapp,
     panelWhatsappLateral,
     panelFacebookLateral,
     panelNavegadorLateral,

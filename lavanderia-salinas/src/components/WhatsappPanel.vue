@@ -10,8 +10,8 @@
           </div>
         </div>
         <div class="whatsapp-panel-actions">
-          <button type="button" title="Colocar a la izquierda" aria-label="Colocar WhatsApp a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><ion-icon :icon="arrowBackOutline" /></button>
-          <button type="button" title="Colocar a la derecha" aria-label="Colocar WhatsApp a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><ion-icon :icon="arrowForwardOutline" /></button>
+          <button type="button" title="Colocar a la izquierda" aria-label="Colocar WhatsApp a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><span class="panel-placement-icon panel-placement-left" aria-hidden="true"><i></i></span></button>
+          <button type="button" title="Colocar a la derecha" aria-label="Colocar WhatsApp a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><span class="panel-placement-icon panel-placement-right" aria-hidden="true"><i></i></span></button>
           <button type="button" :title="lateral ? 'Abrir WhatsApp centrado' : 'Volver WhatsApp al lateral'" :aria-label="lateral ? 'Abrir WhatsApp centrado' : 'Volver WhatsApp al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
           <button type="button" title="Recargar WhatsApp" aria-label="Recargar WhatsApp" @click="recargarWebview"><ion-icon :icon="refreshOutline" /></button>
           <button class="whatsapp-panel-close" type="button" aria-label="Cerrar WhatsApp" title="Cerrar WhatsApp" @click="$emit('cerrar')"><ion-icon :icon="closeOutline" /></button>
@@ -41,10 +41,10 @@
 
 <script setup lang="ts">
 import { IonIcon } from '@ionic/vue'
-import { arrowBackOutline, arrowForwardOutline, closeOutline, contractOutline, expandOutline, logoWhatsapp, refreshOutline } from 'ionicons/icons'
+import { closeOutline, contractOutline, expandOutline, logoWhatsapp, refreshOutline } from 'ionicons/icons'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
-const props = defineProps<{ abierto: boolean; urlInicial?: string }>()
+const props = defineProps<{ abierto: boolean; urlInicial?: string; solicitudCarga?: number }>()
 const emit = defineEmits<{ cerrar: []; 'modo-cambio': [lateral: boolean]; 'lado-cambio': [lado: 'izquierda' | 'derecha'] }>()
 const lateral = ref(true)
 const lado = ref<'izquierda' | 'derecha'>('derecha') // Siempre derecha por defecto
@@ -101,6 +101,7 @@ const CSS_ESTILO_SCROLL = `
 const bodyRef = ref<HTMLDivElement | null>(null)
 const webviewRef = ref<any>(null)
 const webviewListo = ref(false)
+let ultimaSolicitudCargaAplicada = props.solicitudCarga ?? 0
 
 let resizeObserver: ResizeObserver | null = null
 let frameProgramado = false
@@ -129,6 +130,7 @@ const onWebviewListo = () => {
   } catch {
     // noop
   }
+  aplicarSolicitudCargaWhatsapp()
   forzarReajuste()
   // Un segundo empujón tras el primer pintado, por si la página
   // todavía no había terminado de montar su layout inicial.
@@ -172,10 +174,24 @@ watch(
   }
 )
 
-watch(() => props.urlInicial, (url) => {
-  if (!url || !webviewListo.value) return
-  try { webviewRef.value?.loadURL(url) } catch { /* noop */ }
-})
+const aplicarSolicitudCargaWhatsapp = () => {
+  const solicitud = props.solicitudCarga ?? 0
+  if (solicitud === ultimaSolicitudCargaAplicada) return
+  const url = props.urlInicial
+  const webview = webviewRef.value
+  if (!url || !webview || !webviewListo.value) return
+
+  ultimaSolicitudCargaAplicada = solicitud
+  try {
+    Promise.resolve(webview.loadURL(url)).catch((error) => {
+      console.warn('No se pudo volver a cargar la plantilla de WhatsApp:', error)
+    })
+  } catch (error) {
+    console.warn('No se pudo volver a cargar la plantilla de WhatsApp:', error)
+  }
+}
+
+watch(() => props.solicitudCarga, aplicarSolicitudCargaWhatsapp)
 
 const abrirEnNavegador = () => {
   window.open('https://web.whatsapp.com', '_blank', 'noopener,noreferrer')
@@ -282,6 +298,10 @@ const recargarWebview = () => {
 .whatsapp-panel-actions { display: flex; align-items: center; gap: 4px; }
 .whatsapp-panel-actions button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 .whatsapp-panel-actions button:hover, .whatsapp-panel-actions button.activa { background: rgba(255,255,255,.16); }
+.panel-placement-icon { position: relative; display: block; box-sizing: border-box; width: 17px; height: 17px; border: 1.5px solid currentColor; border-radius: 3px; }
+.panel-placement-icon::after { content: ''; position: absolute; top: 2px; bottom: 2px; width: 4px; border-radius: 1px; background: currentColor; }
+.panel-placement-left::after { left: 2px; }
+.panel-placement-right::after { right: 2px; }
 
 .whatsapp-panel-body {
   position: relative;

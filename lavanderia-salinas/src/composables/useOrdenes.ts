@@ -1,5 +1,9 @@
 import { computed, ref } from 'vue'
-import { getApiBaseUrl } from '@/composables/useApiConfig'
+import {
+  API_LOCAL_URL,
+  getApiBaseUrl,
+  getApiOnlineBaseUrl
+} from '@/composables/useApiConfig'
 import { useTurno } from '@/composables/useTurno'
 
 export type OrdenEstado = 'pendiente' | 'en_proceso' | 'listo' | 'entregado' | 'cerrada' | 'cancelada' | 'Cerrada-Cancelada'
@@ -131,8 +135,8 @@ const calcularSubtotal = (items: OrdenItem[]) => items.reduce((total, item) => t
 // Estados que no deben contar como venta real (se cancelaron o se anularon).
 const ESTADOS_EXCLUIDOS_DE_VENTA: OrdenEstado[] = ['cancelada', 'Cerrada-Cancelada']
 
-const api = async (ruta: string, opciones: RequestInit = {}) => {
-  const respuesta = await fetch(`${getApiBaseUrl()}${ruta}`, {
+const api = async (ruta: string, opciones: RequestInit = {}, baseUrl = getApiBaseUrl()) => {
+  const respuesta = await fetch(`${baseUrl}${ruta}`, {
     headers: { 'Content-Type': 'application/json' },
     ...opciones
   })
@@ -145,9 +149,24 @@ const cargarOrdenes = async () => {
   if (cargaEnCurso) return cargaEnCurso
 
   cargando.value = true
-  cargaEnCurso = api('/ordenes').then((datos) => {
+  error.value = null
+  cargaEnCurso = (async () => {
+    const destinoInicial = getApiBaseUrl()
+    let datos: unknown
+    try {
+      datos = await api('/ordenes', {
+        signal: AbortSignal.timeout(destinoInicial === API_LOCAL_URL ? 12000 : 30000)
+      }, destinoInicial)
+    } catch (errorInicial) {
+      if (destinoInicial !== API_LOCAL_URL) throw errorInicial
+
+      const destinoEnLinea = getApiOnlineBaseUrl()
+      datos = await api('/ordenes', {
+        signal: AbortSignal.timeout(30000)
+      }, destinoEnLinea)
+    }
     ordenes.value = datos as Orden[]
-  }).catch((err) => {
+  })().catch((err) => {
     error.value = err instanceof Error ? err.message : 'No se pudieron cargar las órdenes.'
   }).finally(() => {
     cargando.value = false
@@ -190,8 +209,6 @@ const reemplazarOrden = (ordenActualizada: Orden) => {
 }
 
 export function useOrdenes() {
-  void cargarOrdenes()
-
   const { turno } = useTurno()
 
   const totalOrdenes = computed(() => ordenes.value.length)
@@ -303,11 +320,34 @@ const ventaDelDiaTurnoActual = computed(() =>
   }
 
   const eliminarOrden = async (id: string) => {
-    await api(`/ordenes/${id}`, {
-      method: 'DELETE',
-      body: JSON.stringify(payloadUsuario())
-    })
-    ordenes.value = ordenes.value.filter((orden) => orden.id !== id)
+    const baseUrl = getApiBaseUrl()
+    try {
+      await api(`/ordenes/${id}`, {
+        method: 'DELETE',
+        body: JSON.stringify(payloadUsuario()),
+        signal: AbortSignal.timeout(45000)
+      }, baseUrl)
+      ordenes.value = ordenes.value.filter((orden) => orden.id !== id)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        try {
+          await api(`/ordenes/${id}`, { signal: AbortSignal.timeout(12000) }, baseUrl)
+          await cargarOrdenes()
+          throw new Error('El servidor sigue mostrando la orden. No se confirmo su eliminacion; actualice la lista. Intenta de nuevo en unos momentos.')
+        } catch (errorVerificacion) {
+          if (errorVerificacion instanceof Error && errorVerificacion.message === 'Orden no encontrada.') {
+            ordenes.value = ordenes.value.filter((orden) => orden.id !== id)
+            return
+          }
+          if (errorVerificacion instanceof Error && errorVerificacion.message.startsWith('El servidor sigue mostrando')) {
+            throw errorVerificacion
+          }
+          await cargarOrdenes()
+          throw new Error('Se agoto el tiempo de espera y no se pudo confirmar si la orden se elimino. Actualice la lista; verifica si aun aparece antes de volver a intentarlo.')
+        }
+      }
+      throw err
+    }
   }
 
   const agregarCargoExtra = async (id: string, descripcion: string, monto: number) => {
@@ -495,6 +535,7 @@ const ventaDelDiaTurnoActual = computed(() =>
   return {
     ordenes,
     totalOrdenes,
+    cargando,
     siguienteSecuencia,
     ordenesDelTurnoActual,
     ventaDelDiaTurnoActual,
@@ -520,7 +561,6 @@ const ventaDelDiaTurnoActual = computed(() =>
     restaurarOrden,
     eliminarOrden,
     aplicarDescuento,
-    cargando,
     error,
     generarId,
     ahoraISO,

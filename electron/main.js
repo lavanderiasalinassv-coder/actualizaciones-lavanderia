@@ -189,52 +189,6 @@ function iniciarBackend() {
 }
 
 function createWindow() {
-  session.defaultSession.setPermissionRequestHandler(
-    (webContents, permission, callback) => {
-      console.log("Solicitud de permiso:", permission);
-      if (
-        permission === "media" ||
-        permission === "audio-capture" ||
-        permission === "video-capture"
-      ) {
-        console.log("Permitiendo acceso al micrófono");
-        callback(true);
-      } else {
-        console.log("Denegando permiso:", permission);
-        callback(false);
-      }
-    },
-  );
-
-  session.defaultSession.setDevicePermissionHandler((details) => {
-    console.log("Permiso de dispositivo solicitado:", details);
-    if (details.deviceType === "audio") {
-      console.log("Permitiendo dispositivo de audio");
-      return true;
-    }
-    return false;
-  });
-
-  session.defaultSession.setPermissionCheckHandler(
-    (webContents, permission, requestingOrigin, details) => {
-      console.log(
-        "Verificación de permiso:",
-        permission,
-        "para:",
-        requestingOrigin,
-      );
-      if (
-        permission === "media" ||
-        permission === "audio-capture" ||
-        permission === "video-capture"
-      ) {
-        console.log("Permitiendo verificación de permiso de micrófono");
-        return true;
-      }
-      return false;
-    },
-  );
-
   // Configurar Content Security Policy para permitir imágenes de cualquier origen
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders;
@@ -301,8 +255,6 @@ app.whenReady().then(() => {
     app.commandLine.appendSwitch("disable-gpu");
     app.commandLine.appendSwitch("disable-software-rasterizer");
   }
-
-  console.log("Electron iniciándose con configuración de micrófono habilitada");
 
   // Configurar CORS para permitir imágenes externas
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {

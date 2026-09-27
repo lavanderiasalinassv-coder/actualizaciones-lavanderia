@@ -35,6 +35,21 @@ const toDateStr = (v) => {
   return new Date(v).toISOString().slice(0, 10);
 };
 
+const obtenerFechaHoraNegocioMySQL = (fecha = new Date()) => {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guatemala",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(fecha);
+  const valores = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+  return `${valores.year}-${valores.month}-${valores.day} ${valores.hour}:${valores.minute}:${valores.second}`;
+};
+
 // El cierre se guarda como un resumen JSON. Además de comprobar que exista la
 // caja, necesitamos comprobar que el cobro o la entrega realmente aparezcan
 // dentro de su reporte.
@@ -498,23 +513,31 @@ const registrarMovimientoConn = async (
     usuarioNormalizado.id === "dev-mode" ||
     usuarioNormalizado.nombre === "Desarrollador"
   ) {
-    await conn.execute("UPDATE ordenes SET updated_at = NOW() WHERE id = ?", [
+    const fechaLocalMySQL = obtenerFechaHoraNegocioMySQL();
+    await conn.execute("UPDATE ordenes SET updated_at = ? WHERE id = ?", [
+      fechaLocalMySQL,
       ordenId,
     ]);
     return;
   }
 
+  const pad = (valor) => String(valor).padStart(2, "0");
+  const ahora = new Date();
+  const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+
   await conn.execute(
-    "INSERT INTO orden_movimientos (id, orden_id, texto, usuario_id, usuario_nombre, fecha) VALUES (?,?,?,?,?,NOW())",
+    "INSERT INTO orden_movimientos (id, orden_id, texto, usuario_id, usuario_nombre, fecha) VALUES (?,?,?,?,?,?)",
     [
       randomUUID(),
       ordenId,
       textoLimpio,
       usuarioNormalizado.id,
       usuarioNormalizado.nombre,
+      fechaLocalMySQL,
     ],
   );
-  await conn.execute("UPDATE ordenes SET updated_at = NOW() WHERE id = ?", [
+  await conn.execute("UPDATE ordenes SET updated_at = ? WHERE id = ?", [
+    fechaLocalMySQL,
     ordenId,
   ]);
 };
@@ -734,9 +757,14 @@ const actualizarCierreAlEliminarAnticipo = async (
     JSON.stringify(resumen),
     cierre.id,
   ]);
+  
+  const pad = (valor) => String(valor).padStart(2, "0");
+  const ahora = new Date();
+  const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+  
   await conn.execute(
     `INSERT INTO movimientos_caja (id, tipo, monto, concepto, turno_id, numero_caja, usuario, creado_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       movimientoId,
       "cierre",
@@ -745,6 +773,7 @@ const actualizarCierreAlEliminarAnticipo = async (
       anticipo.turno_id,
       cierre.numero_caja,
       usuarioNormalizado.nombre,
+      fechaLocalMySQL,
     ],
   );
 };
@@ -765,33 +794,73 @@ const recalcularTotales = (subtotal, orden, totalCargos) => {
 
 // ---------- API pública ----------
 
-const obtenerOrdenes = async () => {
+const obtenerOrdenes = async (reintento = false) => {
+  try {
   const [ordenRows] = await pool.query(
-    "SELECT * FROM ordenes ORDER BY secuencia DESC",
+    "SELECT * FROM ordenes ORDER BY secuencia DESC LIMIT 500",
   );
   if (!ordenRows.length) return [];
 
+  const ordenIds = ordenRows.map((orden) => orden.id);
+  const placeholdersOrdenes = ordenIds.map(() => "?").join(",");
   const [
     itemsRows,
     fotosRows,
     cargosRows,
     anticiposRows,
     movimientosRows,
-    insumosRows,
-    cierresRows,
     turnoAbiertoRows,
   ] = await Promise.all([
-    pool.query("SELECT * FROM orden_items"),
-    pool.query("SELECT * FROM orden_fotos ORDER BY posicion ASC"),
-    pool.query("SELECT * FROM orden_cargos_extra ORDER BY fecha ASC"),
-    pool.query("SELECT * FROM orden_anticipos ORDER BY fecha ASC"),
-    pool.query("SELECT * FROM orden_movimientos ORDER BY fecha DESC"),
-    pool.query("SELECT * FROM orden_item_insumos"),
-    pool.query("SELECT turno_id, resumen FROM cierres_caja"),
+    pool.query(
+      `SELECT * FROM orden_items WHERE orden_id IN (${placeholdersOrdenes})`,
+      ordenIds,
+    ),
+    pool.query(
+      `SELECT * FROM orden_fotos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY posicion ASC`,
+      ordenIds,
+    ),
+    pool.query(
+      `SELECT * FROM orden_cargos_extra WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
+      ordenIds,
+    ),
+    pool.query(
+      `SELECT * FROM orden_anticipos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
+      ordenIds,
+    ),
+    pool.query(
+      `SELECT * FROM orden_movimientos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha DESC`,
+      ordenIds,
+    ),
     pool.query(
       "SELECT turno_id FROM turno_caja_actual WHERE id = 1 AND abierto = 1 AND turno_id <> ''",
     ),
   ]).then((resultados) => resultados.map(([filas]) => filas));
+
+  const itemIds = itemsRows.map((item) => item.id);
+  const insumosRows = itemIds.length
+    ? (
+        await pool.query(
+          `SELECT * FROM orden_item_insumos WHERE orden_item_id IN (${itemIds.map(() => "?").join(",")})`,
+          itemIds,
+        )
+      )[0]
+    : [];
+  const turnoIds = [
+    ...new Set(
+      [
+        ...ordenRows.map((orden) => orden.turno_id),
+        ...anticiposRows.map((anticipo) => anticipo.turno_id),
+      ].filter(Boolean),
+    ),
+  ];
+  const cierresRows = turnoIds.length
+    ? (
+        await pool.query(
+          `SELECT turno_id, resumen FROM cierres_caja WHERE turno_id IN (${turnoIds.map(() => "?").join(",")})`,
+          turnoIds,
+        )
+      )[0]
+    : [];
 
   // Incluye el turno abierto: todavía no tiene cierre, pero su ID es válido.
   const turnosConCierre = new Set(cierresRows.map((row) => row.turno_id));
@@ -882,6 +951,18 @@ const obtenerOrdenes = async () => {
       ),
     };
   });
+  } catch (error) {
+    const erroresDeConexion = [
+      "PROTOCOL_CONNECTION_LOST",
+      "ECONNRESET",
+      "ETIMEDOUT",
+    ];
+    if (!reintento && erroresDeConexion.includes(error.code)) {
+      console.warn("Conexión MySQL interrumpida al listar órdenes; reintentando una vez.");
+      return obtenerOrdenes(true);
+    }
+    throw error;
+  }
 };
 
 const obtenerOrdenPorId = async (id) => {
@@ -957,14 +1038,18 @@ const crearOrden = async (datos, usuario = "Sistema") => {
       );
     }
 
+    const pad = (valor) => String(valor).padStart(2, "0");
+    const ahora = new Date();
+    const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+    
     await conn.execute(
       `INSERT INTO ordenes (
         id, estado, turno_id, nombre_cliente, codigo_pais, telefono, correo,
         guardar_directorio, envio_domicilio, direccion_entrega, fecha_entrega_activa, fecha_entrega, hora_entrega,
         estado_pago, metodo_pago, monto_recibido, descuento, descuento_manual, descuento_promocion,
         subtotal, total, cambio, cantidad_prendas, detalles_prendas, nota_interna, motivo_cancelacion,
-        tarjeta_monto, tarjeta_referencia, transferencia_monto, transferencia_comprobante
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        tarjeta_monto, tarjeta_referencia, transferencia_monto, transferencia_comprobante, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, // El UUID generado arriba
         "pendiente",
@@ -1000,6 +1085,7 @@ const crearOrden = async (datos, usuario = "Sistema") => {
         datos.tarjetaReferencia || null,
         datos.transferenciaMonto ? Number(datos.transferenciaMonto) : null,
         datos.transferenciaComprobante || null,
+        fechaLocalMySQL,
       ],
     );
 
@@ -1196,8 +1282,11 @@ const actualizarEstado = async (
       const entregadoAtValor = construirFechaConHora(
         fechaTurnoSeleccionado || cambios.fechaEntregado,
       );
-      sets.push("entregado_at = COALESCE(?, NOW())");
-      values.push(entregadoAtValor);
+      const pad = (valor) => String(valor).padStart(2, "0");
+      const ahora = new Date();
+      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+      sets.push("entregado_at = COALESCE(?, ?)");
+      values.push(entregadoAtValor, fechaLocalMySQL);
       if (cambios.turnoId) {
         sets.push("turno_id = ?");
         values.push(cambios.turnoId);
@@ -1334,12 +1423,15 @@ const actualizarPago = async (
     if (turnoActualId) {
       const fechaTurnoPago = await obtenerFechaDelTurno(conn, turnoActualId);
       const fechaPago = construirFechaConHora(fechaTurnoPago);
+      const pad = (valor) => String(valor).padStart(2, "0");
+      const ahora = new Date();
+      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
       let anticipoId = null;
       if (saldoPendiente > 0) {
         anticipoId = randomUUID();
         await conn.execute(
-          "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?,COALESCE(?, NOW()))",
-          [anticipoId, id, turnoActualId, saldoPendiente, fechaPago],
+          "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?,COALESCE(?, ?))",
+          [anticipoId, id, turnoActualId, saldoPendiente, fechaPago, fechaLocalMySQL],
         );
       }
 
@@ -1453,9 +1545,12 @@ const registrarAnticipo = async (
     if (montoAplicado > 0) {
       const anticipoId = randomUUID();
       const fechaAnticipoValor = construirFechaConHora(fechaPersonalizada);
+      const pad = (valor) => String(valor).padStart(2, "0");
+      const ahora = new Date();
+      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
       await conn.execute(
-        "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?, COALESCE(?, NOW()))",
-        [anticipoId, id, turnoId, montoAplicado, fechaAnticipoValor],
+        "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?, COALESCE(?, ?))",
+        [anticipoId, id, turnoId, montoAplicado, fechaAnticipoValor, fechaLocalMySQL],
       );
       numeroCaja = await actualizarCierreConAnticipo(
         conn,
@@ -1562,11 +1657,15 @@ const agregarCargoExtra = async (
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
 
-    const descripcionLimpia = (descripcion || "").trim() || "Cargo extra";
+    const descripcionLimpio = (descripcion || "").trim() || "Cargo extra";
+
+    const pad = (valor) => String(valor).padStart(2, "0");
+    const ahora = new Date();
+    const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
 
     await conn.execute(
-      "INSERT INTO orden_cargos_extra (id, orden_id, descripcion, monto, fecha) VALUES (?,?,?,?,NOW())",
-      [randomUUID(), id, descripcionLimpia, montoValido],
+      "INSERT INTO orden_cargos_extra (id, orden_id, descripcion, monto, fecha) VALUES (?,?,?,?,?)",
+      [randomUUID(), id, descripcionLimpio, montoValido, fechaLocalMySQL],
     );
 
     const [cargos] = await conn.query(
@@ -1872,7 +1971,11 @@ const cancelarOrden = async (id, motivo, usuario = "Sistema") => {
 const limpiarOrdenDeCierres = async (conn, orden) => {
   const referenciaOrden = formatearNumero(orden.secuencia);
   const [cierres] = await conn.query(
-    "SELECT id, resumen FROM cierres_caja FOR UPDATE",
+    `SELECT id, resumen
+       FROM cierres_caja
+      WHERE JSON_SEARCH(resumen, 'one', ?, NULL, '$.ordenes[*].id') IS NOT NULL
+         OR JSON_SEARCH(resumen, 'one', ?, NULL, '$.movimientos[*].concepto') IS NOT NULL`,
+    [String(orden.id), `%${referenciaOrden}%`],
   );
 
   for (const cierre of cierres) {
@@ -1964,12 +2067,10 @@ const limpiarOrdenDeCierres = async (conn, orden) => {
 };
 
 const eliminarOrden = async (id) => {
-  const ordenEliminada = await obtenerOrdenCompleta(id);
-  if (!ordenEliminada) throw new AppError("Orden no encontrada.", 404);
-
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await conn.query("SET SESSION innodb_lock_wait_timeout = 15");
     const [[orden]] = await conn.query(
       "SELECT * FROM ordenes WHERE id = ? FOR UPDATE",
       [id],
@@ -1981,16 +2082,33 @@ const eliminarOrden = async (id) => {
     }
 
     await limpiarOrdenDeCierres(conn, orden);
-    await conn.execute("DELETE FROM orden_movimientos WHERE orden_id = ?", [
-      id,
-    ]);
+    await conn.execute(
+      `DELETE insumo FROM orden_item_insumos insumo
+        INNER JOIN orden_items item ON item.id = insumo.orden_item_id
+       WHERE item.orden_id = ?`,
+      [id],
+    );
+    await conn.execute("DELETE FROM orden_items WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_fotos WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_cargos_extra WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_anticipos WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_movimientos WHERE orden_id = ?", [id]);
     await conn.execute("DELETE FROM ordenes WHERE id = ?", [id]);
     await conn.commit();
-    return ordenEliminada;
+    return true;
   } catch (error) {
-    await conn.rollback();
+    await conn.rollback().catch(() => {});
+    if (error.code === "ER_LOCK_WAIT_TIMEOUT") {
+      throw new AppError(
+        "La orden está siendo modificada por otra operación. Intenta eliminarla de nuevo.",
+        409,
+      );
+    }
     throw error;
   } finally {
+    await conn
+      .query("SET SESSION innodb_lock_wait_timeout = DEFAULT")
+      .catch(() => {});
     conn.release();
   }
 };
@@ -2180,7 +2298,11 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
     }
 
     if (sets.length || Array.isArray(cambios.fotos)) {
-      await conn.execute("UPDATE ordenes SET updated_at = NOW() WHERE id = ?", [
+      const pad = (valor) => String(valor).padStart(2, "0");
+      const ahora = new Date();
+      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+      await conn.execute("UPDATE ordenes SET updated_at = ? WHERE id = ?", [
+        fechaLocalMySQL,
         id,
       ]);
     }
@@ -2368,14 +2490,19 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
     }
 
     // Restaurar la orden y conservar solo pagos que pertenecen a otros turnos.
+    const pad = (valor) => String(valor).padStart(2, "0");
+    const ahora = new Date();
+    const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+    
     await conn.execute(
-      "UPDATE ordenes SET estado = ?, estado_pago = ?, monto_recibido = ?, cambio = ?, turno_id = ?, updated_at = NOW() WHERE id = ?",
+      "UPDATE ordenes SET estado = ?, estado_pago = ?, monto_recibido = ?, cambio = ?, turno_id = ?, updated_at = ? WHERE id = ?",
       [
         "pendiente",
         estadoPagoRestante,
         montoRecibidoRestante,
         cambioRestante,
         ultimoCobroRestante?.turno_id || "",
+        fechaLocalMySQL,
         id,
       ],
     );
@@ -2417,9 +2544,14 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
           "DELETE FROM movimientos_caja WHERE turno_id = ? AND tipo = 'cierre' AND monto > 0 AND concepto LIKE ?",
           [orden.turno_id, `%${formatearNumero(orden.secuencia)}%`],
         );
+        
+        const pad = (valor) => String(valor).padStart(2, "0");
+        const ahora = new Date();
+        const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+        
         await conn.execute(
           `INSERT INTO movimientos_caja (id, tipo, monto, concepto, turno_id, numero_caja, usuario, creado_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             movimientoId,
             "cierre",
@@ -2428,6 +2560,7 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
             orden.turno_id,
             cierre.numero_caja,
             usuarioNormalizado.nombre,
+            fechaLocalMySQL,
           ],
         );
       }
@@ -2480,11 +2613,15 @@ const aplicarDescuentoOrden = async (id, tipo, valor, usuario = "Sistema") => {
         ? "anticipo"
         : "porCobrar";
     
+    const pad = (valor) => String(valor).padStart(2, "0");
+    const ahora = new Date();
+    const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+    
     await conn.execute(
       `UPDATE ordenes 
-       SET descuento = ?, descuento_manual = ?, total = ?, cambio = ?, estado_pago = ?, updated_at = NOW() 
+       SET descuento = ?, descuento_manual = ?, total = ?, cambio = ?, estado_pago = ?, updated_at = ? 
        WHERE id = ?`,
-      [descuentoAplicado, descuentoAplicado, total, cambio, estadoPago, id],
+      [descuentoAplicado, descuentoAplicado, total, cambio, estadoPago, fechaLocalMySQL, id],
     );
     
     const textoTipo = tipo === "porcentaje" ? `${valor}%` : `$${Number(valor).toFixed(2)}`;

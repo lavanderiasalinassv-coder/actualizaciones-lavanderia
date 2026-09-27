@@ -1,12 +1,21 @@
 <template>
   <component :is="soloDetalleId ? 'div' : AppShell">
     <div class="ordenes-page force-light" :class="{ 'modo-solo-detalle': soloDetalleId }">
+      <!-- Overlay de carga para eliminación -->
+      <div v-if="eliminandoOrdenIndividual" class="loading-overlay">
+        <div class="loading-content">
+          <ion-spinner name="crescent" />
+          <p>Eliminando orden...</p>
+        </div>
+      </div>
+
       <div class="header-row">
         <h1>Órdenes</h1>
       </div>
 
       <div class="ordenes-resumen">
         <span class="resumen-chip">{{ ordenesFiltradas.length }} Ordenes</span>
+        <span v-if="cargando" class="loading-indicator">Cargando...</span>
       </div>
 
       <section class="controles-superiores">
@@ -307,7 +316,13 @@
 
             </button>
 
-            <div v-if="ordenesFiltradas.length === 0" class="grid-vacio">
+            <div v-if="cargando && ordenesFiltradas.length === 0" class="grid-vacio" aria-live="polite">
+              Cargando órdenes...
+            </div>
+            <div v-else-if="!cargando && errorOrdenes" class="grid-vacio" role="alert">
+              No se pudieron cargar las órdenes: {{ errorOrdenes }}
+            </div>
+            <div v-else-if="!cargando && ordenesFiltradas.length === 0" class="grid-vacio">
               Sin ordenes{{ estadoActivo !== 'todos' ? ' en este estado' : '' }}
             </div>
           </div>
@@ -353,7 +368,7 @@
               <button
                 v-if="esAdministrador && !esOperador"
                 class="btn-icono peligro"
-                :disabled="peticionOrdenEnCurso"
+                :disabled="peticionOrdenEnCurso || eliminandoOrdenIndividual"
                 title="Eliminar orden"
                 @click="confirmarEliminarOrden"
               >
@@ -1221,7 +1236,7 @@ const emit = defineEmits<{
 import AppShell from '@/components/AppShell.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { IonIcon, IonModal, IonSpinner, toastController } from '@ionic/vue'
+import { IonIcon, IonModal, IonSpinner, onIonViewWillEnter, toastController } from '@ionic/vue'
 import {
   useOrdenes,
   type Orden,
@@ -1272,6 +1287,9 @@ const mostrarRestaurarCerrada = computed(() =>
 const {
   ordenes,
   totalOrdenes,
+  cargando,
+  error: errorOrdenes,
+  cargarOrdenes,
   obtenerOrdenPorId,
   actualizarOrden,
   cambiarEstado,
@@ -1297,6 +1315,7 @@ const mostrarModalMotivoIntervencion = ref(false)
 const ordenIntervencionSeleccionada = ref<Orden | null>(null)
 const fechaEliminarDia = ref('')
 const eliminandoOrdenesDia = ref(false)
+const eliminandoOrdenIndividual = ref(false)
 const restaurandoOrdenCerrada = ref(false)
 const mostrarModalRestaurar = ref(false)
 const ordenSeleccionadaId = ref('')
@@ -1715,7 +1734,7 @@ const ordenesFiltradas = computed(() => {
     const ordenCerrada = orden.estado === 'cerrada' || orden.estado === 'Cerrada-Cancelada'
 
     if (fechaCreacionFiltro.value) {
-      const fechaCreacion = String(orden.createdAt || '').slice(0, 10)
+      const fechaCreacion = fechaISOaCentroamerica(orden.createdAt)
       if (fechaCreacion !== fechaCreacionFiltro.value) return false
     }
 
@@ -1765,14 +1784,7 @@ const ordenesFiltradas = computed(() => {
     const prioridadB = prioridadEstado[b.estado] ?? 99
     if (prioridadA !== prioridadB) return prioridadA - prioridadB
 
-    if (ordenamientoActivo.value === 'fechaEntrega') {
-      const fechaA = a.fechaEntrega ? new Date(`${a.fechaEntrega}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER
-      const fechaB = b.fechaEntrega ? new Date(`${b.fechaEntrega}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER
-
-      if (fechaA !== fechaB) return fechaA - fechaB
-    }
-
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return b.secuencia - a.secuencia
   })
 })
 
@@ -2152,14 +2164,16 @@ const confirmarEliminarOrden = async () => {
   if (!ok) return
 
   const idOrden = ordenSeleccionada.value.id
+  
   cerrarDetalle()
-  peticionOrdenEnCurso.value = true
+  eliminandoOrdenIndividual.value = true
+  
   try {
     await eliminarOrden(idOrden)
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo eliminar la orden.')
   } finally {
-    peticionOrdenEnCurso.value = false
+    eliminandoOrdenIndividual.value = false
   }
 }
 
@@ -2337,7 +2351,7 @@ const abrirDetalle = (id: string) => {
 
   ordenSeleccionadaId.value = id
   if (orden) {
-    fechaCreacionBorrador.value = orden.createdAt.slice(0, 10)
+    fechaCreacionBorrador.value = fechaISOaCentroamerica(orden.createdAt)
     fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
     horaEntregaBorrador.value = orden.horaEntrega ?? ''
     cantidadPrendasBorrador.value = Number(orden.cantidadPrendas || 0)
@@ -2367,7 +2381,7 @@ const guardarFechasOrden = async () => {
       horaEntrega: horaEntregaBorrador.value
     })
     if (ordenActualizada) {
-      fechaCreacionBorrador.value = ordenActualizada.createdAt.slice(0, 10)
+      fechaCreacionBorrador.value = fechaISOaCentroamerica(ordenActualizada.createdAt)
       fechaEntregaBorrador.value = ordenActualizada.fechaEntrega ?? ''
       horaEntregaBorrador.value = ordenActualizada.horaEntrega ?? ''
     }
@@ -2401,7 +2415,7 @@ const guardarCantidadPrendas = async () => {
 
 watch(ordenSeleccionada, (orden) => {
   if (!orden) return
-  fechaCreacionBorrador.value = orden.createdAt.slice(0, 10)
+  fechaCreacionBorrador.value = fechaISOaCentroamerica(orden.createdAt)
   fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
   horaEntregaBorrador.value = orden.horaEntrega ?? ''
   cantidadPrendasBorrador.value = Number(orden.cantidadPrendas || 0)
@@ -3214,6 +3228,10 @@ onMounted(() => {
   actualizarOrdenesPorPagina()
   window.addEventListener('resize', actualizarOrdenesPorPagina)
   void cargarCatalogo()
+})
+
+onIonViewWillEnter(() => {
+  void cargarOrdenes()
 })
 
 onBeforeUnmount(() => {
@@ -4047,9 +4065,79 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #f6fbfc 100%);
+  background-color: rgba(238, 244, 246, 0.96);
+  background-image:
+    radial-gradient(ellipse at 8% 0%, rgba(91, 157, 165, 0.2), transparent 42%),
+    radial-gradient(ellipse at 100% 18%, rgba(105, 133, 176, 0.16), transparent 38%),
+    linear-gradient(150deg, rgba(246, 249, 250, 0.98), rgba(229, 237, 240, 0.96));
+  backdrop-filter: blur(20px) saturate(112%);
   overflow: hidden;
 }
+
+.modal-detalle .detalle-bloque,
+.modal-detalle .mini-card,
+.modal-detalle .estado-cuadrito:not(.actual):not(:disabled),
+.modal-detalle .foto-vacia,
+.modal-detalle .servicio-linea,
+.modal-detalle .movimiento {
+  background: rgba(226, 235, 239, 0.78);
+  border-color: rgba(86, 111, 124, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.modal-detalle .estado-deslizador {
+  background: linear-gradient(145deg, rgba(232, 240, 243, 0.94), rgba(219, 230, 234, 0.9));
+}
+
+.modal-detalle .fecha-orden-input,
+.modal-detalle .prendas-editable-input,
+.modal-detalle .nota-input {
+  background: rgba(239, 244, 246, 0.92);
+  border-color: rgba(86, 111, 124, 0.18);
+}
+
+.modal-detalle .notas,
+.modal-detalle .prendas-editable,
+.modal-detalle .total-box {
+  background: rgba(194, 215, 218, 0.34);
+}
+
+.modal-detalle .btn-outline {
+  background: rgba(226, 235, 239, 0.84);
+}
+
+.modal-detalle,
+.modal-detalle * {
+  scrollbar-width: thin;
+  scrollbar-color: #929ba1 rgba(160, 169, 174, 0.2);
+}
+
+.modal-detalle *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.modal-detalle *::-webkit-scrollbar-track {
+  background: rgba(160, 169, 174, 0.2);
+  border-radius: 999px;
+}
+
+.modal-detalle *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #aeb6bb, #858f96);
+  border: 2px solid rgba(228, 236, 239, 0.88);
+  border-radius: 999px;
+}
+
+.modal-detalle *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #929ba1, #707b82);
+}
+
+.modal-detalle *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .modal-header-acciones {
   display: flex;
   gap: 8px;
@@ -5370,4 +5458,41 @@ onBeforeUnmount(() => {
 }
 .btn-icono.peligro { color: #dc2626; }
 .btn-icono.peligro:hover { background: rgba(220,38,38,0.12); }
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-content {
+  background: white;
+  padding: 30px 40px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.loading-content ion-spinner {
+  --color: #123a66;
+  width: 40px;
+  height: 40px;
+}
+
+.loading-content p {
+  margin: 0;
+  color: #0a1f38;
+  font-weight: 600;
+  font-size: 1rem;
+}
 </style>

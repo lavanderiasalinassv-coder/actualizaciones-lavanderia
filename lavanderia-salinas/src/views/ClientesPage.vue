@@ -216,9 +216,12 @@ const form = ref({
 const cargarClientes = async () => {
   cargandoClientes.value = true
   try {
-    await recargarClientes()                     // fetch real, espera a que la API responda
-    clientes.value = obtenerClientesConEstado()   // ahora toma la foto ya con datos
-    estadisticas.value = await obtenerEstadísticasClientes()
+    // Ejecutar ambas llamadas en paralelo para mejorar velocidad
+    await Promise.all([
+      recargarClientes(),
+      obtenerEstadísticasClientes().then(stats => estadisticas.value = stats)
+    ])
+    clientes.value = obtenerClientesConEstado()
   } finally {
     cargandoClientes.value = false
   }

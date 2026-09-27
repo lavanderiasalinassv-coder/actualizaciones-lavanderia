@@ -29,6 +29,23 @@ const mapNotificacion = (row) => ({
   imagenUrl: row.imagen_url,
 });
 
+const consultarConReintentoDeConexion = async (sql, parametros = []) => {
+  for (let intento = 0; ; intento += 1) {
+    try {
+      return await pool.query(sql, parametros);
+    } catch (error) {
+      const errorTransitorio = [
+        "ETIMEDOUT",
+        "ECONNRESET",
+        "ECONNREFUSED",
+        "PROTOCOL_CONNECTION_LOST",
+      ].includes(error?.code);
+      if (!errorTransitorio || intento >= 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+};
+
 const obtenerParaUsuario = async (usuarioId, rol) => {
   const rolPlural = obtenerVariantePluralRol(rol);
   const [rows] = await pool.query(
@@ -78,7 +95,7 @@ const obtenerAvisosDeAutor = async (autorId) => {
 };
 
 const obtenerTodosLosAvisosEnviados = async () => {
-  const [rows] = await pool.query(
+  const [rows] = await consultarConReintentoDeConexion(
     `SELECT * FROM notificaciones
      WHERE tipo = 'aviso'
      ORDER BY creada_at DESC`,

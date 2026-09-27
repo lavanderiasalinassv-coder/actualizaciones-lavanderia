@@ -1,7 +1,7 @@
 const { pool } = require("../database/MySQLConexion");
 
 const APARIENCIA_PREDETERMINADA = {
-  appShellColor: "#eef4f8",
+  appShellColor: "#e2ecef",
   appShellHeaderColor: "#081a30",
   appShellImagen: "",
   loginColor: "#0a1f38",

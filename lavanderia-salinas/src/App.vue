@@ -6,6 +6,7 @@
       v-if="rutaProtegida"
       :abierto="mostrarPanelWhatsapp"
       :url-inicial="urlWhatsappInicial"
+      :solicitud-carga="solicitudCargaWhatsapp"
       @cerrar="cerrarWhatsapp"
       @modo-cambio="panelWhatsappLateral = $event"
       @lado-cambio="panelLado = $event"
@@ -15,6 +16,13 @@
       :abierto="mostrarPanelFacebook"
       @cerrar="cerrarFacebook"
       @modo-cambio="panelFacebookLateral = $event"
+      @lado-cambio="panelLado = $event"
+    />
+    <NavegadorPannel
+      v-if="rutaProtegida"
+      :abierto="mostrarPanelNavegador"
+      @cerrar="cerrarNavegador"
+      @modo-cambio="panelNavegadorLateral = $event"
       @lado-cambio="panelLado = $event"
     />
 
@@ -80,6 +88,7 @@ import { useSesion } from '@/composables/useSesion'
 import SaliAssistant from '@/components/SaliAssistant.vue'
 import WhatsappPanel from '@/components/WhatsappPanel.vue'
 import FacebookPannel from '@/components/FacebookPannel.vue'
+import NavegadorPannel from '@/components/NavegadorPannel.vue'
 import { usePanelRedes } from '@/composables/usePanelRedes'
 
 const route = useRoute()
@@ -88,16 +97,38 @@ const { cerrarSesion, validarSesion } = useSesion()
 const {
   mostrarPanelWhatsapp,
   mostrarPanelFacebook,
+  mostrarPanelNavegador,
   urlWhatsappInicial,
+  solicitudCargaWhatsapp,
   panelWhatsappLateral,
   panelFacebookLateral,
+  panelNavegadorLateral,
   panelLado,
   panelLateralAbierto,
   ladoPanelActivo,
   cerrarWhatsapp,
   cerrarFacebook,
-  abrirWhatsapp
+  abrirWhatsapp,
+  cerrarNavegador
 } = usePanelRedes()
+
+watch([
+  mostrarPanelWhatsapp,
+  mostrarPanelFacebook,
+  mostrarPanelNavegador,
+  panelWhatsappLateral,
+  panelFacebookLateral,
+  panelNavegadorLateral,
+  panelLado
+], ([whatsappAbierto, facebookAbierto, navegadorAbierto, whatsappLateral, facebookLateral, navegadorLateral, lado]) => {
+  const panelLateralActivo = Boolean(
+    (whatsappAbierto && whatsappLateral) ||
+    (facebookAbierto && facebookLateral) ||
+    (navegadorAbierto && navegadorLateral)
+  )
+  document.documentElement.classList.toggle('app-panel-lateral-activo', panelLateralActivo)
+  document.documentElement.classList.toggle('app-panel-lateral-izquierda', panelLateralActivo && lado === 'izquierda')
+}, { immediate: true })
 
 const abrirWhatsappConMensaje = (evento: Event) => {
   const detalle = (evento as CustomEvent<{ phone?: string; message?: string }>).detail
@@ -236,6 +267,7 @@ watch(rutaProtegida, (esProtegida) => {
     // Cerrar paneles cuando se va a una ruta no protegida (login)
     cerrarWhatsapp()
     cerrarFacebook()
+    cerrarNavegador()
   }
 })
 
@@ -263,6 +295,7 @@ onUnmounted(() => {
   window.removeEventListener('focus', manejarFocus)
   if (timerAviso) clearTimeout(timerAviso)
   detenerCuentaRegresiva()
+  document.documentElement.classList.remove('app-panel-lateral-activo', 'app-panel-lateral-izquierda')
 })
 </script>
 

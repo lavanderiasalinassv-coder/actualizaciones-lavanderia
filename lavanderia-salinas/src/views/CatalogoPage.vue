@@ -53,7 +53,7 @@
       </div>
 
       <!-- ══════════════ Banner configuración ══════════════ -->
-      <div v-if="servicios.length === 0 && (tabActivo === 'servicios' || categoriaActivaId)" class="banner-configura">
+      <div v-if="!cargando && !error && servicios.length === 0 && (tabActivo === 'servicios' || categoriaActivaId)" class="banner-configura">
         <div class="banner-icon"><ion-icon :icon="sparklesOutline" /></div>
         <div>
           <p class="banner-titulo">Configura tus Servicios</p>
@@ -63,8 +63,20 @@
         </div>
       </div>
 
+      <div v-if="cargando && categorias.length === 0" class="catalogo-cargando" role="status" aria-live="polite">
+        <ion-spinner name="crescent" />
+        <span>Cargando catálogo...</span>
+      </div>
+
+      <div v-else-if="error && categorias.length === 0" class="catalogo-error" role="alert">
+        <p>No se pudo cargar el catálogo: {{ error }}</p>
+        <button type="button" class="btn-primario-grande" :disabled="cargando" @click="refrescarCatalogo">
+          <ion-icon :icon="refreshOutline" /> Reintentar
+        </button>
+      </div>
+
       <!-- ══════════════ Estado vacío ══════════════ -->
-      <div v-if="!categoriaActivaId && categorias.length === 0" class="estado-vacio-box">
+      <div v-if="!cargando && !error && !categoriaActivaId && categorias.length === 0" class="estado-vacio-box">
         <div class="estado-vacio-icon-wrap">
           <ion-icon :icon="cubeOutline" class="estado-vacio-icon" />
         </div>
@@ -81,7 +93,7 @@
       </div>
 
       <!-- ══════════════ Tarjetas informativas (solo si no hay nada aún) ══════════════ -->
-      <div v-if="!categoriaActivaId && items.length === 0" class="info-cards-row">
+      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0" class="info-cards-row">
         <div class="info-card">
           <div class="info-card-icon icon-navy"><ion-icon :icon="cubeOutline" /></div>
           <p class="info-card-titulo">Normal</p>
@@ -101,7 +113,7 @@
         </div>
       </div>
 
-      <div v-if="!categoriaActivaId && items.length === 0" class="tips-box">
+      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0" class="tips-box">
         <p class="tips-titulo"><ion-icon :icon="sparklesOutline" /> Consejos para empezar</p>
         <ol class="tips-lista">
           <li>Crea categorías para organizar tus servicios (Lavado, Planchado, Tintorería)</li>
@@ -137,7 +149,7 @@
         </button>
       </div>
 
-      <div v-if="(tabActivo === 'servicios' || categoriaActivaId) && itemsFiltrados.length === 0" class="estado-vacio-box">
+      <div v-if="!cargando && !error && (tabActivo === 'servicios' || categoriaActivaId) && itemsFiltrados.length === 0" class="estado-vacio-box">
         <div class="estado-vacio-icon-wrap"><ion-icon :icon="cubeOutline" class="estado-vacio-icon" /></div>
         <p class="estado-vacio-titulo">Esta categoría está vacía</p>
         <p class="estado-vacio-texto">Agrega un servicio para comenzar</p>
@@ -441,7 +453,7 @@
 
 <script setup lang="ts">
 import AppShell from '@/components/AppShell.vue'
-import { IonButton, IonIcon, IonModal, IonToggle } from '@ionic/vue'
+import { IonButton, IonIcon, IonModal, IonSpinner, IonToggle } from '@ionic/vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   useCatalogo,
@@ -653,7 +665,7 @@ const compartirCatalogo = async () => {
     const ancho = pdf.internal.pageSize.getWidth()
     const alto = pdf.internal.pageSize.getHeight()
     const colorEncabezado = colorPdf(apariencia.appShellHeaderColor, [8, 26, 48])
-    const colorFondo = colorPdf(apariencia.appShellColor, [238, 244, 248])
+    const colorFondo = colorPdf(apariencia.appShellColor, [226, 236, 239])
     const grupos = agruparServiciosParaPdf()
     const margen = 16
     const anchoTarjeta = (ancho - margen * 2 - 8) / 2
@@ -1420,6 +1432,37 @@ const quitarEtiqueta = (id: string) => {
 }
 
 /* ── Estado vacío ── */
+.catalogo-cargando,
+.catalogo-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+  padding: 24px;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-radius: 18px;
+  background: rgba(241, 247, 249, 0.72);
+  color: #36566d;
+  font-weight: 700;
+  text-align: center;
+}
+
+.catalogo-cargando ion-spinner {
+  width: 28px;
+  height: 28px;
+  --color: #397e9f;
+}
+
+.catalogo-error {
+  flex-direction: column;
+  color: #7f3324;
+}
+
+.catalogo-error p {
+  margin: 0;
+}
+
 .estado-vacio-box {
   border: 1.5px dashed #a9d8ee;
   border-radius: 16px;

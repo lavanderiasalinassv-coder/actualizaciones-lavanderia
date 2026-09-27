@@ -604,10 +604,6 @@ export function usePedido() {
       )
 
       const numeroCompletoCliente = `${pedido.codigoPais}${pedido.telefono}`.replace(/\D/g, '')
-      const clienteActualizado = await registrarOrdenCliente(numeroCompletoCliente)
-      if (!clienteActualizado) {
-        console.warn('No se pudo incrementar el contador de órdenes del cliente:', numeroCompletoCliente)
-      }
       ultimaOrdenCreada.value = {
         numero: ordenPersistente.numero,
         nombreCliente: ordenPersistente.nombreCliente,
@@ -633,6 +629,16 @@ export function usePedido() {
       }
 
       reiniciarPedido()
+
+      // El contador de recurrencia es secundario: no debe retrasar la
+      // confirmación después de que el servidor ya guardó la orden.
+      void registrarOrdenCliente(numeroCompletoCliente).then((clienteActualizado) => {
+        if (!clienteActualizado) {
+          console.warn('No se pudo incrementar el contador de órdenes del cliente:', numeroCompletoCliente)
+        }
+      }).catch((error) => {
+        console.warn('No se pudo actualizar el contador de órdenes del cliente:', error)
+      })
 
 
       return { orden: ordenPersistente, faltantes: [] as FaltanteInsumoPedido[] }

@@ -104,15 +104,28 @@
 
         <div class="form-acciones">
           <button class="btn-cancelar" @click="cerrarFormulario">Cancelar</button>
-          <button class="btn-guardar" @click="guardarPromocion" :disabled="!formularioValido">
-            {{ editandoId ? 'Actualizar' : 'Crear' }} Promoción
+          <button class="btn-guardar" @click="guardarPromocion" :disabled="!formularioValido || guardando" :aria-busy="guardando">
+            <ion-spinner v-if="guardando" name="crescent" />
+            {{ guardando ? 'Guardando...' : `${editandoId ? 'Actualizar' : 'Crear'} Promoción` }}
           </button>
         </div>
       </div>
 
       <!-- Lista de promociones -->
       <div v-if="!mostrarFormulario" class="lista-promos">
-        <div v-if="promociones.length === 0" class="vacio">
+        <div v-if="cargando && promociones.length === 0" class="promociones-cargando" role="status" aria-live="polite">
+          <ion-spinner name="crescent" />
+          <span>Cargando promociones...</span>
+        </div>
+
+        <div v-else-if="error && promociones.length === 0" class="promociones-error" role="alert">
+          <p>No se pudieron cargar las promociones: {{ error }}</p>
+          <button class="btn-crear-primera" type="button" :disabled="cargando" @click="cargarPromociones">
+            Reintentar
+          </button>
+        </div>
+
+        <div v-else-if="promociones.length === 0" class="vacio">
           <ion-icon :icon="newspaperOutline" class="icono-vacio" />
           <p>No hay promociones creadas aún.</p>
           <button class="btn-crear-primera" @click="abrirFormulario">
@@ -151,8 +164,8 @@
             >
               <div class="promo-header">
                 <div class="promo-titulo">
-                  <h3>{{ promo.nombre }}</h3>
-                  <span v-if="promo.vigente" class="badge-vigente">Vigente</span>
+                  <h3 style="font-weight: bolder;">{{ promo.nombre }}</h3>
+                  <span v-if="promo.vigente" class="badge-vigente">✦ Vigente</span>
                   <span v-else class="badge-inactiva">Inactiva</span>
                 </div>
                 <div class="promo-acciones">
@@ -168,9 +181,9 @@
               <p v-if="promo.descripcion" class="promo-desc">{{ promo.descripcion }}</p>
 
               <div class="promo-detalles">
-                <div class="detalle-item">
+                <div class="detalle-item detalle-descuento">
                   <span class="label">Descuento:</span>
-                  <strong style="color: goldenrod;">{{ formatearValorPromocion(promo) }}</strong>
+                  <span class="chip-descuento">{{ formatearValorPromocion(promo) }}</span>
                 </div>
 
                 <div class="detalle-item">
@@ -214,7 +227,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { IonIcon, IonButton, toastController } from '@ionic/vue'
+import { IonIcon, IonButton, IonSpinner, toastController } from '@ionic/vue'
 import {
   addCircleOutline,
   newspaperOutline,
@@ -224,7 +237,7 @@ import {
 import AppShell from '@/components/AppShell.vue'
 import { usePromociones, type Promocion, type TipoDescuento, type TipoClienteAplica, type DiaSemana } from '@/composables/usePromociones'
 
-const { promociones, cargarPromociones, crearPromocion, actualizarPromocion, eliminarPromocion } = usePromociones()
+const { promociones, cargando, error, cargarPromociones, crearPromocion, actualizarPromocion, eliminarPromocion } = usePromociones()
 
 const mostrarFormulario = ref(false)
 const editandoId = ref<string | null>(null)
@@ -622,6 +635,16 @@ const diasSeleccionadosTexto = computed(() => {
 .btn-guardar {
   background: #123a66;
   color: #f5f9fc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-guardar ion-spinner {
+  width: 18px;
+  height: 18px;
+  --color: currentColor;
 }
 
 .btn-guardar:disabled {
@@ -644,6 +667,37 @@ const diasSeleccionadosTexto = computed(() => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.promociones-cargando,
+.promociones-error {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-radius: 16px;
+  background: rgba(235, 244, 247, 0.82);
+  color: #36566d;
+  font-weight: 700;
+  text-align: center;
+}
+
+.promociones-cargando ion-spinner {
+  width: 28px;
+  height: 28px;
+  --color: #397e9f;
+}
+
+.promociones-error {
+  flex-direction: column;
+  color: #7f3324;
+}
+
+.promociones-error p {
+  margin: 0;
 }
 
 .vacio {
@@ -700,27 +754,70 @@ const diasSeleccionadosTexto = computed(() => {
   border-color: #123a66;
 }
 
+/* --- Cards de promociones ------------------------------------------- */
+/* Estructura: cromática navy para la interfaz, acento dorado reservado
+   únicamente para señalar que la card es una oferta (chip + brillo). */
+
 .promo-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .promo-card {
-  background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.10);
-  border-radius: 14px;
-  padding: 16px;
-  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(165deg, #fffefb 0%, #fbf5e7 100%);
+  border: 1px solid rgba(199, 161, 63, 0.3);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 10px 26px rgba(120, 92, 20, 0.08);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .promo-card:hover {
-  box-shadow: 0 8px 24px rgba(10, 31, 56, 0.08);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 32px rgba(120, 92, 20, 0.14);
+}
+
+/* Brillo dorado que recorre la card, de forma sutil y periódica */
+.promo-card:not(.promo-inactiva)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(255, 224, 138, 0.55) 50%,
+    transparent 58%
+  );
+  transform: translateX(-130%);
+  animation: promoShine 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes promoShine {
+  0%, 12% { transform: translateX(-130%); }
+  55%, 100% { transform: translateX(130%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-card::after {
+    animation: none;
+    content: none;
+  }
 }
 
 .promo-card.promo-inactiva {
-  opacity: 0.6;
+  opacity: 0.62;
   background: #f9fafb;
+  border-color: rgba(10, 31, 56, 0.08);
+  box-shadow: none;
+}
+
+.promo-card.promo-inactiva:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 .promo-header {
@@ -728,13 +825,14 @@ const diasSeleccionadosTexto = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .promo-titulo {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .promo-titulo h3 {
@@ -745,18 +843,21 @@ const diasSeleccionadosTexto = computed(() => {
 
 .badge-vigente,
 .badge-inactiva {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 0.7rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .badge-vigente {
-  background: rgba(22, 163, 74, 0.15);
-  color: #15803d;
+  background: linear-gradient(100deg, #f6dc8e, #cf9a35);
+  color: #4a3300;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .badge-inactiva {
@@ -767,6 +868,7 @@ const diasSeleccionadosTexto = computed(() => {
 .promo-acciones {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .btn-editar,
@@ -828,6 +930,27 @@ const diasSeleccionadosTexto = computed(() => {
   color: #0a1f38;
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+.detalle-descuento {
+  padding: 10px 0 12px;
+}
+
+.chip-descuento {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-weight: 900;
+  font-size: 0.95rem;
+  color: #5c3f00;
+  background: linear-gradient(100deg, #fbe7ab 0%, #eec661 60%, #d9a83e 100%);
+  border: 1px solid rgba(180, 140, 40, 0.35);
+}
+
+.promo-card.promo-inactiva .chip-descuento {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6f7891;
+  border-color: rgba(10, 31, 56, 0.08);
 }
 
 .dias-muestra {

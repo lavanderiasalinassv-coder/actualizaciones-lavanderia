@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/composables/useApiConfig'
+import { API_LOCAL_URL, getApiBaseUrl } from '@/composables/useApiConfig'
 
 export type RolEquipo = 'administrador' | 'recepcionista' | 'cajero' | 'operador'
 
@@ -42,15 +42,33 @@ export const getEquipo = async (): Promise<UsuarioEquipo[]> => {
 }
 
 export const autenticarUsuarioEquipo = async (codigo: string): Promise<UsuarioEquipo | null> => {
-  const res = await fetch(`${apiUrl()}/auth`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo })
-  })
+  const destinoActual = getApiBaseUrl()
+  const electron = typeof window !== 'undefined' && (
+    navigator.userAgent.includes('Electron') || Boolean((window as any).electronAPI)
+  )
+  const autenticarEn = async (destino: string) => {
+    const res = await fetch(`${destino}/equipo/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo })
+    })
 
-  if (res.status === 401) return null
+    if (res.status === 401) return null
+    return manejarRespuesta<UsuarioEquipo>(res)
+  }
 
-  return manejarRespuesta<UsuarioEquipo>(res)
+  let usuario: UsuarioEquipo | null
+  try {
+    usuario = await autenticarEn(destinoActual)
+  } catch (error) {
+    if (!electron || destinoActual === API_LOCAL_URL) throw error
+    return autenticarEn(API_LOCAL_URL)
+  }
+
+  if (usuario?.errorEnvio && electron && destinoActual !== API_LOCAL_URL) {
+    return autenticarEn(API_LOCAL_URL)
+  }
+  return usuario
 }
 
 export const agregarUsuarioEquipo = async (data: Partial<UsuarioEquipo>): Promise<UsuarioEquipo> => {

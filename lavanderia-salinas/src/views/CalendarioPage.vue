@@ -994,7 +994,7 @@
 <script setup lang="ts">
 import AppShell from '@/components/AppShell.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { IonIcon, IonModal, IonSpinner, toastController } from '@ionic/vue'
+import { IonIcon, IonModal, IonSpinner, onIonViewWillEnter, toastController } from '@ionic/vue'
 import {
   useOrdenes,
   type Orden,
@@ -1040,6 +1040,7 @@ const mostrarRestaurarCerrada = computed(() => esAdministrador.value)
 
 const {
   ordenes,
+  cargarOrdenes,
   obtenerOrdenPorId,
   actualizarOrden,
   cambiarEstado,
@@ -1103,6 +1104,9 @@ const esMobile = computed(() => anchoVentana.value <= 760)
 onMounted(() => {
   window.addEventListener('resize', actualizarAncho)
   void cargarCatalogo()
+})
+onIonViewWillEnter(() => {
+  void cargarOrdenes()
 })
 onUnmounted(() => {
   window.removeEventListener('resize', actualizarAncho)
@@ -1858,7 +1862,7 @@ const abrirDetalle = (id: string) => {
   ordenSeleccionadaId.value = id
   const orden = obtenerOrdenPorId(id)
   if (orden) {
-    fechaCreacionBorrador.value = orden.createdAt.slice(0, 10)
+    fechaCreacionBorrador.value = fechaISOaCentroamerica(orden.createdAt)
     fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
   }
 }
@@ -1915,7 +1919,7 @@ watch(
   ordenSeleccionada,
   (orden) => {
     if (!orden) return
-    fechaCreacionBorrador.value = orden.createdAt.slice(0, 10)
+    fechaCreacionBorrador.value = fechaISOaCentroamerica(orden.createdAt)
     fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
   },
   { immediate: true }
@@ -3080,8 +3084,77 @@ const cambiarEstadoPago = async (id: string) => {
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #f6fbfc 100%);
+  background-color: rgba(238, 244, 246, 0.96);
+  background-image:
+    radial-gradient(ellipse at 8% 0%, rgba(91, 157, 165, 0.2), transparent 42%),
+    radial-gradient(ellipse at 100% 18%, rgba(105, 133, 176, 0.16), transparent 38%),
+    linear-gradient(150deg, rgba(246, 249, 250, 0.98), rgba(229, 237, 240, 0.96));
+  backdrop-filter: blur(20px) saturate(112%);
   overflow: hidden;
+}
+
+.modal-detalle .detalle-bloque,
+.modal-detalle .mini-card,
+.modal-detalle .estado-cuadrito:not(.actual):not(:disabled),
+.modal-detalle .foto-vacia,
+.modal-detalle .servicio-linea,
+.modal-detalle .movimiento {
+  background: rgba(226, 235, 239, 0.78);
+  border-color: rgba(86, 111, 124, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.modal-detalle .estado-deslizador {
+  background: linear-gradient(145deg, rgba(232, 240, 243, 0.94), rgba(219, 230, 234, 0.9));
+}
+
+.modal-detalle .fecha-orden-input,
+.modal-detalle .prendas-editable-input,
+.modal-detalle .nota-input {
+  background: rgba(239, 244, 246, 0.92);
+  border-color: rgba(86, 111, 124, 0.18);
+}
+
+.modal-detalle .notas,
+.modal-detalle .prendas-editable,
+.modal-detalle .total-box {
+  background: rgba(194, 215, 218, 0.34);
+}
+
+.modal-detalle .btn-outline {
+  background: rgba(226, 235, 239, 0.84);
+}
+
+.modal-detalle,
+.modal-detalle * {
+  scrollbar-width: thin;
+  scrollbar-color: #929ba1 rgba(160, 169, 174, 0.2);
+}
+
+.modal-detalle *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.modal-detalle *::-webkit-scrollbar-track {
+  background: rgba(160, 169, 174, 0.2);
+  border-radius: 999px;
+}
+
+.modal-detalle *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #aeb6bb, #858f96);
+  border: 2px solid rgba(228, 236, 239, 0.88);
+  border-radius: 999px;
+}
+
+.modal-detalle *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #929ba1, #707b82);
+}
+
+.modal-detalle *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .modal-header-acciones {

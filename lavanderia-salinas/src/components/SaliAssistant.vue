@@ -74,7 +74,7 @@
             aria-label="Colocar chat a la izquierda"
             @click="colocarEnLateral('izquierda')"
           >
-            <ion-icon :icon="arrowBackOutline" />
+            <span class="panel-placement-icon panel-placement-left" aria-hidden="true"><i></i></span>
           </button>
           <button
             class="sali-accion-header"
@@ -84,7 +84,7 @@
             aria-label="Colocar chat a la derecha"
             @click="colocarEnLateral('derecha')"
           >
-            <ion-icon :icon="arrowForwardOutline" />
+            <span class="panel-placement-icon panel-placement-right" aria-hidden="true"><i></i></span>
           </button>
           <button
             class="sali-accion-header"
@@ -220,7 +220,7 @@ import { IonIcon } from '@ionic/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { 
-  arrowBackOutline, arrowForwardOutline, closeOutline, contractOutline, expandOutline, micOffOutline, micOutline, pauseOutline,
+  closeOutline, contractOutline, expandOutline, micOffOutline, micOutline, pauseOutline,
   sendOutline
 } from 'ionicons/icons'
 import MarkdownIt from 'markdown-it'
@@ -1215,17 +1215,7 @@ onMounted(() => {
     window.speechSynthesis.onvoiceschanged = () => obtenerVozFemeninaEspanol()
   }
 
-  if (esEntornoElectron()) {
-    // Electron no implementa SpeechRecognition de forma fiable, pero sí
-    // proporciona getUserMedia y MediaRecorder para la transcripción local.
-    usaSpeechRecognitionNativo.value = false
-    microfonoDisponible.value = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined'
-    // Descarga y prepara Whisper de antemano para que el micrófono no se
-    // sienta lento la primera vez que el usuario lo usa.
-    void obtenerTranscriptor().catch((error) => {
-      console.error('[Burbujita] No se pudo precargar Whisper en Electron:', error)
-    })
-  } else {
+  if (!esEntornoElectron()) {
     usaSpeechRecognitionNativo.value = !!(
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     )
@@ -1429,6 +1419,10 @@ onUnmounted(() => {
 .sali-accion-header { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #2563eb; }
 .sali-accion-header:hover { background: #eff6ff; }
 .sali-accion-header.activa { background: #dbeafe; color: #1d4ed8; }
+.panel-placement-icon { position: relative; display: block; box-sizing: border-box; width: 17px; height: 17px; border: 1.5px solid currentColor; border-radius: 3px; }
+.panel-placement-icon::after { content: ''; position: absolute; top: 2px; bottom: 2px; width: 4px; border-radius: 1px; background: currentColor; }
+.panel-placement-left::after { left: 2px; }
+.panel-placement-right::after { right: 2px; }
 .sali-aviso { padding: 9px 11px; border-radius: 11px; background: #dcf2ee; color: #16756c; border: 1px solid rgba(22, 117, 108, .16); font-size: .78rem; line-height: 1.35; }
 .sali-mensajes { flex: 1; min-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 8px 4px; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; }
 .sali-mensajes::-webkit-scrollbar {display: none;}

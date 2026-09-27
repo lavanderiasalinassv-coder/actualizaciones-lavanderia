@@ -24,7 +24,7 @@ const mapCliente = (row) => ({
 
 const listarClientes = async () => {
   const [rows] = await pool.query(
-    "SELECT * FROM clientes ORDER BY fecha_registro DESC"
+    "SELECT * FROM clientes ORDER BY fecha_registro DESC LIMIT 500"
   );
   return rows.map(mapCliente);
 };

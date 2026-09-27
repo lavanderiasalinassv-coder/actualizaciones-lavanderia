@@ -292,7 +292,7 @@ import { personCircleOutline, fingerPrintOutline as iconoHuella, powerOutline, w
 import { autenticarUsuarioEquipo } from '@/composables/useEquipo'
 import { useSesion } from '@/composables/useSesion'
 import { useApariencia } from '@/composables/useApariencia'
-import { getApiBaseUrl } from '@/composables/useApiConfig'
+import { API_LOCAL_URL, getApiBaseUrl } from '@/composables/useApiConfig'
 import { guardarUsuarioConfiable, obtenerUsuarioConfiable, eliminarUsuarioConfiable } from '@/composables/use2FAConfiable'
 
 const { apariencia, estiloLogin } = useApariencia()
@@ -706,14 +706,26 @@ const reenviarCodigo2FA = async () => {
   if (!usuario2FA.value) return
 
   try {
-    const respuesta = await fetch(`${getApiBaseUrl()}/auth2fa/enviar-codigo`, {
+    const destinoActual = getApiBaseUrl()
+    const opciones: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         usuarioId: usuario2FA.value.id,
         correo: usuario2FA.value.correo
       })
-    })
+    }
+    let respuesta: Response
+    try {
+      respuesta = await fetch(`${destinoActual}/auth2fa/enviar-codigo`, opciones)
+    } catch (error) {
+      if (!esElectron() || destinoActual === API_LOCAL_URL) throw error
+      respuesta = await fetch(`${API_LOCAL_URL}/auth2fa/enviar-codigo`, opciones)
+    }
+
+    if (!respuesta.ok && esElectron() && destinoActual !== API_LOCAL_URL) {
+      respuesta = await fetch(`${API_LOCAL_URL}/auth2fa/enviar-codigo`, opciones)
+    }
 
     if (!respuesta.ok) {
       const error = await respuesta.json().catch(() => ({ error: 'No se pudo reenviar el código.' }))
