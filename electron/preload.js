@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   abrirCarpetaRespaldo: () => ipcRenderer.invoke("abrir-carpeta-respaldo"),
   abrirWhatsAppDesktop: (url) =>
     ipcRenderer.invoke("abrir-whatsapp-desktop", url),
+  copiarImagenCuponWhatsApp: (dataUrl) =>
+    ipcRenderer.invoke("copiar-imagen-cupon-whatsapp", dataUrl),
   isElectron: true,
   onUpdateDisponible: (callback) =>
     ipcRenderer.on("update-disponible", (_e, info) => callback(info)),
@@ -24,10 +26,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   descargarEInstalarActualizacion: () =>
     ipcRenderer.invoke("descargar-e-instalar-actualizacion"),
   buscarActualizaciones: () => ipcRenderer.invoke("buscar-actualizaciones"),
-  obtenerVersionAplicacion: () => ipcRenderer.invoke("obtener-version-aplicacion"),
-  comprobarVersionPublicacion: () => ipcRenderer.invoke("comprobar-version-publicacion"),
+  obtenerVersionAplicacion: () =>
+    ipcRenderer.invoke("obtener-version-aplicacion"),
+  comprobarVersionPublicacion: () =>
+    ipcRenderer.invoke("comprobar-version-publicacion"),
   publicarActualizacion: () => ipcRenderer.invoke("publicar-actualizacion"),
-  puedePublicarActualizacion: () => ipcRenderer.invoke("puede-publicar-actualizacion"),
+  puedePublicarActualizacion: () =>
+    ipcRenderer.invoke("puede-publicar-actualizacion"),
   onProgresoPublicacion: (callback) => {
     const listener = (_event, detalle) => callback(detalle);
     ipcRenderer.on("progreso-publicacion", listener);

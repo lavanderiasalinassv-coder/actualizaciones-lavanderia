@@ -14,10 +14,18 @@ export interface Promocion {
   tipoClienteAplica: TipoClienteAplica
   minOrdenes?: number
   vigente: boolean
+  generarQr: boolean
+  maxUsosPorCliente?: number | null
   fechaInicio: string
   fechaFin: string
   diasEspecificos: DiaSemana[]
   createdAt: string
+}
+
+export interface EstadoUsoCuponQr {
+  usos: number
+  maxUsosPorCliente: number | null
+  disponible: boolean
 }
 
 const apiUrl = () => `${getApiBaseUrl()}/promociones`
@@ -59,6 +67,15 @@ const cargarPromociones = async (): Promise<void> => {
 cargarPromociones()
 
 export const usePromociones = () => {
+  const consultarUsosCuponQr = async (id: string, telefono: string): Promise<EstadoUsoCuponQr> => {
+    const res = await fetch(`${apiUrl()}/${id}/validar-uso`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefono })
+    })
+    return manejarRespuesta<EstadoUsoCuponQr>(res)
+  }
+
   const crearPromocion = async (datos: Omit<Promocion, 'id' | 'createdAt'>): Promise<Promocion> => {
     const res = await fetch(apiUrl(), {
       method: 'POST',
@@ -151,6 +168,7 @@ export const usePromociones = () => {
 
   return {
     promociones,
+    consultarUsosCuponQr,
     cargando,
     error,
     cargarPromociones,

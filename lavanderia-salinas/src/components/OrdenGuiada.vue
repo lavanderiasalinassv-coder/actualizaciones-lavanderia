@@ -37,6 +37,12 @@
             <ion-icon :icon="mailOutline" /><span>Correo</span>
           </button>
         </div>
+        <div v-if="esAdministrador && cuponesDisponibles.length" class="acciones-grupo">
+          <span class="acciones-etiqueta">Regalo</span>
+          <button class="action-btn regalo accion-compacta" title="Enviar un cupón de regalo" @click="abrirModalRegaloCupon">
+            <ion-icon :icon="giftOutline" /><span>Enviar cupón</span>
+          </button>
+        </div>
         <div class="acciones-grupo acciones-grupo-principal">
           <button class="action-btn accion-compacta boton-ordenes" title="Ir a órdenes" aria-label="Ir a órdenes" @click="irAOrdenes">
             <ion-icon :icon="listOutline" /><span>Ver Órdenes</span>
@@ -66,7 +72,16 @@
 
       <div class="orden-layout">
         <section class="panel-principal">
-          <div class="panel-cabecera">
+          <div
+            class="panel-cabecera"
+            :class="{
+              'paso-color-cliente': etapaActiva === 0,
+              'paso-color-servicios': etapaActiva === 1,
+              'paso-color-prendas': etapaActiva === 2,
+              'paso-color-entrega': etapaActiva === 3,
+              'paso-color-resumen': etapaActiva === 4
+            }"
+          >
             <div>
               <h3>{{ pasos[etapaActiva].title }}</h3>
             </div>
@@ -76,7 +91,7 @@
             </div>
           </div>
 
-          <div v-if="etapaActiva === 0" class="paso-contenido">
+          <div v-if="etapaActiva === 0" class="paso-contenido paso-color-cliente">
             <transition name="slide-fade" mode="out-in">
               <div :key="pasoClienteActiva" class="wizard-card">
                 <div class="wizard-header">
@@ -220,15 +235,23 @@
                         <ion-icon :icon="sparklesOutline" />
                         Promociones disponibles
                       </div>
-                      <div v-if="promocionesAplicables.length" class="promo-grid">
+                      <div v-if="promocionesVisibles.length" class="promo-grid">
                         <button
-                          v-for="promo in promocionesAplicables"
+                          v-for="promo in promocionesVisibles"
                           :key="promo.id"
+                          type="button"
                           class="promo-card"
-                          :class="{ active: promoSeleccionada?.id === promo.id }"
-                          @click="seleccionarPromocion(promo)"
+                          :class="{
+                            active: promoSeleccionada?.id === promo.id,
+                            'cupon-qr-escaneado': promoQrEscaneada?.id === promo.id,
+                            'promo-verde-magenta': promocionEsVerdeMagenta(promo),
+                            'promo-dorada': promocionEsDorada(promo)
+                          }"
+                          :disabled="promo.generarQr"
+                          @click="!promo.generarQr && seleccionarPromocion(promo)"
                         >
                           <span class="promo-emoji">🎉</span>
+                          <span v-if="promoQrEscaneada?.id === promo.id" class="promo-qr-detectado">Cupón QR escaneado</span>
                           <strong>{{ promo.nombre }}</strong>
                           <span class="promo-valor">{{ textoValorPromocion(promo) }}</span>
                           <span class="promo-aplica">{{ textoAplicaPromocion(promo) }}</span>
@@ -236,6 +259,16 @@
                         </button>
                       </div>
                       <p v-else class="promo-empty">No hay promociones para este cliente.</p>
+                      <div class="promo-cupon-acciones">
+                        <button class="promo-escanear-btn" :disabled="escaneandoCupon" @click="iniciarEscaneoCupon">
+                          <ion-icon :icon="cameraOutline" />
+                          {{ escaneandoCupon ? 'Abriendo cámara...' : 'Escanear cupón QR' }}
+                        </button>
+                        <span v-if="promoSeleccionada" class="promo-cupon-activo">
+                          {{ promoSeleccionada.generarQr ? `Cupón QR aplicado: ${promoSeleccionada.nombre}` : `Promoción aplicada: ${promoSeleccionada.nombre}` }}
+                        </span>
+                      </div>
+                      <p v-if="errorEscaneoCupon" class="promo-lector-error" role="alert">{{ errorEscaneoCupon }}</p>
                       <button v-if="promoSeleccionada" class="link-btn" @click="limpiarPromocion">
                         Quitar promoción
                       </button>
@@ -255,7 +288,7 @@
             </transition>
           </div>
 
-          <div v-else-if="etapaActiva === 1" class="paso-contenido">
+          <div v-else-if="etapaActiva === 1" class="paso-contenido paso-color-servicios">
             <div class="buscador-row">
               <div class="search-bar">
                 <ion-icon :icon="searchOutline" />
@@ -449,7 +482,7 @@
             </div>
           </div>
 
-          <div v-else-if="etapaActiva === 2" class="paso-contenido">
+          <div v-else-if="etapaActiva === 2" class="paso-contenido paso-color-prendas">
             <div class="prendas-seccion">
               <div class="prendas-card">
                 <div class="prendas-header">
@@ -490,9 +523,6 @@
                       rows="4"
                       placeholder="Ej: 2 pantalones dañados, 1 camisa con botones sueltos, manchas de grasa..."
                     ></textarea>
-                    <p class="ayuda-texto">
-                      {{ pedido.detallesPrendas.length }}/500 caracteres
-                    </p>
                   </label>
                 </div>
               </div>
@@ -508,7 +538,7 @@
             </div>
           </div>
 
-          <div v-else-if="etapaActiva === 3" class="paso-contenido">
+          <div v-else-if="etapaActiva === 3" class="paso-contenido paso-color-entrega">
             <label class="toggle-card horizontal">
               <div>
                 <strong>Envío a domicilio</strong>
@@ -662,7 +692,7 @@
             </div>
           </div>
 
-          <div v-else class="paso-contenido">
+          <div v-else class="paso-contenido paso-color-resumen">
             <div class="fotos-box">
               <div class="fotos-header">
                 <strong>📸 Fotos opcionales</strong>
@@ -684,35 +714,6 @@
             </div>
 
             <div class="resumen-box">
-              <div class="resumen-linea">
-                <span>Cliente</span>
-                <strong>{{ pedido.nombreCliente || 'Sin nombre' }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Servicios</span>
-                <strong>{{ cantidadTotal }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Prendas recibidas</span>
-                <strong>{{ pedido.cantidadPrendas }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Total</span>
-                <strong>${{ total.toFixed(2) }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Recibido</span>
-                    <strong>${{ Number(pedido.montoRecibido || 0).toFixed(2) }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Cambio</span>
-                <strong>${{ cambio.toFixed(2) }}</strong>
-              </div>
-              <div class="resumen-linea">
-                <span>Descuento aplicado</span>
-                <strong>${{ (descuentoPromocionMonto + descuentoManualMonto).toFixed(2) }}</strong>
-              </div>
-
               <label v-if="esAdministrador" class="toggle-check orden-correo-toggle">
                 <input v-model="enviarCorreoAlCrear" type="checkbox" :disabled="!pedido.correo.trim()" />
                 Enviar confirmación por correo al crear
@@ -740,75 +741,122 @@
         <aside class="panel-lateral">
           <div class="factura-card">
             <div class="factura-header">
-              <div>
-                <p class="panel-etiqueta">🧾 Factura </p>
+              <img :src="logoTicket" alt="" class="factura-logo" />
+              <strong class="factura-marca">LAVANDERÍA SALINAS</strong>
+              <span class="factura-subtitulo">Comprobante de servicio</span>
+              <span class="factura-numero">ORDEN DE SERVICIO · VISTA PREVIA</span>
+            </div>
+
+            <div
+              v-if="pedido.nombreCliente || pedido.telefono || pedido.correo || (etapaActiva >= 2 && Number(pedido.cantidadPrendas) > 0) || (etapaActiva >= 3 && (pedido.fechaEntregaActiva || pedido.envioDomicilio)) || (etapaActiva >= 2 && pedido.detallesPrendas)"
+              class="factura-datos"
+            >
+              <div v-if="pedido.nombreCliente" class="factura-linea">
+                <span>Cliente</span>
+                <strong>{{ pedido.nombreCliente }}</strong>
               </div>
-              <span class="factura-badge">{{ cantidadTotal }} ítems</span>
+              <div v-if="pedido.telefono" class="factura-linea">
+                <span>Teléfono</span>
+                <strong>{{ `${pedido.codigoPais || ''} ${pedido.telefono}`.trim() }}</strong>
+              </div>
+              <div v-if="pedido.correo" class="factura-linea">
+                <span>Correo</span>
+                <strong>{{ pedido.correo }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 2 && Number(pedido.cantidadPrendas) > 0" class="factura-linea">
+                <span>Prendas recibidas</span>
+                <strong>{{ pedido.cantidadPrendas }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 3 && pedido.fechaEntregaActiva" class="factura-linea">
+                <span>Fecha de entrega</span>
+                <strong>{{ fechaEntregaTexto }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 3 && pedido.envioDomicilio && pedido.direccionEntrega" class="factura-linea">
+                <span>Dirección</span>
+                <strong>{{ pedido.direccionEntrega }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 2 && pedido.detallesPrendas" class="factura-linea">
+                <span>Detalles</span>
+                <strong>{{ pedido.detallesPrendas }}</strong>
+              </div>
             </div>
 
-            <div class="factura-linea subtotal">
-              <span>Subtotal</span>
-              <strong>${{ subtotal.toFixed(2) }}</strong>
+            <div v-if="pedido.items.length" class="factura-servicios">
+              <div class="factura-tabla-cabecera">
+                <span class="factura-cantidad">Cant.</span>
+                <span>Servicio</span>
+                <span class="factura-precio">P.U.</span>
+                <span class="factura-precio">Total</span>
+              </div>
+              <div v-for="item in pedido.items" :key="item.id" class="factura-item">
+                <span class="factura-cantidad">{{ item.cantidad }}</span>
+                <span class="factura-servicio-nombre">{{ item.nombre }}<small>{{ etiquetaUnidad(item.unidad) }}</small></span>
+                <span class="factura-precio">${{ item.precio.toFixed(2) }}</span>
+                <strong class="factura-precio">${{ (item.precio * item.cantidad).toFixed(2) }}</strong>
+              </div>
             </div>
-            <div class="factura-linea descuento">
-              <span>Promoción ({{ promoSeleccionada ? textoValorPromocion(promoSeleccionada) : 'sin aplicar' }})</span>
-              <strong>-${{ descuentoPromocionMonto.toFixed(2) }}</strong>
-            </div>
-            <div class="factura-linea descuento">
-              <span>Descuento manual ({{ pedido.descuentoManualTipo === 'porcentaje' ? `${Number(pedido.descuentoManual || 0).toFixed(2)}%` : `$${Number(pedido.descuentoManual || 0).toFixed(2)}` }})</span>
-              <strong>-${{ descuentoManualMonto.toFixed(2) }}</strong>
-            </div>
-            <div class="factura-linea total">
-              <span>Total</span>
-              <strong>${{ total.toFixed(2) }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>Cliente</span>
-              <strong>{{ pedido.nombreCliente || 'Sin nombre' }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>Prendas recibidas</span>
-              <strong>{{ pedido.cantidadPrendas }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>Entrega</span>
-              <strong>{{ pedido.fechaEntregaActiva ? fechaEntregaTexto : 'Sin fecha' }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>Pago</span>
-              <strong>{{ pedido.estadoPago }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>{{ pedido.estadoPago === 'anticipo' ? 'Anticipo recibido' : 'Pago recibido' }}</span>
-              <strong>${{ Number(pedido.montoRecibido || 0).toFixed(2) }}</strong>
-            </div>
-            <div class="factura-linea">
-              <span>Saldo pendiente</span>
-              <strong>${{ saldoPendiente.toFixed(2) }}</strong>
-            </div>
+            <p v-else-if="etapaActiva >= 1" class="factura-vacia">Agrega servicios para completar el ticket.</p>
 
-            <div class="factura-mini-items">
-              <article v-for="item in pedido.items.slice(0, 3)" :key="item.id" class="factura-item">
-                <span>{{ item.nombre }}</span>
-                <strong>{{ item.cantidad }}</strong>
-              </article>
-              <p v-if="pedido.items.length === 0" class="factura-vacia">Aún no agregas servicios.</p>
-              <p v-else-if="pedido.items.length > 3" class="factura-mas">
-                +{{ pedido.items.length - 3 }} servicios más
-              </p>
+            <div v-if="pedido.items.length" class="factura-totales">
+              <div v-if="etapaActiva >= 3" class="factura-linea">
+                <span>Pago</span>
+                <strong>{{ pedido.estadoPago === 'porCobrar' ? 'Por cobrar' : pedido.estadoPago === 'anticipo' ? 'Anticipo' : 'Pagado' }}</strong>
+              </div>
+              <div class="factura-linea">
+                <span>Subtotal</span>
+                <strong>${{ subtotal.toFixed(2) }}</strong>
+              </div>
+              <div v-if="descuentoPromocionMonto" class="factura-linea descuento">
+                <span>Promoción</span>
+                <strong>-${{ descuentoPromocionMonto.toFixed(2) }}</strong>
+              </div>
+              <div v-if="descuentoManualMonto" class="factura-linea descuento">
+                <span>Descuento manual</span>
+                <strong>-${{ descuentoManualMonto.toFixed(2) }}</strong>
+              </div>
+              <div class="factura-linea total">
+                <span>TOTAL</span>
+                <strong>${{ total.toFixed(2) }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 3" class="factura-linea">
+                <span>{{ pedido.estadoPago === 'anticipo' ? 'Anticipo recibido' : 'Pago recibido' }}</span>
+                <strong>${{ Number(pedido.montoRecibido || 0).toFixed(2) }}</strong>
+              </div>
+              <div v-if="etapaActiva >= 3" class="factura-linea saldo">
+                <span>Saldo pendiente</span>
+                <strong>${{ saldoPendiente.toFixed(2) }}</strong>
+              </div>
             </div>
+            <footer v-if="pedido.nombreCliente || pedido.items.length" class="factura-footer">¡Gracias por su preferencia!<br>Presente este ticket al retirar sus prendas.</footer>
           </div>
 
-          <div class="tarjeta-resumen acciones-card">
-            <p class="panel-etiqueta">Cancelar</p>
-            <button class="cancel-order-btn" @click="reiniciarFlujo">
+          <div class="acciones-card">
+            <button type="button" class="cancel-order-btn" @click="reiniciarFlujo">
+              <ion-icon :icon="closeOutline" />
               Cancelar pedido
             </button>
-            <p class="acciones-texto">Se limpia el carrito y vuelves al inicio del flujo.</p>
           </div>
         </aside>
       </div>
     </div>
+
+    <ion-modal
+      :is-open="escaneandoCupon"
+      class="modal-escaner-cupon"
+      @didPresent="conectarEscanerCupon"
+      @didDismiss="detenerEscaneoCupon"
+    >
+      <div class="modal-escaner-contenido">
+        <header class="modal-escaner-header">
+          <h3>Escanear cupón QR</h3>
+          <button type="button" class="modal-escaner-cerrar" aria-label="Cerrar escáner" @click="detenerEscaneoCupon">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </header>
+        <video ref="videoCupon" autoplay playsinline muted aria-label="Vista de la cámara para leer el cupón QR" />
+        <button type="button" class="modal-escaner-cancelar" @click="detenerEscaneoCupon">Cancelar</button>
+      </div>
+    </ion-modal>
 
     <ion-modal :is-open="mostrarAdvertenciaStock" class="modal-stock" @didDismiss="cerrarAdvertenciaStock">
       <div class="modal-stock-contenido">
@@ -864,25 +912,105 @@
         </div>
       </div>
     </ion-modal>
+
+    <ion-modal
+      :is-open="mostrarModalRegaloCupon"
+      class="modal-regalo-cupon"
+      @didDismiss="cerrarModalRegaloCupon"
+    >
+      <div class="modal-regalo-contenido">
+        <header class="modal-regalo-header">
+          <div>
+            <span class="modal-regalo-etiqueta">Regalo para el cliente</span>
+            <h3>Enviar un cupón</h3>
+          </div>
+          <button type="button" class="modal-regalo-cerrar" aria-label="Cerrar" @click="cerrarModalRegaloCupon">
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </header>
+
+        <p v-if="ultimaOrdenCreada" class="modal-regalo-cliente">
+          {{ ultimaOrdenCreada.nombreCliente }} · Orden {{ ultimaOrdenCreada.numero }}
+        </p>
+        <p v-if="ultimaOrdenCreada" class="modal-regalo-contacto">
+          WhatsApp: {{ ultimaOrdenCreada.codigoPais }} {{ ultimaOrdenCreada.telefono || 'No registrado' }}
+          <span>·</span>
+          Correo: {{ ultimaOrdenCreada.correo || 'No registrado' }}
+        </p>
+
+        <div class="modal-regalo-lista" role="radiogroup" aria-label="Cupones disponibles">
+          <button
+            v-for="promo in cuponesDisponibles"
+            :key="promo.id"
+            type="button"
+            role="radio"
+            :aria-checked="promo.id === cuponRegaloSeleccionadoId"
+            class="modal-regalo-cupon-opcion"
+            :class="{ seleccionado: promo.id === cuponRegaloSeleccionadoId }"
+            @click="cuponRegaloSeleccionadoId = promo.id"
+          >
+            <span class="modal-regalo-cupon-datos">
+              <strong>{{ promo.nombre }}</strong>
+              <span>{{ textoValorPromocion(promo) }} de descuento · Vence {{ fechaCuponTexto(promo.fechaFin) }}</span>
+              <span>{{ textoLimiteCupon(promo) }}</span>
+            </span>
+            <ion-icon v-if="promo.id === cuponRegaloSeleccionadoId" :icon="checkmarkCircleOutline" />
+          </button>
+        </div>
+
+        <p v-if="!cuponesDisponibles.length" class="modal-regalo-vacio">No hay cupones vigentes disponibles.</p>
+        <p v-if="errorRegaloCupon" class="modal-regalo-error" role="alert">{{ errorRegaloCupon }}</p>
+
+        <div class="modal-regalo-acciones">
+          <button
+            type="button"
+            class="regalo-whatsapp"
+            :disabled="enviandoRegaloCupon || !cuponRegaloSeleccionado || !telefonoRegaloValido"
+            @click="enviarRegaloCupon('whatsapp')"
+          >
+            <ion-icon :icon="logoWhatsapp" /> WhatsApp
+          </button>
+          <button
+            type="button"
+            class="regalo-correo"
+            :disabled="enviandoRegaloCupon || !cuponRegaloSeleccionado || !correoRegaloValido"
+            @click="enviarRegaloCupon('correo')"
+          >
+            <ion-icon :icon="mailOutline" /> Correo
+          </button>
+        </div>
+        <p v-if="enviandoRegaloCupon" class="modal-regalo-enviando" role="status">Preparando envío del cupón...</p>
+        <div v-if="cuponRegaloSeleccionado" class="cupon-regalo-renderizador" aria-hidden="true">
+          <CuponQrCard
+            ref="tarjetaCuponRegalo"
+            :promocion="cuponRegaloSeleccionado"
+          />
+        </div>
+      </div>
+    </ion-modal>
   </section>
 </template>
 
 <script setup lang="ts">
 import { IonIcon, IonModal, IonToggle, toastController } from '@ionic/vue'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser'
+import CuponQrCard from '@/components/CuponQrCard.vue'
 import { enviarFacturaOrdenPorCorreo, generarHtmlFacturaOrden, usePedido, type ItemPedido } from '@/composables/Usepedido'
 import { useCatalogo } from '@/composables/Usecatalogo'
 import { buscarClientePorTelefono, agregarCliente, type ClienteConEstado, editarCliente as editarClienteAPI, useClientes } from '@/composables/useClientes'
 import { usePromociones, type Promocion } from '@/composables/usePromociones'
+import { obtenerIdPromocionDelCupon } from '@/utils/cuponQr'
 import { ZONA_HORARIA_NEGOCIO } from '@/composables/useFechas'
 import { useSesion } from '@/composables/useSesion'
 import { obtenerIconoPorNombre } from '@/composables/iconosPrendas'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
-import { imprimirTicketOrden as imprimirTicketOrdenCompartido, imprimirTicketPrendas as imprimirTicketPrendasCompartido } from '@/utils/documentosOrden'
+import { imprimirTicketOrden as imprimirTicketOrdenCompartido, imprimirTicketPrendas as imprimirTicketPrendasCompartido, logoTicket } from '@/utils/documentosOrden'
 import {
   calendarOutline,
   cashOutline,
+  cameraOutline,
   cardOutline,
   checkmarkCircleOutline,
   closeOutline,
@@ -890,6 +1018,7 @@ import {
   chevronBackOutline,
   chevronForwardOutline,
   globeOutline,
+  giftOutline,
   imageOutline,
   mailOutline,
   logoWhatsapp,
@@ -904,10 +1033,11 @@ import {
   trashOutline,
 } from 'ionicons/icons'
 
+
 const router = useRouter()
 const irAOrdenes = () => router.push('/tabs/ordenes')
 const { servicios, categorias: categoriasCatalogo, cargarCatalogo } = useCatalogo()
-const { obtenerPromocionesAplicables } = usePromociones()
+const { promociones, consultarUsosCuponQr, obtenerPromocionesAplicables } = usePromociones()
 const { clientesConEstado } = useClientes()
 const { esAdministrador } = useSesion()
 
@@ -981,6 +1111,12 @@ const productosScroll = ref<HTMLElement | null>(null)
 const mostrarDescuento = ref(false)
 const clienteEncontrado = ref<ClienteConEstado | null>(null)
 const promoSeleccionada = ref<Promocion | null>(null)
+const promoQrEscaneada = ref<Promocion | null>(null)
+const escaneandoCupon = ref(false)
+const errorEscaneoCupon = ref('')
+const videoCupon = ref<HTMLVideoElement | null>(null)
+let controlesEscanerCupon: IScannerControls | null = null
+let contextoSonidoCupon: AudioContext | null = null
 const montosRapidos = [5, 10, 20, 50]
 const MAX_FOTOS_PEDIDO = 6
 const busqueda = ref('')
@@ -1095,13 +1231,113 @@ watch(productosCategoriaActiva, (lista) => {
   productoSlideIndex.value = Math.min(productoSlideIndex.value, Math.max(0, lista.length - 1))
 })
 
-const promocionesAplicables = computed(() =>
+const promocionesElegibles = computed(() =>
   obtenerPromocionesAplicables(
     !!clienteEncontrado.value,
     clienteEncontrado.value?.esRecurrente ?? false,
     clienteEncontrado.value?.totalOrdenes ?? 0
   )
 )
+const promocionesAplicables = computed(() =>
+  promocionesElegibles.value.filter((promocion) => !promocion.generarQr)
+)
+const promocionesVisibles = computed(() => {
+  if (!promoQrEscaneada.value) return promocionesAplicables.value
+  return [promoQrEscaneada.value, ...promocionesAplicables.value]
+})
+const cuponesDisponibles = computed(() => {
+  const hoy = new Date().toISOString().split('T')[0]
+  return promociones.value.filter((promo) =>
+    promo.generarQr && promo.vigente && promo.fechaInicio <= hoy && promo.fechaFin >= hoy
+  )
+})
+const cuponRegaloSeleccionadoId = ref('')
+const cuponRegaloSeleccionado = computed(() =>
+  cuponesDisponibles.value.find((promo) => promo.id === cuponRegaloSeleccionadoId.value) ?? null
+)
+const mostrarModalRegaloCupon = ref(false)
+const enviandoRegaloCupon = ref(false)
+const errorRegaloCupon = ref('')
+type RespuestaCompartirCupon = { ok: boolean; error: string }
+type TarjetaCuponCompartible = {
+  compartirCuponDesdeOrden: (datos: {
+    canal: 'whatsapp' | 'correo'
+    nombreCliente: string
+    destinatario: string
+  }) => Promise<RespuestaCompartirCupon>
+}
+const tarjetaCuponRegalo = ref<TarjetaCuponCompartible | null>(null)
+const telefonoRegaloCupon = computed(() => {
+  const orden = ultimaOrdenCreada.value
+  return orden ? `${orden.codigoPais}${orden.telefono}`.replace(/\D/g, '') : ''
+})
+const telefonoRegaloValido = computed(() =>
+  telefonoRegaloCupon.value.length >= 8 && telefonoRegaloCupon.value.length <= 15
+)
+const correoRegaloValido = computed(() =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ultimaOrdenCreada.value?.correo.trim() ?? '')
+)
+
+const fechaCuponTexto = (fecha: string) => new Date(`${fecha}T00:00:00`).toLocaleDateString('es-SV', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric'
+})
+
+const textoLimiteCupon = (promo: Promocion) =>
+  typeof promo.maxUsosPorCliente === 'number' && Number.isInteger(promo.maxUsosPorCliente) && promo.maxUsosPorCliente >= 1
+    ? `Límite por cliente: máximo ${promo.maxUsosPorCliente} ${promo.maxUsosPorCliente === 1 ? 'uso' : 'usos'}`
+    : 'Límite por cliente: sin límite'
+
+const abrirModalRegaloCupon = () => {
+  if (!esAdministrador.value || !cuponesDisponibles.value.length) return
+  cuponRegaloSeleccionadoId.value = cuponesDisponibles.value[0].id
+  errorRegaloCupon.value = ''
+  mostrarModalRegaloCupon.value = true
+}
+
+const cerrarModalRegaloCupon = () => {
+  mostrarModalRegaloCupon.value = false
+  errorRegaloCupon.value = ''
+}
+
+const enviarRegaloCupon = async (canal: 'whatsapp' | 'correo') => {
+  const orden = ultimaOrdenCreada.value
+  if (!esAdministrador.value || !orden || !cuponRegaloSeleccionado.value || enviandoRegaloCupon.value) return
+
+  if (canal === 'whatsapp' && !telefonoRegaloValido.value) {
+    errorRegaloCupon.value = 'La orden no tiene un número de WhatsApp válido.'
+    return
+  }
+  if (canal === 'correo' && !correoRegaloValido.value) {
+    errorRegaloCupon.value = 'La orden no tiene un correo electrónico válido.'
+    return
+  }
+
+  enviandoRegaloCupon.value = true
+  errorRegaloCupon.value = ''
+
+  try {
+    const resultado = await tarjetaCuponRegalo.value?.compartirCuponDesdeOrden({
+      canal,
+      nombreCliente: orden.nombreCliente,
+      destinatario: canal === 'whatsapp' ? telefonoRegaloCupon.value : orden.correo.trim()
+    })
+    if (!resultado?.ok) {
+      errorRegaloCupon.value = resultado?.error || 'No se pudo compartir el cupón.'
+      return
+    }
+    cerrarModalRegaloCupon()
+  } catch (error) {
+    errorRegaloCupon.value = error instanceof Error ? error.message : 'No se pudo enviar el cupón.'
+  } finally {
+    enviandoRegaloCupon.value = false
+  }
+}
+
+watch([etapaActiva, pasoClienteActiva], () => {
+  if (etapaActiva.value !== 0 || pasoClienteActiva.value !== 1) detenerEscaneoCupon()
+})
 
 const clientesSugeridos = computed(() => {
   const consulta = pedido.nombreCliente.trim().toLowerCase()
@@ -1182,6 +1418,12 @@ const textoValorPromocion = (promo: Promocion) =>
   promo.tipoDescuento === 'porcentaje'
     ? `${Number(promo.valor).toFixed(2)}%`
     : `$${Number(promo.valor).toFixed(2)}`
+const promocionEsDorada = (promo: Promocion) =>
+  (promo.tipoDescuento === 'porcentaje' && Number(promo.valor) >= 50) ||
+  (promo.tipoDescuento === 'dinero' && Number(promo.valor) >= 20)
+const promocionEsVerdeMagenta = (promo: Promocion) =>
+  (promo.tipoDescuento === 'porcentaje' && Number(promo.valor) >= 30 && Number(promo.valor) < 50) ||
+  (promo.tipoDescuento === 'dinero' && Number(promo.valor) >= 10 && Number(promo.valor) < 20)
 const textoAplicaPromocion = (promo: Promocion) => {
   if (promo.tipoClienteAplica === 'registrados') return 'Aplica a clientes registrados'
   if (promo.tipoClienteAplica === 'recurrentes') {
@@ -1279,6 +1521,7 @@ const reiniciarFlujo = () => {
   mostrarDescuento.value = false
   clienteEncontrado.value = null
   promoSeleccionada.value = null
+  promoQrEscaneada.value = null
   mostrarAdvertenciaStock.value = false
   faltantesStockModal.value = []
   limpiarUltimaOrdenCreada()
@@ -1406,15 +1649,155 @@ const seleccionarPromocion = (promo: Promocion) => {
     return
   }
 
+  promoQrEscaneada.value = null
   promoSeleccionada.value = promo
+  pedido.promocionQrId = promo.generarQr ? promo.id : null
   pedido.descuentoPromocionTipo = promo.tipoDescuento
   pedido.descuentoPromocion = promo.valor
 }
 
+const detenerEscaneoCupon = () => {
+  controlesEscanerCupon?.stop()
+  controlesEscanerCupon = null
+  escaneandoCupon.value = false
+}
+
+const emitirPitidoCupon = () => {
+  try {
+    contextoSonidoCupon ??= new AudioContext()
+    const inicio = contextoSonidoCupon.currentTime
+    const oscilador = contextoSonidoCupon.createOscillator()
+    const volumen = contextoSonidoCupon.createGain()
+
+    oscilador.type = 'sine'
+    oscilador.frequency.setValueAtTime(880, inicio)
+    volumen.gain.setValueAtTime(0.0001, inicio)
+    volumen.gain.exponentialRampToValueAtTime(0.08, inicio + 0.012)
+    volumen.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.12)
+    oscilador.connect(volumen)
+    volumen.connect(contextoSonidoCupon.destination)
+    oscilador.start(inicio)
+    oscilador.stop(inicio + 0.12)
+    void contextoSonidoCupon.resume()
+  } catch {
+    // La lectura del QR no depende del sonido.
+  }
+}
+
+const emitirSonidoDenegadoCupon = () => {
+  try {
+    contextoSonidoCupon ??= new AudioContext()
+    const inicio = contextoSonidoCupon.currentTime
+    const oscilador = contextoSonidoCupon.createOscillator()
+    const volumen = contextoSonidoCupon.createGain()
+
+    oscilador.type = 'square'
+    oscilador.frequency.setValueAtTime(320, inicio)
+    oscilador.frequency.exponentialRampToValueAtTime(190, inicio + 0.16)
+    volumen.gain.setValueAtTime(0.0001, inicio)
+    volumen.gain.exponentialRampToValueAtTime(0.055, inicio + 0.015)
+    volumen.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.18)
+    oscilador.connect(volumen)
+    volumen.connect(contextoSonidoCupon.destination)
+    oscilador.start(inicio)
+    oscilador.stop(inicio + 0.18)
+    void contextoSonidoCupon.resume()
+  } catch {
+    // El sonido es opcional; la validación del cupón continúa.
+  }
+}
+
+const rechazarCuponQr = (mensaje: string) => {
+  errorEscaneoCupon.value = mensaje
+  emitirSonidoDenegadoCupon()
+}
+
+const iniciarEscaneoCupon = () => {
+  errorEscaneoCupon.value = ''
+  escaneandoCupon.value = true
+}
+
+const conectarEscanerCupon = async () => {
+  if (!escaneandoCupon.value) return
+
+  if (!videoCupon.value) {
+    detenerEscaneoCupon()
+    errorEscaneoCupon.value = 'No se pudo iniciar la cámara en este dispositivo.'
+    return
+  }
+
+  try {
+    const controles = await new BrowserMultiFormatReader().decodeFromVideoDevice(
+      undefined,
+      videoCupon.value,
+      (resultado) => {
+        if (!resultado || !escaneandoCupon.value) return
+        detenerEscaneoCupon()
+
+        const promocionId = obtenerIdPromocionDelCupon(resultado.getText())
+        const promocion = promocionId
+          ? promociones.value.find((item) => item.id === promocionId)
+          : undefined
+
+        if (!promocion) {
+          rechazarCuponQr('Este QR no corresponde a un cupón de Lavandería Salinas.')
+          return
+        }
+        const hoy = new Date().toISOString().split('T')[0]
+        if (promocion.fechaFin < hoy) {
+          rechazarCuponQr('Promoción expirada')
+          return
+        }
+        if (!promocionesElegibles.value.some((item) => item.id === promocion.id)) {
+          rechazarCuponQr(promocion.fechaInicio > hoy
+            ? 'Esta promoción todavía no está disponible.'
+            : 'Este cupón no aplica a este cliente hoy.')
+          return
+        }
+
+        const telefonoCliente = `${pedido.codigoPais}${pedido.telefono}`.replace(/\D/g, '')
+        void consultarUsosCuponQr(promocion.id, telefonoCliente)
+          .then((estadoUso) => {
+            if (!estadoUso.disponible) {
+              rechazarCuponQr(`Cliente excedió el máximo de usos de este cupón (${estadoUso.usos}/${estadoUso.maxUsosPorCliente}).`)
+              return
+            }
+            emitirPitidoCupon()
+            promoQrEscaneada.value = promocion
+            promoSeleccionada.value = promocion
+            pedido.promocionQrId = promocion.id
+            pedido.descuentoPromocionTipo = promocion.tipoDescuento
+            pedido.descuentoPromocion = promocion.valor
+            void mostrarToastCupon(`Cupón aplicado: ${promocion.nombre}`)
+          })
+          .catch((error) => {
+            rechazarCuponQr(error instanceof Error
+              ? error.message
+              : 'No se pudo validar el máximo de usos del cupón.')
+          })
+      }
+    )
+    if (escaneandoCupon.value) controlesEscanerCupon = controles
+    else controles.stop()
+  } catch {
+    detenerEscaneoCupon()
+    errorEscaneoCupon.value = 'No se pudo acceder a la cámara. Revisa el permiso de cámara de la app.'
+  }
+}
+
+const mostrarToastCupon = async (mensaje: string) => {
+  const toast = await toastController.create({ message: mensaje, duration: 2200, color: 'success' })
+  await toast.present()
+}
+
+onBeforeUnmount(detenerEscaneoCupon)
+
 const limpiarPromocion = () => {
   promoSeleccionada.value = null
+  promoQrEscaneada.value = null
   pedido.descuentoPromocion = 0
   pedido.descuentoPromocionTipo = 'porcentaje'
+  pedido.promocionQrId = null
 }
 
 const clientePasoSiguiente = () => {
@@ -2131,6 +2514,11 @@ onMounted(() => {
   font-size: 1.05em;
 }
 
+.action-btn.regalo {
+  background: linear-gradient(135deg, #f6d982, #e7b94f);
+  color: #463300;
+}
+
 .action-btn.verde {
   background: #16a34a;
   color: #ffffff;
@@ -2310,7 +2698,11 @@ onMounted(() => {
 }
 
 .panel-principal {
-  padding: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .panel-cabecera {
@@ -2432,7 +2824,66 @@ onMounted(() => {
 .paso-contenido {
   display: grid;
   gap: 16px;
+  padding: 16px;
+  border: 1px solid transparent;
+  border-radius: 16px;
   color: #0a1f38;
+}
+
+.paso-color-cliente,
+.paso-color-servicios,
+.paso-color-prendas,
+.paso-color-entrega,
+.paso-color-resumen {
+  border-color: #dce9e4;
+  background: linear-gradient(135deg, #eff8f4 0%, #f1f6ff 54%, #fff8ed 100%);
+}
+
+.paso-color-cliente .wizard-card,
+.paso-color-cliente .promos-box.compact,
+.paso-color-servicios .carrito-box.compact,
+.paso-color-prendas .prendas-card,
+.paso-color-resumen .fotos-box,
+.paso-color-resumen .resumen-box {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.paso-color-cliente .wizard-card,
+.paso-color-cliente .promos-box.compact {
+  padding: 0;
+}
+
+.paso-color-servicios .carrito-box.compact {
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(18, 58, 102, 0.12);
+}
+
+.paso-color-prendas .prendas-card {
+  padding: 8px 0;
+}
+
+.paso-color-prendas .prendas-card + .prendas-card {
+  padding-top: 18px;
+  border-top: 1px solid rgba(18, 58, 102, 0.12);
+}
+
+.paso-color-resumen .fotos-box,
+.paso-color-resumen .resumen-box {
+  padding: 0;
+}
+
+.paso-color-resumen .resumen-box {
+  padding-top: 14px;
+  border-top: 1px solid rgba(18, 58, 102, 0.12);
+}
+
+.panel-cabecera[class*='paso-color-'] {
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 14px;
 }
 .cliente-grid {
   display: grid;
@@ -2716,6 +3167,112 @@ onMounted(() => {
   color: #0a1f38;
 }
 
+.promo-cupon-acciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.promo-escanear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(18, 58, 102, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #123a66;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.promo-escanear-btn:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.promo-cupon-activo {
+  color: #23764a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.modal-escaner-cupon {
+  --width: min(92vw, 460px);
+  --height: auto;
+  --max-height: 90vh;
+  --border-radius: 16px;
+  --backdrop-opacity: 0.55;
+}
+
+.modal-escaner-cupon::part(content) {
+  height: auto;
+  max-height: 90vh;
+  background: #ffffff;
+}
+
+.modal-escaner-contenido {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.modal-escaner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-escaner-header h3 {
+  margin: 0;
+  color: #0a1f38;
+  font-size: 1.05rem;
+}
+
+.modal-escaner-cerrar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #123a66;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.modal-escaner-contenido video {
+  display: block;
+  width: 100%;
+  max-height: min(58vh, 360px);
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  background: #0a1f38;
+  object-fit: cover;
+}
+
+.modal-escaner-cancelar {
+  min-height: 42px;
+  border: 1px solid rgba(18, 58, 102, 0.16);
+  border-radius: 8px;
+  background: #f5f9fc;
+  color: #123a66;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.promo-lector-error {
+  margin: 0;
+  color: #a33a2b;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .promo-empty {
   margin: 0;
   color: #7c8fa6;
@@ -2750,6 +3307,42 @@ onMounted(() => {
 .promo-card.active {
   border-color: #123a66;
   background: linear-gradient(180deg, rgba(18, 58, 102, 0.12), rgba(79, 179, 224, 0.12), rgba(22, 163, 74, 0.08));
+}
+
+.promo-card:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.promo-card.cupon-qr-escaneado {
+  border-color: #397e9f;
+  background: linear-gradient(145deg, #e6f6fa, #ffffff 70%);
+  box-shadow: 0 8px 20px rgba(18, 58, 102, 0.1);
+}
+
+.promo-card.promo-verde-magenta {
+  border-color: #d7b2cf;
+  background: linear-gradient(130deg, #eff9f2 0%, #ffffff 48%, #fcf0f8 100%);
+}
+
+.promo-card.promo-dorada {
+  border-color: #d7bd79;
+  background: linear-gradient(135deg, #fff9e9, #ffffff 60%, #fffdf6);
+}
+
+.promo-card.promo-dorada .promo-valor {
+  color: #946300;
+}
+
+.promo-card.promo-verde-magenta .promo-valor {
+  color: #a40b68;
+}
+
+.promo-qr-detectado {
+  color: #23764a;
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
 }
 
 .promo-emoji {
@@ -3514,6 +4107,73 @@ onMounted(() => {
   gap: 12px;
 }
 
+.preview-recibo {
+  width: min(100%, 380px);
+  margin: 0 auto;
+  padding: 18px 16px;
+  border: 1px dashed #b7b7ae;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #fffefa 100%);
+  box-shadow: 0 8px 18px rgba(10, 31, 56, 0.12);
+  color: #171717;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.preview-recibo-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #555;
+  text-align: center;
+}
+
+.preview-recibo-header strong {
+  font-size: 0.92rem;
+}
+
+.preview-recibo-header span {
+  color: #555;
+  font-size: 0.68rem;
+}
+
+.preview-recibo .resumen-linea {
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px dashed #ddd;
+  font-size: 0.72rem;
+}
+
+.preview-recibo .resumen-linea span {
+  color: #555 !important;
+  font-size: inherit;
+}
+
+.preview-recibo .resumen-linea strong {
+  max-width: 58%;
+  color: #171717 !important;
+  font-size: inherit;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.preview-recibo .resumen-linea-total {
+  margin: 4px 0;
+  padding: 9px 0;
+  border-top: 1px solid #222;
+  border-bottom: 3px double #222;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.preview-recibo .resumen-linea-total strong {
+  color: #111 !important;
+  font-size: inherit;
+  font-weight: 900;
+}
+
 .alerta-stock {
   padding: 12px 14px;
   border-radius: 14px;
@@ -3529,6 +4189,10 @@ onMounted(() => {
   display: grid;
   gap: 14px;
   align-content: start;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
 }
 
 .tarjeta-resumen {
@@ -3538,115 +4202,222 @@ onMounted(() => {
 }
 
 .factura-card {
-  background: #fffef8;
-  border: 1px dashed rgba(18, 58, 102, 0.28);
-  border-radius: 4px;
-  padding: 12px;
+  width: 100%;
+  max-width: 80mm;
+  margin-inline: auto;
+  background: linear-gradient(180deg, #fffefa 0%, #ffffff 100%);
+  border: 1px dashed #aaa99f;
+  border-radius: 3px;
+  padding: 18px 16px;
   display: grid;
-  gap: 8px;
-  position: sticky;
-  top: 0;
-  box-shadow: 3px 4px 0 rgba(18, 58, 102, 0.06), 0 10px 20px rgba(10, 31, 56, 0.05);
+  gap: 0;
+  position: relative;
+  color: #171717;
+  font-family: 'Courier New', Courier, monospace;
+  box-shadow: 0 10px 24px rgba(10, 31, 56, 0.12);
 }
 
 .factura-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: flex-start;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed rgba(18, 58, 102, 0.22);
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #777;
+  text-align: center;
 }
 
-.factura-header h4 {
-  margin: 0;
-  color: #0a1f38;
+.factura-logo {
+  width: 27mm;
+  max-height: 18mm;
+  object-fit: contain;
 }
 
-.factura-badge {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(18, 58, 102, 0.10), rgba(79, 179, 224, 0.12));
-  color: #123a66;
-  font-size: 0.78rem;
+.factura-marca {
+  color: #171717;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.factura-numero {
+  width: 100%;
+  margin-top: 3px;
+  padding: 6px 3px;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  color: #171717;
+  font-size: 0.66rem;
   font-weight: 800;
-  white-space: nowrap;
+}
+
+.factura-header .panel-etiqueta {
+  margin: 0;
+  color: #171717;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.factura-subtitulo {
+  display: block;
+  margin-top: 3px;
+  color: #555;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.factura-datos {
+  display: grid;
+  gap: 0;
+  padding: 8px 0;
+  border-bottom: 1px dashed #777;
 }
 
 .factura-linea {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(58px, 0.75fr) minmax(0, 1.25fr);
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  font-size: 0.82rem;
-  color: #0a1f38 !important;
+  gap: 5px;
+  align-items: flex-start;
+  padding: 5px 0;
+  border-bottom: 1px dashed #ddd;
+  font-size: 0.68rem;
+  color: #171717 !important;
 }
 
 .factura-linea strong {
-  color: #0a1f38 !important;
+  min-width: 0;
+  color: #171717 !important;
+  font-size: 0.7rem;
   text-align: right;
-}
-
-.factura-linea.total {
-  border-top: 1px dashed rgba(18, 58, 102, 0.14);
-  padding-top: 8px;
-  margin-top: 2px;
-}
-
-.factura-linea.subtotal {
-  padding-bottom: 2px;
-}
-
-.factura-linea.descuento {
-  color: #0f7a3a !important;
-}
-
-.factura-linea.descuento strong {
-  color: #0f7a3a !important;
+  overflow-wrap: anywhere;
 }
 
 .factura-linea span,
 .factura-vacia,
 .factura-mas {
-  color: #6d829c !important;
+  color: #555 !important;
 }
 
-.factura-mini-items {
+.factura-servicios {
   display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(10, 31, 56, 0.08);
-  color : #6d829c;
+  gap: 0;
+  padding: 8px 0;
+  border-bottom: 1px dashed #777;
+  color: #333;
+}
+
+.factura-tabla-cabecera,
+.factura-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 42px 48px;
+  gap: 4px;
+  align-items: start;
+}
+
+.factura-tabla-cabecera {
+  padding: 5px 0;
+  border-top: 1px solid #555;
+  border-bottom: 1px solid #555;
+  color: #333;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .factura-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 0.84rem;
+  padding: 5px 0;
+  border-bottom: 1px dashed #ddd;
+  color: #171717;
+  font-size: 0.62rem;
+}
+
+.factura-cantidad {
+  text-align: center;
+}
+
+.factura-servicio-nombre {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.factura-servicio-nombre small {
+  display: block;
+  color: #666;
+  font-size: 0.56rem;
+}
+
+.factura-precio {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.factura-totales {
+  padding-top: 6px;
+}
+
+.factura-totales .factura-linea.total {
+  margin: 5px 0;
+  padding: 8px 0;
+  border-top: 1px solid #222;
+  border-bottom: 3px double #222;
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.factura-totales .factura-linea.total strong {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.factura-totales .factura-linea.descuento strong {
+  color: #333 !important;
+}
+
+.factura-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #777;
+  color: #444;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .acciones-card {
-  position: sticky;
-  top: 270px;
+  position: static;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .cancel-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
-  border: 1px solid rgba(220, 38, 38, 0.16);
-  border-radius: 18px;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.12), rgba(248, 113, 113, 0.18));
+  min-height: 42px;
+  border: 1px solid rgba(185, 28, 28, 0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fff8f7;
   color: #b91c1c;
-  font-weight: 900;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
 .cancel-order-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 18px rgba(220, 38, 38, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-color: rgba(185, 28, 28, 0.35);
+  background: #fff0ee;
+}
+
+.cancel-order-btn ion-icon {
+  font-size: 17px;
 }
 
 .acciones-texto {
@@ -3761,6 +4532,172 @@ onMounted(() => {
   padding: 28px;
   border-radius: 20px;
   color: #000000;
+}
+
+.modal-regalo-cupon {
+  --width: min(92vw, 540px);
+  --height: auto;
+  --max-height: 90vh;
+  --border-radius: 16px;
+  --background: #ffffff;
+}
+
+.modal-regalo-cupon::part(content) {
+  height: auto;
+  max-height: 90vh;
+  background: #ffffff;
+}
+
+.modal-regalo-contenido {
+  display: grid;
+  gap: 14px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 20px;
+  background: #ffffff;
+  color: #0a1f38;
+}
+
+.modal-regalo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-regalo-etiqueta {
+  color: #8b661b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.modal-regalo-header h3 {
+  margin: 3px 0 0;
+  font-size: 1.2rem;
+}
+
+.modal-regalo-cerrar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #123a66;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.modal-regalo-cliente,
+.modal-regalo-contacto,
+.modal-regalo-vacio,
+.modal-regalo-enviando {
+  margin: 0;
+}
+
+.cupon-regalo-renderizador {
+  display: none;
+}
+
+.modal-regalo-cliente {
+  font-weight: 850;
+}
+
+.modal-regalo-contacto {
+  color: #64798c;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.modal-regalo-lista {
+  display: grid;
+  gap: 8px;
+  max-height: 38vh;
+  overflow-y: auto;
+}
+
+.modal-regalo-cupon-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dce7ee;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #123a66;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modal-regalo-cupon-opcion.seleccionado {
+  border-color: #c99a32;
+  background: #fff9e9;
+  box-shadow: 0 0 0 2px rgba(201, 154, 50, 0.12);
+}
+
+.modal-regalo-cupon-datos {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.modal-regalo-cupon-datos strong {
+  color: #0a1f38;
+  overflow-wrap: anywhere;
+}
+
+.modal-regalo-cupon-datos span {
+  color: #64798c;
+  font-size: 0.8rem;
+}
+
+.modal-regalo-acciones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.modal-regalo-acciones button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.regalo-whatsapp {
+  background: #168b54;
+}
+
+.regalo-correo {
+  background: #123a66;
+}
+
+.modal-regalo-acciones button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.modal-regalo-error {
+  margin: 0;
+  color: #b42323;
+  font-size: 0.85rem;
+}
+
+.modal-regalo-enviando {
+  color: #64798c;
+  font-size: 0.82rem;
+  text-align: center;
 }
 
 .modal-correo-modal {
@@ -3949,6 +4886,12 @@ onMounted(() => {
     position: static;
   }
 
+  .panel-lateral {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
   .factura-card {
     position: static;
   }
@@ -3964,7 +4907,12 @@ onMounted(() => {
   }
 
   .panel-principal {
-    padding: 14px;
+    padding: 0;
+  }
+
+  .paso-contenido {
+    padding: 12px;
+    gap: 12px;
   }
 
   .orden-hero {
@@ -3986,6 +4934,10 @@ onMounted(() => {
   .turno-alerta {
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .panel-cabecera[class*='paso-color-'] {
+    padding: 10px 12px;
   }
 
   .mini-resumen {

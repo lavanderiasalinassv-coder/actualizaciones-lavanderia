@@ -1,6 +1,13 @@
 import { getApiBaseUrl } from './useApiConfig'
 
-export const enviarCorreoHTML = async (correo: string, html: string, asunto?: string, nombreCliente?: string) => {
+export const enviarCorreoHTML = async (
+  correo: string,
+  html: string,
+  asunto?: string,
+  nombreCliente?: string,
+  imagenCupon?: string,
+  adjuntarLogo = true
+) => {
   try {
     const respuesta = await fetch(`${getApiBaseUrl()}/correo/enviar-html`, {
       method: 'POST',
@@ -9,7 +16,9 @@ export const enviarCorreoHTML = async (correo: string, html: string, asunto?: st
         correo,
         html,
         asunto: asunto || 'Tu orden - Lavandería Salinas',
-        nombreCliente
+        nombreCliente,
+        imagenCupon,
+        adjuntarLogo
       })
     })
 

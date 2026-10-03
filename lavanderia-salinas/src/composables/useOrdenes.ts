@@ -25,6 +25,7 @@ export interface CrearOrdenInput {
   descuento: number
   descuentoManual?: number
   descuentoPromocion?: number
+  promocionQrId?: string | null
   codigoPais: string
   telefono: string
   correo: string

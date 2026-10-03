@@ -11,7 +11,7 @@
         <div class="facebook-panel-actions">
           <button type="button" title="Colocar a la izquierda" aria-label="Colocar Facebook a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><span class="panel-placement-icon panel-placement-left" aria-hidden="true"><i></i></span></button>
           <button type="button" title="Colocar a la derecha" aria-label="Colocar Facebook a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><span class="panel-placement-icon panel-placement-right" aria-hidden="true"><i></i></span></button>
-          <button type="button" :title="lateral ? 'Abrir Facebook centrado' : 'Volver Facebook al lateral'" :aria-label="lateral ? 'Abrir Facebook centrado' : 'Volver Facebook al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
+          <button type="button" :title="lateral ? 'Maximizar Facebook a pantalla completa' : 'Restaurar Facebook al lateral'" :aria-label="lateral ? 'Maximizar Facebook a pantalla completa' : 'Restaurar Facebook al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
           <button type="button" title="Recargar Facebook" aria-label="Recargar Facebook" @click="recargarWebview"><ion-icon :icon="refreshOutline" /></button>
           <button class="facebook-panel-close" type="button" aria-label="Cerrar Facebook" title="Cerrar Facebook" @click="$emit('cerrar')"><ion-icon :icon="closeOutline" /></button>
         </div>
@@ -212,7 +212,7 @@ const recargarWebview = () => {
   border-right: 1px solid #d7dde3;
   box-shadow: 12px 0 34px rgba(12, 34, 48, 0.2);
 }
-.facebook-panel-centrado { top: 7vh; right: 50%; bottom: auto; left: 50%; width: min(860px, 92vw); height: 86vh; transform: translateX(-50%); border: 0; border-radius: 18px; box-shadow: 0 24px 70px rgba(12, 34, 48, 0.34); }
+.facebook-panel-centrado { z-index: 7000; inset: 0; width: 100vw; min-width: 0; max-width: none; height: 100dvh; transform: none; border: 0; border-radius: 0; box-shadow: none; }
 
 .facebook-panel-header {
   display: flex;

@@ -134,7 +134,7 @@
           @keydown.enter="abrirCategoria(categoria.id)"
         >
           <span class="categoria-card-acento" :style="{ background: categoria.color }"></span>
-          <span class="categoria-card-icono" :style="{ color: categoria.color, background: `${categoria.color}20` }"><ion-icon :icon="pricetagOutline" /></span>
+          <span class="categoria-card-icono" :style="{ color: categoria.color, background: `${categoria.color}20` }"><ion-icon :icon="obtenerIconoPorNombre(categoria.nombre)" /></span>
           <span class="categoria-card-nombre">{{ categoria.nombre }}</span>
           <span class="categoria-card-conteo">{{ contarItemsCategoria(categoria.id) }} {{ contarItemsCategoria(categoria.id) === 1 ? 'elemento' : 'elementos' }}</span>
           <button class="categoria-card-editar" type="button" title="Editar categoría" :aria-label="`Editar categoría ${categoria.nombre}`" @click.stop="abrirModalCategoria(categoria)">
@@ -167,7 +167,7 @@
             <div v-for="item in grupo.items" :key="item.id" class="tarjeta-servicio" :style="{ borderLeftColor: grupo.color }">
               <div class="tarjeta-top">
                 <div class="tarjeta-icono">
-                  <ion-icon :icon="item.tipo === 'articulo' ? pricetagOutline : shirtOutline" />
+                  <ion-icon :icon="item.tipo === 'articulo' ? pricetagOutline : obtenerIconoPorNombre(`${item.nombre} ${grupo.nombre}`)" />
                 </div>
                 <span class="tarjeta-nombre">{{ item.nombre }}</span>
                 <button class="editar-btn" @click="editarItem(item)">
@@ -479,7 +479,6 @@ import {
   shareSocialOutline,
   searchOutline,
   sparklesOutline,
-  shirtOutline,
   createOutline,
   closeOutline,
   saveOutline,

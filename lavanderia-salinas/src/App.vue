@@ -7,7 +7,11 @@
       :abierto="mostrarPanelWhatsapp"
       :url-inicial="urlWhatsappInicial"
       :solicitud-carga="solicitudCargaWhatsapp"
-      @cerrar="cerrarWhatsapp"
+      :imagen-pendiente="imagenWhatsappPendiente"
+      :texto-adjunto="textoWhatsappPendiente"
+      :solicitud-adjunto="solicitudAdjuntoWhatsapp"
+      @adjunto-resuelto="limpiarAdjuntoWhatsapp"
+      @cerrar="cerrarWhatsappConLimpieza"
       @modo-cambio="panelWhatsappLateral = $event"
       @lado-cambio="panelLado = $event"
     />
@@ -19,9 +23,11 @@
       @lado-cambio="panelLado = $event"
     />
     <NavegadorPannel
-      v-if="rutaProtegida"
       :abierto="mostrarPanelNavegador"
+      :minimizado="panelNavegadorMinimizado"
+      :oculto="!rutaProtegida"
       @cerrar="cerrarNavegador"
+      @minimizar="minimizarNavegador"
       @modo-cambio="panelNavegadorLateral = $event"
       @lado-cambio="panelLado = $event"
     />
@@ -93,11 +99,14 @@ import { usePanelRedes } from '@/composables/usePanelRedes'
 
 const route = useRoute()
 const router = useRouter()
+const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/', '/login', '/verificacion-2fa'])
+const rutaProtegida = computed(() => !RUTAS_SIN_CONTROL_INACTIVIDAD.has(route.path))
 const { cerrarSesion, validarSesion } = useSesion()
 const {
   mostrarPanelWhatsapp,
   mostrarPanelFacebook,
   mostrarPanelNavegador,
+  panelNavegadorMinimizado,
   urlWhatsappInicial,
   solicitudCargaWhatsapp,
   panelWhatsappLateral,
@@ -109,6 +118,7 @@ const {
   cerrarWhatsapp,
   cerrarFacebook,
   abrirWhatsapp,
+  minimizarNavegador,
   cerrarNavegador
 } = usePanelRedes()
 
@@ -116,26 +126,50 @@ watch([
   mostrarPanelWhatsapp,
   mostrarPanelFacebook,
   mostrarPanelNavegador,
+  panelNavegadorMinimizado,
   panelWhatsappLateral,
   panelFacebookLateral,
   panelNavegadorLateral,
-  panelLado
-], ([whatsappAbierto, facebookAbierto, navegadorAbierto, whatsappLateral, facebookLateral, navegadorLateral, lado]) => {
+  panelLado,
+  rutaProtegida
+], ([whatsappAbierto, facebookAbierto, navegadorAbierto, navegadorMinimizado, whatsappLateral, facebookLateral, navegadorLateral, lado, sesionProtegida]) => {
   const panelLateralActivo = Boolean(
-    (whatsappAbierto && whatsappLateral) ||
-    (facebookAbierto && facebookLateral) ||
-    (navegadorAbierto && navegadorLateral)
+    sesionProtegida && (
+      (whatsappAbierto && whatsappLateral) ||
+      (facebookAbierto && facebookLateral) ||
+      (navegadorAbierto && !navegadorMinimizado && navegadorLateral)
+    )
   )
   document.documentElement.classList.toggle('app-panel-lateral-activo', panelLateralActivo)
   document.documentElement.classList.toggle('app-panel-lateral-izquierda', panelLateralActivo && lado === 'izquierda')
 }, { immediate: true })
 
 const abrirWhatsappConMensaje = (evento: Event) => {
-  const detalle = (evento as CustomEvent<{ phone?: string; message?: string }>).detail
+  const detalle = (evento as CustomEvent<{ phone?: string; message?: string; image?: string }>).detail
   const phone = String(detalle?.phone || '').replace(/\D/g, '')
   const message = String(detalle?.message || '')
+  const image = typeof detalle?.image === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(detalle.image)
+    ? detalle.image
+    : ''
+  imagenWhatsappPendiente.value = image
+  textoWhatsappPendiente.value = image ? message : ''
+  solicitudAdjuntoWhatsapp.value += 1
   const url = `https://web.whatsapp.com/send${phone ? `?phone=${phone}&text=${encodeURIComponent(message)}` : `?text=${encodeURIComponent(message)}`}`
   abrirWhatsapp(url)
+}
+
+const imagenWhatsappPendiente = ref('')
+const textoWhatsappPendiente = ref('')
+const solicitudAdjuntoWhatsapp = ref(0)
+
+const limpiarAdjuntoWhatsapp = () => {
+  imagenWhatsappPendiente.value = ''
+  textoWhatsappPendiente.value = ''
+}
+
+const cerrarWhatsappConLimpieza = () => {
+  cerrarWhatsapp()
+  limpiarAdjuntoWhatsapp()
 }
 
 onMounted(() => window.addEventListener('whatsapp-compose', abrirWhatsappConMensaje))
@@ -155,9 +189,6 @@ const segundosRestantes = ref(TIEMPO_AVISO_SEG)
 
 let timerAviso: ReturnType<typeof setTimeout> | null = null
 let timerCuentaRegresiva: ReturnType<typeof setInterval> | null = null
-
-const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/', '/login', '/verificacion-2fa'])
-const rutaProtegida = computed(() => !RUTAS_SIN_CONTROL_INACTIVIDAD.has(route.path))
 
 // Estilos dinámicos para ajustar la app cuando hay paneles laterales abiertos
 const estilosAppConPanel = computed(() => {
@@ -267,7 +298,6 @@ watch(rutaProtegida, (esProtegida) => {
     // Cerrar paneles cuando se va a una ruta no protegida (login)
     cerrarWhatsapp()
     cerrarFacebook()
-    cerrarNavegador()
   }
 })
 

@@ -299,6 +299,7 @@ const pedido = reactive({
   descuentoManualTipo: 'porcentaje' as 'porcentaje' | 'dinero',
   descuentoPromocion: 0,
   descuentoPromocionTipo: 'porcentaje' as 'porcentaje' | 'dinero',
+  promocionQrId: null as string | null,
   codigoPais: '+503',
   telefono: '',
   correo: '',
@@ -542,6 +543,7 @@ export function usePedido() {
     pedido.descuentoManualTipo = 'porcentaje'
     pedido.descuentoPromocion = 0
     pedido.descuentoPromocionTipo = 'porcentaje'
+    pedido.promocionQrId = null
     pedido.telefono = ''
     pedido.correo = ''
     pedido.guardarDirectorio = true
@@ -591,6 +593,7 @@ export function usePedido() {
           descuento: Number(descuentoTotal.value || 0),
           descuentoManual: Number(descuentoManualMonto.value || 0),
           descuentoPromocion: Number(descuentoPromocionMonto.value || 0),
+          promocionQrId: pedido.promocionQrId,
           codigoPais: `+${pedido.codigoPais.replace(/\D/g, '')}`,
           telefono: pedido.telefono,
           correo: pedido.correo,

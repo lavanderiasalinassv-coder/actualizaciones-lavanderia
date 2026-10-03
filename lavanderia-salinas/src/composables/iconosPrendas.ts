@@ -6,7 +6,9 @@ import {
   cubeOutline,
   colorFillOutline,
   bagHandleOutline,
-  waterOutline
+  waterOutline,
+  cutOutline,
+  flashOutline
 } from 'ionicons/icons'
 
 interface ReglaIcono {
@@ -16,37 +18,52 @@ interface ReglaIcono {
 
 const REGLAS: ReglaIcono[] = [
   {
+    palabras: ['costureria', 'costura', 'costurero', 'costurera', 'bastilla', 'reparacion'],
+    icono: cutOutline
+  },
+  {
     palabras: [
-      'camisa', 'camiseta', 'playera', 'polo', 'blusa', 'vestido',
-      'chaqueta', 'saco', 'suéter', 'sueter', 'abrigo', 'chumpa', 'top'
+      'camisa', 'camisas', 'camiseta', 'camisetas', 'playera', 'playeras', 'polo', 'polos',
+      'blusa', 'blusas', 'vestido', 'vestidos', 'chaqueta', 'chaquetas', 'saco', 'sacos',
+      'sueter', 'sueteres', 'abrigo', 'abrigos', 'chumpa', 'chumpas', 'top', 'tops'
     ],
     icono: shirtOutline
   },
   {
-    palabras: ['pantalon', 'pantalón', 'jean', 'jeans', 'short', 'falda', 'mezclilla'],
+    palabras: [
+      'pantalon', 'pantalones', 'pantalo', 'jean', 'jeans', 'short', 'shorts', 'falda', 'faldas', 'mezclilla'
+    ],
     icono: bagHandleOutline
   },
   {
     palabras: [
-      'sabana', 'sábana', 'edredon', 'edredón', 'cobija', 'manta', 'almohada',
-      'funda', 'colcha', 'cortina', 'mantel', 'toalla'
+      'sabana', 'sabanas', 'edredon', 'edredones', 'cobija', 'cobijas', 'manta', 'mantas',
+      'almohada', 'almohadas', 'funda', 'fundas', 'colcha', 'colchas', 'cortina', 'cortinas',
+      'mantel', 'manteles', 'toalla', 'toallas'
     ],
     icono: bedOutline
   },
   {
-    palabras: ['zapato', 'tenis', 'sandalia', 'bota', 'calzado', 'zapatilla'],
+    palabras: [
+      'zapato', 'zapatos', 'tenis', 'sandalia', 'sandalias', 'bota', 'botas', 'calzado',
+      'zapatilla', 'zapatillas'
+    ],
     icono: footstepsOutline
   },
   {
-    palabras: ['tinte', 'tintoreria', 'tintorería', 'planchado', 'lavado', 'seco'],
+    palabras: ['planchado', 'plancha', 'planchas'],
+    icono: flashOutline
+  },
+  {
+    palabras: ['tinte', 'tintoreria', 'lavado', 'lavar', 'secado', 'secar', 'seco'],
     icono: waterOutline
   },
   {
-    palabras: ['alfombra', 'tapete', 'cojin', 'cojín', 'hogar'],
+    palabras: ['alfombra', 'alfombras', 'tapete', 'tapetes', 'cojin', 'cojines', 'hogar'],
     icono: homeOutline
   },
   {
-    palabras: ['mancha', 'teñido', 'tenido', 'color'],
+    palabras: ['mancha', 'manchas', 'tenido', 'color'],
     icono: colorFillOutline
   }
 ]
@@ -54,9 +71,14 @@ const REGLAS: ReglaIcono[] = [
 const ICONO_POR_DEFECTO = cubeOutline
 
 export function obtenerIconoPorNombre(nombre: string): string {
-  const texto = nombre.toLowerCase()
+  const texto = ` ${nombre
+    .toLocaleLowerCase('es')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()} `
   for (const regla of REGLAS) {
-    if (regla.palabras.some((palabra) => texto.includes(palabra))) {
+    if (regla.palabras.some((palabra) => texto.includes(` ${palabra} `))) {
       return regla.icono
     }
   }

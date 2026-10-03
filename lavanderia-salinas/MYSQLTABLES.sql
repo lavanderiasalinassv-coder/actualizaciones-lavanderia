@@ -20,7 +20,7 @@ CREATE TABLE `catalogo_categorias` (
   `creado_en` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_catalogo_categorias_nombre` (`nombre`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 CREATE TABLE `catalogo_items` (
@@ -316,6 +316,8 @@ CREATE TABLE `promociones` (
   `tipo_cliente_aplica` enum('todos','registrados','recurrentes') NOT NULL DEFAULT 'todos',
   `min_ordenes` int(11) DEFAULT NULL,
   `vigente` tinyint(1) NOT NULL DEFAULT '1',
+  `generar_qr` tinyint(1) NOT NULL DEFAULT '0',
+    `max_usos_por_cliente` int(10) unsigned DEFAULT NULL,
   `fecha_inicio` date NOT NULL,
   `fecha_fin` date NOT NULL,
   `dias_especificos` json NOT NULL,
@@ -324,6 +326,17 @@ CREATE TABLE `promociones` (
   KEY `idx_promociones_vigente` (`vigente`),
   KEY `idx_promociones_fechas` (`fecha_inicio`,`fecha_fin`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+CREATE TABLE `promocion_usos_qr` (
+  `id` char(36) NOT NULL,
+  `promocion_id` char(36) NOT NULL,
+  `orden_id` char(36) NOT NULL,
+  `cliente_telefono` varchar(32) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promocion_usos_qr_orden` (`orden_id`),
+  KEY `idx_promocion_usos_qr_cliente` (`promocion_id`, `cliente_telefono`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `tareas` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,

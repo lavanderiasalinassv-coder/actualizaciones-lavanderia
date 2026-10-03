@@ -230,9 +230,128 @@ import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useSaliAiConfig } from '@/composables/useSaliAiConfig'
 import { obtenerTranscriptor, decodificarAudioParaWhisper } from '@/composables/useTranscripcionLocal'
-import { useOrdenes } from '@/composables/useOrdenes'
+import { useOrdenes, type Orden } from '@/composables/useOrdenes'
 
 type Mensaje = { rol: 'user' | 'assistant', texto: string }
+
+const extraerFechaEntregaSolicitada = (texto: string): string | null => {
+  const normalizado = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const meses: Record<string, number> = { enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5, julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11 }
+  const fechaLarga = normalizado.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})\b/)
+  if (fechaLarga) {
+    const [, diaTexto, mesTexto, anioTexto] = fechaLarga
+    const dia = Number(diaTexto); const anio = Number(anioTexto); const mes = meses[mesTexto]
+    const fecha = new Date(anio, mes, dia)
+    if (fecha.getFullYear() === anio && fecha.getMonth() === mes && fecha.getDate() === dia) return `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+  }
+  const fechaNumerica = normalizado.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b|\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/)
+  if (!fechaNumerica) return null
+  const anio = Number(fechaNumerica[1] || fechaNumerica[6]); const mes = Number(fechaNumerica[2] || fechaNumerica[5]); const dia = Number(fechaNumerica[3] || fechaNumerica[4])
+  const fecha = new Date(anio, mes - 1, dia)
+  return fecha.getFullYear() === anio && fecha.getMonth() === mes - 1 && fecha.getDate() === dia ? `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` : null
+}
+
+const aplicarEdicionesPdfOrden = (orden: Orden, texto: string) => {
+  const cambios: string[] = []
+  const personalizada: Orden = { ...orden, items: orden.items.map((item) => ({ ...item })) }
+  const valor = (campo: string) => {
+    const match = texto.match(new RegExp(`${campo}\\s+(?:a|por|como|:|es)\\s*["“]?(.+?)["”]?(?=\\s*(?:,|;|$|\\by\\s+(?:el|la|los|las|su|sus|tel[eé]fono|correo|fecha|hora|cantidad|detalles|estado|m[eé]todo|descuento|subtotal|total|monto|pago|servicio)\\b))`, 'i'))
+    return match?.[1]?.trim().replace(/[.!?]+$/, '').trim() || null
+  }
+  const nombre = valor('(?:nombre\\s+(?:del\\s+)?cliente|cliente)')
+  if (nombre) { personalizada.nombreCliente = nombre; cambios.push('cliente') }
+  const telefono = valor('tel[eé]fono')
+  if (telefono) {
+    if (telefono.trim().startsWith('+')) personalizada.codigoPais = ''
+    personalizada.telefono = telefono.replace(/[\s-]/g, '')
+    cambios.push('teléfono')
+  }
+  const correo = valor('(?:correo(?:\\s+electr[oó]nico)?|email)')
+  if (correo) { personalizada.correo = correo; cambios.push('correo') }
+  const fechaEntrega = /fecha\s+de\s+entrega|entrega/i.test(texto) ? extraerFechaEntregaSolicitada(texto) : null
+  if (fechaEntrega) { personalizada.fechaEntrega = fechaEntrega; personalizada.fechaEntregaActiva = true; cambios.push('fecha de entrega') }
+  const hora = valor('hora(?:\\s+de\\s+entrega)?')
+  if (hora) { personalizada.horaEntrega = hora; cambios.push('hora de entrega') }
+  const prendasTexto = valor('(?:cantidad\\s+de\\s+prendas|prendas\\s+recibidas)')
+  if (prendasTexto && Number.isFinite(Number(prendasTexto))) { personalizada.cantidadPrendas = Math.max(0, Number(prendasTexto)); cambios.push('cantidad de prendas') }
+  const detalles = valor('detalles?\\s+(?:de\\s+)?prendas')
+  if (detalles) { personalizada.detallesPrendas = detalles; cambios.push('detalles de prendas') }
+  const numero = valor('(?:n[uú]mero\\s+de\\s+(?:la\\s+)?orden|n[uú]mero\\s+de\\s+factura)')
+  if (numero) { personalizada.numero = numero.replace(/^#/, ''); cambios.push('número de orden en el PDF') }
+  const fechaCreacion = texto.match(/fecha\s+de\s+(?:creaci[oó]n|orden)[^0-9]*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+de\s+[a-záéíóú]+\s+de\s+\d{4})/i)
+  if (fechaCreacion) {
+    const parsed = extraerFechaEntregaSolicitada(fechaCreacion[1])
+    if (parsed) { personalizada.createdAt = parsed; cambios.push('fecha de creación') }
+  }
+  const estadoPago = valor('estado\\s+de\\s+pago')
+  if (estadoPago) {
+    const estadoNormalizado = estadoPago.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    if (/pagad/.test(estadoNormalizado)) personalizada.estadoPago = 'pagado'
+    else if (/anticipo/.test(estadoNormalizado)) personalizada.estadoPago = 'anticipo'
+    else if (/por cobrar|pendiente/.test(estadoNormalizado)) personalizada.estadoPago = 'porCobrar'
+    else personalizada.estadoPago = estadoPago as Orden['estadoPago']
+    cambios.push('estado de pago')
+  }
+  const metodoPago = valor('m[eé]todo\\s+de\\s+pago')
+  if (metodoPago) {
+    const metodoNormalizado = metodoPago.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    if (/tarjeta/.test(metodoNormalizado)) personalizada.metodoPago = 'tarjeta'
+    else if (/transferencia/.test(metodoNormalizado)) personalizada.metodoPago = 'transferencia'
+    else if (/efectivo/.test(metodoNormalizado)) personalizada.metodoPago = 'efectivo'
+    cambios.push('método de pago')
+  }
+  const estadoOrden = valor('estado(?:\\s+(?:de\\s+)?(?:la\\s+)?orden)')
+  if (estadoOrden) {
+    const normalizado = estadoOrden.toLowerCase().replace(/[\s-]+/g, '_')
+    const estados: Record<string, Orden['estado']> = { pendiente: 'pendiente', 'en_proceso': 'en_proceso', proceso: 'en_proceso', listo: 'listo', entregado: 'entregado', cerrada: 'cerrada', cancelada: 'cancelada' }
+    if (estados[normalizado]) { personalizada.estado = estados[normalizado]; cambios.push('estado de la orden') }
+  }
+  const recibido = texto.match(/(?:monto\s+recibido|pago\s+recibido)\s+(?:a|por|de|:|es)\s*\$?([\d]+(?:[.,]\d{1,2})?)/i)
+  if (recibido) { personalizada.montoRecibido = Number(recibido[1].replace(',', '.')); cambios.push('monto recibido') }
+  const itemAgregado = texto.match(/agrega(?:r)?\s+(?:un\s+)?servicio\s+(.+?)\s+cantidad\s+(\d+)\s+precio\s+\$?([\d]+(?:[.,]\d{1,2})?)/i)
+  if (itemAgregado) {
+    personalizada.items.push({ id: `pdf-${Date.now()}`, nombre: itemAgregado[1].trim(), cantidad: Number(itemAgregado[2]), precio: Number(itemAgregado[3].replace(',', '.')), unidad: 'unidad', nota: '' })
+    cambios.push('servicio agregado')
+  }
+  const itemEliminado = texto.match(/(?:elimina|eliminar|quita|quitar|borra|borrar)\s+(?:el\s+)?(?:servicio|art[ií]culo)\s*#?(\d+)/i)
+  if (itemEliminado) {
+    const indice = Number(itemEliminado[1]) - 1
+    if (indice >= 0 && indice < personalizada.items.length) { personalizada.items.splice(indice, 1); cambios.push(`servicio ${indice + 1} eliminado`) }
+  }
+  const campoServicio = (campo: string) => texto.match(new RegExp(`(?:${campo}\\s+(?:del\\s+)?(?:servicio|art[ií]culo)\\s*#?(\\d+)|(?:servicio|art[ií]culo)\\s*#?(\\d+)\\s+${campo})\\s+(?:a|por|como|:|es)\\s*([^,;]+)`, 'i'))
+  const nombreServicio = campoServicio('nombre')
+  const cantidadServicio = campoServicio('cantidad')
+  const precioServicio = campoServicio('precio')
+  for (const [match, campo] of [[nombreServicio, 'nombre'], [cantidadServicio, 'cantidad'], [precioServicio, 'precio']] as const) {
+    if (!match) continue
+    const indice = Number(match[1] || match[2]) - 1
+    const item = personalizada.items[indice]
+    if (!item) continue
+    const nuevoValor = match[3].trim().replace(/[.!?]+$/, '')
+    if (campo === 'nombre') item.nombre = nuevoValor
+    else {
+      const numero = Number(nuevoValor.replace('$', '').replace(',', '.'))
+      if (!Number.isFinite(numero) || numero < 0) continue
+      if (campo === 'cantidad') item.cantidad = numero
+      else item.precio = numero
+    }
+    cambios.push(`${campo} del servicio ${indice + 1}`)
+  }
+  const descuento = texto.match(/descuento\s+(?:a|por|de|:|es)\s*\$?([\d]+(?:[.,]\d{1,2})?)/i)
+  const subtotalSolicitado = texto.match(/subtotal\s+(?:a|por|de|:|es)\s*\$?([\d]+(?:[.,]\d{1,2})?)/i)
+  const totalSolicitado = texto.match(/total\s+(?:a|por|de|:|es)\s*\$?([\d]+(?:[.,]\d{1,2})?)/i)
+  if (subtotalSolicitado) { personalizada.subtotal = Number(subtotalSolicitado[1].replace(',', '.')); cambios.push('subtotal') }
+  if (descuento) { personalizada.total = Math.max(0, personalizada.subtotal - Number(descuento[1].replace(',', '.'))); cambios.push('descuento') }
+  if (totalSolicitado) { personalizada.total = Number(totalSolicitado[1].replace(',', '.')); cambios.push('total') }
+  if (cambios.some((cambio) => /servicio \d+|servicio.*(?:eliminado|agregado)/.test(cambio))) {
+    const descuentoActual = Math.max(0, Number(orden.subtotal) - Number(orden.total))
+    personalizada.subtotal = personalizada.items.reduce((suma, item) => suma + (Number(item.precio) || 0) * (Number(item.cantidad) || 0), 0)
+    personalizada.total = Math.max(0, personalizada.subtotal - descuentoActual)
+    if (descuento) personalizada.total = Math.max(0, personalizada.subtotal - Number(descuento[1].replace(',', '.')))
+    if (totalSolicitado) personalizada.total = Number(totalSolicitado[1].replace(',', '.'))
+  }
+  return { orden: personalizada, cambios }
+}
 
 const { usuarioActual, rol, esAdministrador } = useSesion()
 const { funcionesBloqueadas } = useAccesoOperativo()
@@ -246,6 +365,7 @@ const ladoLateral = ref<'izquierda' | 'derecha'>('derecha')
 const pregunta = ref('')
 const enviando = ref(false)
 const mensajes = ref<Mensaje[]>([])
+const ultimaOrdenPdf = ref<Orden | null>(null)
 const contenedorMensajes = ref<HTMLElement | null>(null)
 const entradaTexto = ref<HTMLTextAreaElement | null>(null)
 const altoViewportChat = ref(0)
@@ -786,17 +906,38 @@ const enviar = async (esPorVoz = false) => {
   pregunta.value = ''
   enviando.value = true
   try {
-    const solicitudPdfOrden = /\bpdf\b/i.test(texto)
-      ? texto.match(/\borden(?:\s*(?:n(?:ú|u)mero)?\.?)?\s*#?\s*(\d{1,8})\b/i)
-      : null
+    const solicitudPdf = /\b(pdf|documento|archivo)\b/i.test(texto)
+    const solicitudNumeroOrden = texto.match(/\borden(?:\s*(?:n(?:u|ú)mero)?\.?)?\s*#?\s*(\d{1,8})\b/i)
+    const edicionPdf = ultimaOrdenPdf.value ? aplicarEdicionesPdfOrden(ultimaOrdenPdf.value, texto) : null
+    const intencionDeEditarPdf = /\b(cambia|cambiar|modifica|modificar|edita|editar|pon|poner|ajusta|ajustar|quita|quitar|elimina|eliminar)\b/i.test(texto)
+    if (!solicitudPdf && ultimaOrdenPdf.value && edicionPdf?.cambios.length) {
+      ultimaOrdenPdf.value = edicionPdf.orden
+      const respuestaEdicion = `Listo. Para el PDF de la orden ${ultimaOrdenPdf.value.numero} ajusté: ${edicionPdf.cambios.join(', ')}. La orden guardada no se modifica. Pídeme el PDF de nuevo cuando quieras descargarlo.`
+      mensajes.value.push({ rol: 'assistant', texto: respuestaEdicion })
+      return
+    }
+    if (!solicitudPdf && ultimaOrdenPdf.value && intencionDeEditarPdf) {
+      const respuestaAclaracion = 'Puedo personalizar para el PDF el cliente, teléfono, correo, fechas y hora, prendas, detalles, estado, pago, subtotal, descuento, total y los servicios. Indica el campo y su nuevo valor, por ejemplo: “cambia el cliente a Ana López” o “servicio 1 cantidad a 3”. La orden guardada no se modifica.'
+      mensajes.value.push({ rol: 'assistant', texto: respuestaAclaracion })
+      return
+    }
+    const solicitudPdfOrden = solicitudPdf && (solicitudNumeroOrden || ultimaOrdenPdf.value)
     if (solicitudPdfOrden) {
       await cargarOrdenes()
-      const numeroSolicitado = Number(solicitudPdfOrden[1])
-      const orden = ordenes.value.find((item) => Number(String(item.numero).replace(/\D/g, '')) === numeroSolicitado)
-      if (!orden) throw new Error(`No encontré la orden #${solicitudPdfOrden[1]}. Comprueba el número e inténtalo de nuevo.`)
+      const numeroSolicitado = solicitudNumeroOrden ? Number(solicitudNumeroOrden[1]) : null
+      const ordenBase = numeroSolicitado
+        ? ordenes.value.find((item) => Number(String(item.numero).replace(/\D/g, '')) === numeroSolicitado)
+        : ultimaOrdenPdf.value
+      if (!ordenBase) throw new Error('No encontré la orden. Comprueba el número e inténtalo de nuevo.')
+      const mismaOrdenPendiente = ultimaOrdenPdf.value?.id === ordenBase.id
+      const basePdf = mismaOrdenPendiente && ultimaOrdenPdf.value
+        ? { ...ordenBase, ...ultimaOrdenPdf.value, items: ultimaOrdenPdf.value.items.map((item) => ({ ...item })) }
+        : ordenBase
+      const { orden: ordenPdf, cambios: cambiosPdf } = aplicarEdicionesPdfOrden(basePdf, texto)
+      ultimaOrdenPdf.value = ordenPdf
       const { descargarPdfOrden } = await import('@/utils/documentosOrden')
-      descargarPdfOrden(orden)
-      const respuestaPdf = `Listo. Generé el PDF con la información de la orden ${orden.numero} y comenzó la descarga.`
+      descargarPdfOrden(ordenPdf)
+      const respuestaPdf = `Listo. Generé el PDF de la orden ${ordenPdf.numero}${cambiosPdf.length ? `. Apliqué los cambios de ${cambiosPdf.join(', ')}` : ''} y comenzó la descarga. La orden guardada no se modifica.`
       const responderConVoz = esPorVoz && conversacionPorVoz.value
       mensajes.value.push({ rol: 'assistant', texto: respuestaPdf })
       if (responderConVoz) void hablarTexto(respuestaPdf, mensajes.value.length - 1)

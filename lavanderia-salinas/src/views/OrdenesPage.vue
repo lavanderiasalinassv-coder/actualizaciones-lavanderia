@@ -331,14 +331,32 @@
       </section>
 
       <ion-modal :is-open="detalleAbierto" class="modal-ordenes" @didDismiss="cerrarDetalle">
-        <div class="modal-detalle force-light">
-          <div class="modal-header">
+        <div
+          class="modal-detalle force-light"
+          :style="ordenSeleccionada ? { '--modal-estado-color': estadoColores[ordenSeleccionada.estado].dot } : {}"
+        >
+          <div
+            class="modal-header orden-header-estado"
+            :style="ordenSeleccionada ? {
+              background: estadoColores[ordenSeleccionada.estado].bg,
+              borderColor: estadoColores[ordenSeleccionada.estado].dot
+            } : {}"
+          >
             <div class="modal-header-left">
-              <div class="modal-icon">
+              <div
+                class="modal-icon"
+                :style="ordenSeleccionada ? {
+                  background: estadoColores[ordenSeleccionada.estado].dot,
+                  color: '#ffffff'
+                } : {}"
+              >
                 <ion-icon :icon="receiptOutline" />
               </div>
               <div>
-                <p class="detalle-numero">🧾 Orden {{ ordenSeleccionada?.numero ?? '' }}</p>
+                <p
+                  class="detalle-numero"
+                  :style="ordenSeleccionada ? { color: estadoColores[ordenSeleccionada.estado].textStrong } : {}"
+                >Orden {{ ordenSeleccionada?.numero ?? '' }}</p>
                 <h2>Detalle de orden</h2>
                 <p v-if="ordenSeleccionada?.estado === 'cerrada'" class="orden-cerrada-header">
                   {{ textoCierreOrden(ordenSeleccionada) }}
@@ -352,12 +370,12 @@
             </div>
 
             <div class="modal-header-acciones">
-              <button v-if="!esOperador" class="btn-icono" title="Enviar por WhatsApp" :disabled="peticionOrdenEnCurso" @click="enviarWhatsApp">
+              <button v-if="!esOperador" class="btn-icono accion-whatsapp" title="Enviar por WhatsApp" :disabled="peticionOrdenEnCurso" @click="enviarWhatsApp">
                 <ion-icon :icon="logoWhatsapp" />
               </button>
               <button
                 v-if="!esOperador && ordenSeleccionada?.correo"
-                class="btn-icono"
+                class="btn-icono accion-correo"
                 :disabled="enviandoCorreo || peticionOrdenEnCurso"
                 :title="enviandoCorreo ? 'Enviando factura...' : 'Enviar factura automáticamente por correo'"
                 @click="enviarEmail"
@@ -367,7 +385,7 @@
               </button>
               <button
                 v-if="ordenSeleccionada"
-                class="btn-icono"
+                class="btn-icono accion-impresion"
                 type="button"
                 title="Imprimir ticket de orden"
                 aria-label="Imprimir ticket de orden"
@@ -377,7 +395,7 @@
               </button>
               <button
                 v-if="ordenSeleccionada"
-                class="btn-icono"
+                class="btn-icono accion-impresion"
                 type="button"
                 title="Imprimir ticket de prendas"
                 aria-label="Imprimir ticket de prendas"
@@ -425,6 +443,13 @@
                   >
                     <span class="estado-cuadrito-emoji" aria-hidden="true">{{ estado.emoji }}</span>
                     <span>{{ estado.label }}</span>
+                    <span
+                      v-if="ordenSeleccionada.estado === estado.value"
+                      class="estado-cuadrito-progreso"
+                      :class="{ completa: estado.value === 'entregado' }"
+                      :style="{ '--estado-progreso-color': estadoColores[ordenSeleccionada.estado].dot }"
+                      aria-label="Estado actual"
+                    ></span>
                   </button>
                 </div>
 
@@ -4193,9 +4218,13 @@ onBeforeUnmount(() => {
   padding: 18px;
   background-color: rgba(238, 244, 246, 0.96);
   background-image:
-    radial-gradient(ellipse at 8% 0%, rgba(91, 157, 165, 0.2), transparent 42%),
-    radial-gradient(ellipse at 100% 18%, rgba(105, 133, 176, 0.16), transparent 38%),
-    linear-gradient(150deg, rgba(246, 249, 250, 0.98), rgba(229, 237, 240, 0.96));
+    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 20%, transparent), transparent 42%),
+    radial-gradient(ellipse at 100% 18%, color-mix(in srgb, var(--modal-estado-color, #6985b0) 16%, transparent), transparent 38%),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--modal-estado-color, #5b9da5) 10%, #f6f9fa),
+      color-mix(in srgb, var(--modal-estado-color, #6985b0) 8%, #e5edf0)
+    );
   backdrop-filter: blur(20px) saturate(112%);
   overflow: hidden;
 }
@@ -4272,9 +4301,9 @@ onBeforeUnmount(() => {
 }
 
 .btn-icono {
-  border: none;
-  background: rgba(10, 31, 56, 0.05);
-  color: #123a66;
+  border: 1px solid #d1d5db;
+  background: transparent;
+  color: #374151;
   font-size: 1.1rem;
   cursor: pointer;
   width: 38px;
@@ -4282,17 +4311,62 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   display: grid;
   place-items: center;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.btn-icono:hover {
-  background: rgba(102, 194, 184, 0.18);
-  color: #16a34a;
+.btn-icono.accion-whatsapp {
+  border-color: #25d366;
+  color: #25d366;
+}
+
+.btn-icono.accion-whatsapp:hover:not(:disabled) {
+  color: #1ebe5d;
+}
+
+.btn-icono.accion-correo {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.btn-icono.accion-correo:hover:not(:disabled) {
+  color: #1d4ed8;
+}
+
+.btn-icono.accion-impresion {
+  border-color: #0f766e;
+  color: #0f766e;
+}
+
+.btn-icono.accion-impresion:hover:not(:disabled) {
+  color: #115e59;
+}
+
+.btn-icono.peligro {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.btn-icono.peligro:hover:not(:disabled) {
+  color: #b91c1c;
+}
+
+.btn-icono:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .modal-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+.modal-header.orden-header-estado {
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 14px;
+  transition: background-color 0.2s ease, border-bottom-color 0.2s ease;
 }
 
 .modal-header-left {
@@ -4336,8 +4410,8 @@ onBeforeUnmount(() => {
 }
 
 .cerrar-detalle {
-  border: none;
-  background: rgba(10, 31, 56, 0.05);
+  border: 1px solid #d1d5db;
+  background: transparent;
   color: #5b7088;
   font-size: 1.1rem;
   cursor: pointer;
@@ -4528,6 +4602,39 @@ onBeforeUnmount(() => {
 .estado-cuadrito.actual .estado-cuadrito-emoji {
   filter: grayscale(1);
   opacity: 0.7;
+}
+
+.estado-cuadrito-progreso {
+  position: relative;
+  display: block;
+  width: 52px;
+  max-width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--estado-progreso-color) 18%, #ffffff);
+}
+
+.estado-cuadrito-progreso::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--estado-progreso-color);
+  content: '';
+  animation: estado-progreso 1.2s ease-in-out infinite;
+}
+
+.estado-cuadrito-progreso.completa::after {
+  width: 100%;
+  transform: none;
+  animation: none;
+  box-shadow: 0 0 7px var(--estado-progreso-color);
+}
+
+@keyframes estado-progreso {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(285%); }
 }
 
 .cancelar-orden-boton {
@@ -5598,9 +5705,6 @@ onBeforeUnmount(() => {
 .btn-principal.peligro {
   background: #dc2626;
 }
-.btn-icono.peligro { color: #dc2626; }
-.btn-icono.peligro:hover { background: rgba(220,38,38,0.12); }
-
 .loading-overlay {
   position: fixed;
   top: 0;

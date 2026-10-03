@@ -13,6 +13,8 @@
       <span>Orden {{ notificacionOrdenNumero }} en proceso</span>
     </div>
 
+    <NieveNavidena />
+
     <ion-content
       class="shell-container"
       :scroll-y="false"
@@ -79,13 +81,13 @@
                     </button>
                   </div>
                 </div>
-                <button v-if="!esOperador" class="notificacion-icono-btn whatsapp-launch-btn" type="button" title="Abrir WhatsApp Web" aria-label="Abrir WhatsApp Web" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirWhatsapp">
+                <button v-if="!esOperador" class="notificacion-icono-btn whatsapp-launch-btn" :class="{ activo: mostrarPanelWhatsapp }" type="button" :title="mostrarPanelWhatsapp ? 'WhatsApp está abierto' : 'Abrir WhatsApp Web'" :aria-label="mostrarPanelWhatsapp ? 'WhatsApp está abierto' : 'Abrir WhatsApp Web'" :aria-pressed="mostrarPanelWhatsapp" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirWhatsapp">
                   <ion-icon :icon="logoWhatsapp" />
                 </button>
-                <button v-if="esAdministrador" class="notificacion-icono-btn facebook-launch-btn" type="button" title="Abrir Facebook Messenger" aria-label="Abrir Facebook Messenger" @click="abrirFacebook">
+                <button v-if="esAdministrador" class="notificacion-icono-btn facebook-launch-btn" :class="{ activo: mostrarPanelFacebook }" type="button" :title="mostrarPanelFacebook ? 'Facebook está abierto' : 'Abrir Facebook Messenger'" :aria-label="mostrarPanelFacebook ? 'Facebook está abierto' : 'Abrir Facebook Messenger'" :aria-pressed="mostrarPanelFacebook" @click="abrirFacebook">
                   <ion-icon :icon="logoFacebook" />
                 </button>
-                <button v-if="esAdministrador" class="notificacion-icono-btn navegador-launch-btn" type="button" title="Abrir Navegador" aria-label="Abrir Navegador" @click="abrirNavegador">
+                <button v-if="esAdministrador" class="notificacion-icono-btn navegador-launch-btn" :class="{ abierto: mostrarPanelNavegador, minimizado: mostrarPanelNavegador && panelNavegadorMinimizado }" type="button" :title="mostrarPanelNavegador && panelNavegadorMinimizado ? 'Restaurar navegador minimizado' : mostrarPanelNavegador ? 'Navegador está abierto' : 'Abrir Navegador'" :aria-label="mostrarPanelNavegador && panelNavegadorMinimizado ? 'Restaurar navegador minimizado' : mostrarPanelNavegador ? 'Navegador está abierto' : 'Abrir Navegador'" :aria-pressed="mostrarPanelNavegador" @click="abrirNavegador">
                   <ion-icon :icon="globeOutline" />
                 </button>
                 <button class="banner-perfil-superior" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
@@ -219,7 +221,7 @@
                 <button v-if="squeeze < 0.98 && esAdministrador" class="notificacion-icono-btn facebook-launch-btn" type="button" title="Abrir Facebook Messenger" aria-label="Abrir Facebook Messenger" @click="abrirFacebook">
                   <ion-icon :icon="logoFacebook" />
                 </button>
-                <button v-if="squeeze < 0.98 && esAdministrador" class="notificacion-icono-btn navegador-launch-btn" type="button" title="Abrir Navegador" aria-label="Abrir Navegador" @click="abrirNavegador">
+                <button v-if="squeeze < 0.98 && esAdministrador" class="notificacion-icono-btn navegador-launch-btn" :class="{ minimizado: mostrarPanelNavegador && panelNavegadorMinimizado }" type="button" :title="mostrarPanelNavegador && panelNavegadorMinimizado ? 'Restaurar navegador minimizado' : 'Abrir Navegador'" :aria-label="mostrarPanelNavegador && panelNavegadorMinimizado ? 'Restaurar navegador minimizado' : 'Abrir Navegador'" :aria-pressed="mostrarPanelNavegador && panelNavegadorMinimizado" @click="abrirNavegador">
                   <ion-icon :icon="globeOutline" />
                 </button>
                 <button class="banner-perfil-superior banner-perfil-superior-compacto" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
@@ -943,15 +945,29 @@
               </div>
 
               <p class="notificacion-mensaje" v-html="notificacion.mensaje" @click="manejarClickImagen($event)"></p>
-              <div v-if="notificacion.imagenUrl" class="notificacion-imagen-container" @click="abrirModalImagenGrande(notificacion.imagenUrl)">
+              <div v-if="notificacion.imagenUrl && !esUrlVideo(notificacion.imagenUrl)" class="notificacion-imagen-container" @click="abrirModalImagenGrande(notificacion.imagenUrl)">
                 <img :src="notificacion.imagenUrl" alt="Imagen del aviso" class="notificacion-imagen" />
                 <div class="notificacion-imagen-lupa">
                   <ion-icon :icon="expandOutline" />
                 </div>
               </div>
+              <div v-else-if="notificacion.imagenUrl" class="notificacion-video-container">
+                <div v-if="obtenerUrlVideoIncrustado(notificacion.imagenUrl)" class="video-embed-viewport" :class="{ 'drive-video-viewport': esUrlDrive(notificacion.imagenUrl) }">
+                  <iframe
+                    :src="obtenerUrlVideoIncrustado(notificacion.imagenUrl) || undefined"
+                    class="aviso-video-player"
+                    :class="{ 'drive-video-frame': esUrlDrive(notificacion.imagenUrl) }"
+                    title="Video del aviso"
+                    allow="encrypted-media; picture-in-picture; fullscreen *"
+                    allowfullscreen
+                    loading="lazy"
+                  ></iframe>
+                </div>
+                <video v-else-if="esUrlVideoDirecto(notificacion.imagenUrl)" :src="obtenerUrlVideoDirecto(notificacion.imagenUrl) || undefined" class="aviso-video-player" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
+              </div>
               <div class="notificacion-footer">
                 <p v-if="notificacion.autorNombre" class="notificacion-autor">Enviado por: {{ notificacion.autorNombre }}</p>
-                <button v-if="notificacion.imagenUrl || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)" title="Ampliar imagen">
+                <button v-if="(notificacion.imagenUrl && !esUrlVideo(notificacion.imagenUrl)) || tieneImagenEnMensaje(notificacion.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(notificacion)" title="Ampliar imagen">
                   <ion-icon :icon="expandOutline" />
                 </button>
               </div>
@@ -1012,18 +1028,34 @@
 
           <div class="aviso-inicial-mensaje-container">
             <p class="aviso-inicial-mensaje" v-html="avisoInicial.mensaje" @click="manejarClickImagen($event)"></p>
-            <div v-if="avisoInicial.imagenUrl" class="aviso-inicial-imagen-container" @click="abrirModalImagenGrande(avisoInicial.imagenUrl)">
+            <div
+              v-if="avisoInicial.imagenUrl && !esUrlVideo(avisoInicial.imagenUrl)"
+              class="aviso-inicial-imagen-container"
+              role="button"
+              tabindex="0"
+              aria-label="Ampliar imagen del aviso"
+              @click="abrirModalImagenGrande(avisoInicial.imagenUrl)"
+              @keydown.enter="abrirModalImagenGrande(avisoInicial.imagenUrl)"
+            >
               <img :src="avisoInicial.imagenUrl" alt="Imagen del aviso" class="aviso-inicial-imagen" />
-              <div class="aviso-inicial-imagen-lupa">
-                <ion-icon :icon="expandOutline" />
-              </div>
+            </div>
+            <div v-else-if="avisoInicial.imagenUrl" class="notificacion-video-container">
+                <div v-if="obtenerUrlVideoIncrustado(avisoInicial.imagenUrl)" class="video-embed-viewport" :class="{ 'drive-video-viewport': esUrlDrive(avisoInicial.imagenUrl) }">
+                  <iframe
+                    :src="obtenerUrlVideoIncrustado(avisoInicial.imagenUrl) || undefined"
+                    class="aviso-video-player"
+                    :class="{ 'drive-video-frame': esUrlDrive(avisoInicial.imagenUrl) }"
+                    title="Video del aviso"
+                    allow="encrypted-media; picture-in-picture; fullscreen *"
+                    allowfullscreen
+                    loading="lazy"
+                  ></iframe>
+                </div>
+              <video v-else-if="esUrlVideoDirecto(avisoInicial.imagenUrl)" :src="obtenerUrlVideoDirecto(avisoInicial.imagenUrl) || undefined" class="aviso-video-player" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
             </div>
           </div>
           <div class="aviso-inicial-footer">
             <p v-if="avisoInicial.autorNombre" class="aviso-inicial-autor">Enviado por: {{ avisoInicial.autorNombre }}</p>
-            <button v-if="avisoInicial.imagenUrl || tieneImagenEnMensaje(avisoInicial.mensaje)" class="btn-ampliar-imagen" @click="ampliarPrimeraImagen(avisoInicial)" title="Ampliar imagen">
-              <ion-icon :icon="expandOutline" />
-            </button>
           </div>
           <span class="aviso-inicial-fecha">{{ new Date(avisoInicial.fecha).toLocaleDateString('es-ES') }}</span>
         </div>
@@ -1126,7 +1158,7 @@
               <button type="button" class="html-toolbar-btn" @click="insertarEmoji('📢')" title="Anuncio">
                 📢
               </button>
-              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAviso" title="Agregar imagen desde URL">
+              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAviso" title="Agregar imagen o video desde URL">
                 <ion-icon :icon="imageOutline" />
               </button>
             </div>
@@ -1144,8 +1176,19 @@
             <p class="preview-label">Vista previa:</p>
             <div class="preview-content preview-content-grande">
               <div v-html="mensajeAviso"></div>
-              <div v-for="(imagen, index) in imagenesAviso" :key="index" class="preview-imagen-container">
-                <img :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
+              <div v-for="(imagen, index) in imagenesAviso" :key="index" class="preview-imagen-container" :class="{ 'preview-video-container': esUrlVideo(imagen) }">
+                <div v-if="obtenerUrlVideoIncrustado(imagen)" class="video-embed-viewport preview-video-embed" :class="{ 'drive-video-viewport': esUrlDrive(imagen) }">
+                  <iframe
+                    :src="obtenerUrlVideoIncrustado(imagen) || undefined"
+                    class="preview-video-player"
+                    :class="{ 'drive-video-frame': esUrlDrive(imagen) }"
+                    title="Vista previa del video"
+                    allow="encrypted-media; picture-in-picture; fullscreen *"
+                    allowfullscreen
+                  ></iframe>
+                </div>
+                <video v-else-if="esUrlVideoDirecto(imagen)" :src="obtenerUrlVideoDirecto(imagen) || undefined" class="preview-video-player" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
+                <img v-else :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
                 <button class="preview-imagen-eliminar" @click="eliminarImagenAviso(index)">
                   <ion-icon :icon="trashOutline" />
                 </button>
@@ -1172,8 +1215,8 @@
               <ion-icon :icon="imageOutline" />
             </div>
             <div>
-              <p class="modal-titulo">Agregar imagen</p>
-              <p class="modal-subtitulo">Pega la URL de la imagen</p>
+              <p class="modal-titulo">Agregar imagen o video</p>
+              <p class="modal-subtitulo">Pega la URL de la imagen o del video</p>
             </div>
           </div>
           <button class="modal-cerrar" @click="mostrarModalImagenAviso = false">
@@ -1181,18 +1224,29 @@
           </button>
         </div>
 
-        <label class="modal-label">URL de la imagen</label>
+        <label class="modal-label">URL de imagen o video</label>
         <input
           v-model="imagenAvisoUrl"
           class="modal-input-texto"
           style="color: black; background-color: white;"
           type="url"
-          placeholder="https://ejemplo.com/imagen.jpg"
+          placeholder="URL Imagen o Video"
         />
 
         <div v-if="imagenAvisoUrl" class="imagen-url-preview">
           <p class="preview-info-text">Vista previa:</p>
-          <img :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" @error="imagenError = true" @load="imagenError = false" />
+          <div v-if="obtenerUrlVideoIncrustado(imagenAvisoUrl)" class="video-embed-viewport" :class="{ 'drive-video-viewport': esUrlDrive(imagenAvisoUrl) }">
+            <iframe
+              :src="obtenerUrlVideoIncrustado(imagenAvisoUrl) || undefined"
+              class="imagen-url-preview-video"
+              :class="{ 'drive-video-frame': esUrlDrive(imagenAvisoUrl) }"
+              title="Vista previa del video"
+              allow="encrypted-media; picture-in-picture; fullscreen *"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <video v-else-if="esUrlVideoDirecto(imagenAvisoUrl)" :src="obtenerUrlVideoDirecto(imagenAvisoUrl) || undefined" class="imagen-url-preview-video" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
+          <img v-else :src="imagenAvisoUrl" alt="Vista previa" class="imagen-url-preview-img" @error="imagenError = true" @load="imagenError = false" />
           <p v-if="imagenError" class="preview-error-text">No se pudo cargar la imagen. Verifica la URL.</p>
           <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrl = ''; imagenError = false">
             <ion-icon :icon="closeOutline" />
@@ -1202,7 +1256,7 @@
         <div class="modal-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalImagenAviso = false">Cancelar</ion-button>
           <ion-button class="btn-primario" :disabled="!imagenAvisoUrl.trim()" @click="confirmarImagenAviso">
-            Agregar imagen
+            Agregar imagen o video
           </ion-button>
         </div>
       </div>
@@ -1305,7 +1359,7 @@
               <button type="button" class="html-toolbar-btn" @click="insertarEmojiEditar('📢')" title="Anuncio">
                 📢
               </button>
-              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAvisoEditar" title="Agregar imagen">
+              <button type="button" class="html-toolbar-btn imagen-btn" @click="abrirModalImagenAvisoEditar" title="Agregar imagen o video">
                 <ion-icon :icon="imageOutline" />
               </button>
             </div>
@@ -1323,8 +1377,19 @@
             <p class="preview-label">Vista previa:</p>
             <div class="preview-content preview-content-grande">
               <div v-html="mensajeAvisoEditar"></div>
-              <div v-for="(imagen, index) in imagenesAvisoEditar" :key="index" class="preview-imagen-container">
-                <img :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
+              <div v-for="(imagen, index) in imagenesAvisoEditar" :key="index" class="preview-imagen-container" :class="{ 'preview-video-container': esUrlVideo(imagen) }">
+                <div v-if="obtenerUrlVideoIncrustado(imagen)" class="video-embed-viewport preview-video-embed" :class="{ 'drive-video-viewport': esUrlDrive(imagen) }">
+                  <iframe
+                    :src="obtenerUrlVideoIncrustado(imagen) || undefined"
+                    class="preview-video-player"
+                    :class="{ 'drive-video-frame': esUrlDrive(imagen) }"
+                    title="Vista previa del video"
+                    allow="encrypted-media; picture-in-picture; fullscreen *"
+                    allowfullscreen
+                  ></iframe>
+                </div>
+                <video v-else-if="esUrlVideoDirecto(imagen)" :src="obtenerUrlVideoDirecto(imagen) || undefined" class="preview-video-player" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
+                <img v-else :src="imagen" alt="Imagen del aviso" class="preview-imagen" />
                 <button class="preview-imagen-eliminar" @click="eliminarImagenAvisoEditar(index)">
                   <ion-icon :icon="trashOutline" />
                 </button>
@@ -1342,7 +1407,6 @@
       </div>
     </ion-modal>
 
-    <!-- Modal de imagen URL para editar -->
     <ion-modal :is-open="mostrarModalImagenAvisoEditar" class="modal-shell modal-imagen-url" @didDismiss="mostrarModalImagenAvisoEditar = false">
       <div class="modal-contenido modal-imagen-url-contenido modal-fondo-blanco">
         <div class="modal-header">
@@ -1351,8 +1415,8 @@
               <ion-icon :icon="imageOutline" />
             </div>
             <div>
-              <p class="modal-titulo">Agregar imagen</p>
-              <p class="modal-subtitulo">Pega la URL de la imagen</p>
+              <p class="modal-titulo">Agregar imagen o video</p>
+              <p class="modal-subtitulo">Pega la URL de la imagen o del video</p>
             </div>
           </div>
           <button class="modal-cerrar" @click="mostrarModalImagenAvisoEditar = false">
@@ -1360,18 +1424,29 @@
           </button>
         </div>
 
-        <label class="modal-label">URL de la imagen</label>
+        <label class="modal-label">URL de imagen o video</label>
         <input
           v-model="imagenAvisoUrlEditar"
           class="modal-input-texto"
           style="color: black; background-color: white;"
           type="url"
-          placeholder="https://ejemplo.com/imagen.jpg"
+          placeholder="URL Imagen o Video"
         />
 
         <div v-if="imagenAvisoUrlEditar" class="imagen-url-preview">
           <p class="preview-info-text">Vista previa:</p>
-          <img :src="imagenAvisoUrlEditar" alt="Vista previa" class="imagen-url-preview-img" @error="imagenErrorEditar = true" @load="imagenErrorEditar = false" />
+          <div v-if="obtenerUrlVideoIncrustado(imagenAvisoUrlEditar)" class="video-embed-viewport" :class="{ 'drive-video-viewport': esUrlDrive(imagenAvisoUrlEditar) }">
+            <iframe
+              :src="obtenerUrlVideoIncrustado(imagenAvisoUrlEditar) || undefined"
+              class="imagen-url-preview-video"
+              :class="{ 'drive-video-frame': esUrlDrive(imagenAvisoUrlEditar) }"
+              title="Vista previa del video"
+              allow="encrypted-media; picture-in-picture; fullscreen *"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <video v-else-if="esUrlVideoDirecto(imagenAvisoUrlEditar)" :src="obtenerUrlVideoDirecto(imagenAvisoUrlEditar) || undefined" class="imagen-url-preview-video" muted playsinline controls controlslist="nodownload noremoteplayback" preload="metadata"></video>
+          <img v-else :src="imagenAvisoUrlEditar" alt="Vista previa" class="imagen-url-preview-img" @error="imagenErrorEditar = true" @load="imagenErrorEditar = false" />
           <p v-if="imagenErrorEditar" class="preview-error-text">No se pudo cargar la imagen. Verifica la URL.</p>
           <button type="button" class="imagen-url-preview-eliminar" @click="imagenAvisoUrlEditar = ''; imagenErrorEditar = false">
             <ion-icon :icon="closeOutline" />
@@ -1381,7 +1456,7 @@
         <div class="modal-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalImagenAvisoEditar = false">Cancelar</ion-button>
           <ion-button class="btn-primario" :disabled="!imagenAvisoUrlEditar.trim()" @click="confirmarImagenAvisoEditar">
-            Agregar imagen
+            Agregar imagen o video
           </ion-button>
         </div>
       </div>
@@ -1469,6 +1544,40 @@
       </div>
     </ion-modal>
 
+    <Teleport to="body">
+      <div
+        v-if="videoFullscreenAviso"
+        class="video-fullscreen-overlay"
+        :class="{ 'video-fullscreen-drive': videoFullscreenAviso.drive }"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Reproductor de video"
+        tabindex="-1"
+        @click.self="cerrarVideoPantallaCompleta"
+      >
+        <button class="video-fullscreen-close" type="button" aria-label="Cerrar video" @click="cerrarVideoPantallaCompleta">
+          <ion-icon :icon="closeOutline" />
+        </button>
+        <iframe
+          v-if="videoFullscreenAviso.incrustado"
+          class="video-fullscreen-player"
+          :src="videoFullscreenAviso.src"
+          title="Video en pantalla completa"
+          allow="encrypted-media; picture-in-picture; fullscreen *"
+          allowfullscreen
+        ></iframe>
+        <video
+          v-else
+          class="video-fullscreen-player"
+          :src="videoFullscreenAviso.src"
+          muted
+          playsinline
+          controls
+          controlslist="nodownload noremoteplayback"
+          preload="metadata"
+        ></video>
+      </div>
+    </Teleport>
   </ion-page>
 </template>
 
@@ -1489,9 +1598,13 @@ import { useApariencia } from '@/composables/useApariencia'
 import { useModalesCaja } from '@/composables/useModalesCaja'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useNotificaciones, type NotificacionUsuario } from '@/composables/useNotificaciones'
+import { esUrlDrive, esUrlVideo, esUrlVideoDirecto, obtenerUrlVideoDirecto, obtenerUrlVideoIncrustado } from '../utils/mediaAvisos'
 import { usePanelRedes } from '@/composables/usePanelRedes'
 import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
+import NieveNavidena from '@/components/NieveNavidena.vue'
+import { useDiciembre } from '@/composables/useDiciembre'
 import { jsPDF } from 'jspdf'
+import logoNavidad from '@/assets/logo-navidad.png'
 const { validarSesion } = useSesion()
 const mensajeErrorActualizacion = ref('')
 
@@ -1533,8 +1646,9 @@ const router = useRouter()
 const route = useRoute()
 const { ultimaOrdenCreada } = usePedido()
 const { apariencia, estiloAppShell } = useApariencia()
+const esDiciembre = useDiciembre()
 const logoCloudinaryFallido = ref(false)
-const logoActual = computed(() => logoCloudinaryFallido.value ? logo : (apariencia.appShellImagen || logo))
+const logoActual = computed(() => esDiciembre.value ? logoNavidad : (logoCloudinaryFallido.value ? logo : (apariencia.appShellImagen || logo)))
 const usarLogoLocal = () => {
   logoCloudinaryFallido.value = true
 }
@@ -1604,6 +1718,7 @@ const mostrarModalImagenAvisoEditar = ref(false)
 const imagenAvisoUrl = ref('')
 const imagenGrandeUrl = ref('')
 const mostrarModalImagenGrande = ref(false)
+const videoFullscreenAviso = ref<{ src: string; incrustado: boolean; drive: boolean } | null>(null)
 const avisoParaEditar = ref<NotificacionUsuario | null>(null)
 const tituloAvisoEditar = ref('')
 const mensajeAvisoEditar = ref('')
@@ -1618,6 +1733,10 @@ const colorSeleccionadoEditar = ref('#000000')
 const {
   abrirWhatsapp: abrirWhatsappPanel,
   abrirFacebook,
+  mostrarPanelWhatsapp,
+  mostrarPanelFacebook,
+  mostrarPanelNavegador,
+  panelNavegadorMinimizado,
   abrirNavegador
 } = usePanelRedes()
 
@@ -1854,6 +1973,30 @@ const abrirModalImagenGrande = (url: string) => {
   mostrarModalImagenGrande.value = true
 }
 
+const abrirVideoPantallaCompleta = (url: string) => {
+  const incrustado = obtenerUrlVideoIncrustado(url)
+  if (incrustado) {
+    videoFullscreenAviso.value = { src: incrustado, incrustado: true, drive: esUrlDrive(url) }
+    return
+  }
+
+  const directo = obtenerUrlVideoDirecto(url)
+  if (directo) videoFullscreenAviso.value = { src: directo, incrustado: false, drive: false }
+}
+
+const cerrarVideoPantallaCompleta = () => {
+  videoFullscreenAviso.value = null
+}
+
+const manejarEscapeVideoPantallaCompleta = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') cerrarVideoPantallaCompleta()
+}
+
+watch(videoFullscreenAviso, video => {
+  if (video) window.addEventListener('keydown', manejarEscapeVideoPantallaCompleta)
+  else window.removeEventListener('keydown', manejarEscapeVideoPantallaCompleta)
+})
+
 const manejarClickImagen = (event: MouseEvent) => {
   const target = event.target as HTMLElement
   if (target.tagName === 'IMG' && target instanceof HTMLImageElement) {
@@ -1867,7 +2010,7 @@ const tieneImagenEnMensaje = (mensaje: string) => {
 
 const ampliarPrimeraImagen = (notificacion: NotificacionUsuario) => {
   // Primero revisar imagenUrl
-  if (notificacion.imagenUrl) {
+  if (notificacion.imagenUrl && !esUrlVideo(notificacion.imagenUrl)) {
     abrirModalImagenGrande(notificacion.imagenUrl)
     return
   }
@@ -2102,6 +2245,9 @@ onMounted(() => {
       resizeObserver = new ResizeObserver(() => medirBanner())
       resizeObserver.observe(bannerRef.value)
     }
+    if ((route.path === '/tabs/home' && route.query.enfoque === 'venta') || route.path === '/tabs/ordenes' || route.path === '/tabs/reportes') {
+      iniciarEnfoqueVenta()
+    }
   })
 
   void validarSesion()
@@ -2132,21 +2278,41 @@ const botonesOperativosBloqueados = computed(() => {
 /* Header deslizable con el scroll */
 const bannerRef = ref<HTMLDivElement | null>(null)
 const alturaBannerPx = ref(320)
-const alturaBannerCss = computed(() => `${alturaBannerPx.value}px`)
 const bannerOffsetPx = ref(0)
 const bannerOffsetCss = computed(() => `${bannerOffsetPx.value}px`)
 let ultimoScrollTop = 0
+const ALTURA_BARRA_COMPACTA = 76
 
 const medirBanner = () => {
-  if (bannerRef.value) {
+  if (bannerRef.value && squeeze.value < 0.5 && bannerOffsetPx.value === 0) {
     alturaBannerPx.value = bannerRef.value.offsetHeight
   }
+}
+
+const iniciarEnfoqueVenta = () => {
+  const contenido = contentAreaRef.value
+  if (!contenido) return
+
+  medirBanner()
+  contenido.scrollTop = 0
+  bannerOffsetPx.value = 0
+  squeeze.value = 1
+  bannerColapsado = true
+  ultimoScrollTop = UMBRAL_COLAPSAR
+  contenido.scrollTop = UMBRAL_COLAPSAR
 }
 
 watch(() => route.path, () => {
   bannerOffsetPx.value = 0
   ultimoScrollTop = 0
-  nextTick(() => medirBanner())
+  squeeze.value = 0
+  bannerColapsado = false
+  nextTick(() => {
+    medirBanner()
+    if ((route.path === '/tabs/home' && route.query.enfoque === 'venta') || route.path === '/tabs/ordenes' || route.path === '/tabs/reportes') {
+      iniciarEnfoqueVenta()
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -2160,7 +2326,12 @@ onUnmounted(() => {
 })
 
 const fechaLarga = computed(() =>
-  ahora.value.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }))
+  new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+    .formatToParts(ahora.value)
+    .map((parte) => parte.type === 'month'
+      ? `${parte.value.charAt(0).toLocaleUpperCase('es-ES')}${parte.value.slice(1)}`
+      : parte.value)
+    .join(''))
 
 const horaActual = computed(() =>
   ahora.value.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true })
@@ -2197,6 +2368,11 @@ const mostrarAccionesCompactas = computed(() => squeeze.value >= 0.72)
 const UMBRAL_COLAPSAR = 32
 const UMBRAL_EXPANDIR = 6
 const squeeze = ref(0)
+const alturaContenidoSuperiorCss = computed(() =>
+  `${squeeze.value >= 0.98
+    ? ALTURA_BARRA_COMPACTA + UMBRAL_COLAPSAR + 12
+    : alturaBannerPx.value + 24}px`
+)
 let bannerColapsado = false
 let frameProgramado = false
 
@@ -2215,7 +2391,7 @@ const actualizarShellCompacto = (event: Event) => {
       // Arriba del todo: banner siempre visible
       bannerOffsetPx.value = 0
     } else {
-      const maxOcultar = bannerRef.value?.offsetHeight ?? alturaBannerPx.value
+      const maxOcultar = Math.max(0, alturaBannerPx.value - ALTURA_BARRA_COMPACTA)
       // Baja -> se oculta progresivamente; sube -> reaparece progresivamente
       bannerOffsetPx.value = Math.min(maxOcultar, Math.max(0, bannerOffsetPx.value + delta))
     }
@@ -3236,6 +3412,11 @@ const getIconoLavanderia = (id: string) => {
   height: 100%;
 }
 
+.main-content {
+  position: relative;
+  z-index: 1;
+}
+
 .shell-loading-overlay {
   position: fixed;
   inset: 0;
@@ -3802,7 +3983,8 @@ ion-content.shell-container {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: calc(24px + v-bind(alturaBannerCss)) 28px 220px; /* CAMBIAR: antes decía "padding: 24px 28px 220px" */
+  padding: v-bind(alturaContenidoSuperiorCss) 28px 220px;
+  transition: padding-top 0.22s ease;
 }
 
 .content-area > * {
@@ -5135,6 +5317,13 @@ ion-content.shell-container {
   border-color: rgba(37, 211, 102, 0.58);
 }
 
+.whatsapp-launch-btn.activo {
+  background: #168b54;
+  border-color: #86efac;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.3);
+}
+
 .facebook-launch-btn {
   background: rgba(8, 102, 255, 0.16);
   border-color: rgba(8, 102, 255, 0.36);
@@ -5146,6 +5335,13 @@ ion-content.shell-container {
   border-color: rgba(8, 102, 255, 0.58);
 }
 
+.facebook-launch-btn.activo {
+  background: #2563eb;
+  border-color: #93c5fd;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
 .navegador-launch-btn {
   background: rgba(59, 130, 246, 0.16);
   border-color: rgba(59, 130, 246, 0.36);
@@ -5155,6 +5351,20 @@ ion-content.shell-container {
 .navegador-launch-btn:hover {
   background: rgba(59, 130, 246, 0.26);
   border-color: rgba(59, 130, 246, 0.58);
+}
+
+.navegador-launch-btn.abierto {
+  background: #1d4ed8;
+  border-color: #93c5fd;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.navegador-launch-btn.minimizado {
+  background: #2563eb;
+  border-color: #bfdbfe;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.38);
 }
 
 .notificacion-icono-btn:disabled {
@@ -5359,6 +5569,16 @@ ion-content.shell-container {
   display: block;
 }
 
+.imagen-url-preview-video {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  aspect-ratio: 16 / 9;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  border-radius: 12px;
+  background: #111827;
+}
+
 .imagen-url-preview-eliminar {
   position: absolute;
   top: -8px;
@@ -5396,11 +5616,28 @@ ion-content.shell-container {
   transform: scale(1.02);
 }
 
+.notificacion-video-container {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(79, 179, 224, 0.15);
+  border-radius: 12px;
+  background: #111827;
+}
+
 .notificacion-imagen {
   width: 100%;
   max-height: 300px;
   object-fit: cover;
   display: block;
+}
+
+.aviso-video-player {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: #111827;
 }
 
 .notificacion-imagen-lupa {
@@ -5657,12 +5894,63 @@ ion-content.shell-container {
   display: inline-block;
 }
 
+.preview-imagen-container.preview-video-container {
+  display: block;
+  width: min(100%, 360px);
+}
+
 .preview-imagen {
   max-width: 100%;
   max-height: 200px;
   border-radius: 12px;
   border: 2px solid rgba(79, 179, 224, 0.25);
   box-shadow: 0 4px 16px rgba(79, 179, 224, 0.1);
+}
+
+.preview-video-player {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 200px;
+  aspect-ratio: 16 / 9;
+  border: 2px solid rgba(79, 179, 224, 0.25);
+  border-radius: 12px;
+  background: #111827;
+}
+
+.video-embed-viewport {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #111827;
+}
+
+.video-embed-viewport iframe {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+}
+
+.video-embed-viewport.preview-video-embed {
+  width: 100%;
+}
+
+.video-embed-viewport.drive-video-viewport .drive-video-frame {
+  position: absolute;
+  top: -48px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 48px);
+  max-height: none;
+  aspect-ratio: auto;
+  border: 0;
 }
 
 .preview-imagen-eliminar {

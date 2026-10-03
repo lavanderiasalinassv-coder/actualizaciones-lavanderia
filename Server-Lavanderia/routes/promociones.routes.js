@@ -2,6 +2,7 @@ const { Router } = require("express");
 const {
   listarPromociones,
   obtenerUnaPromocion,
+  consultarUsosCupon,
   listarVigentes,
   listarAplicables,
   crearUnaPromocion,
@@ -14,6 +15,7 @@ const router = Router();
 router.get("/promociones", listarPromociones);
 router.get("/promociones/vigentes", listarVigentes);
 router.post("/promociones/aplicables", listarAplicables);
+router.post("/promociones/:id/validar-uso", consultarUsosCupon);
 router.get("/promociones/:id", obtenerUnaPromocion);
 router.post("/promociones", crearUnaPromocion);
 router.put("/promociones/:id", editarUnaPromocion);

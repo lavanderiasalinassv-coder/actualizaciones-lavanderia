@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 const mostrarPanelWhatsapp = ref(false)
 const mostrarPanelFacebook = ref(false)
 const mostrarPanelNavegador = ref(false)
+const panelNavegadorMinimizado = ref(false)
 const urlWhatsappInicial = ref('')
 const solicitudCargaWhatsapp = ref(0)
 const panelWhatsappLateral = ref(true)
@@ -35,10 +36,20 @@ export function usePanelRedes() {
   }
 
   const abrirNavegador = () => {
+    if (mostrarPanelNavegador.value && panelNavegadorMinimizado.value) {
+      panelNavegadorMinimizado.value = false
+      return
+    }
+
     cerrarTodosLosPaneles()
     panelNavegadorLateral.value = true
     panelLado.value = 'derecha' // Siempre derecha por defecto
     mostrarPanelNavegador.value = true
+    panelNavegadorMinimizado.value = false
+  }
+
+  const minimizarNavegador = () => {
+    if (mostrarPanelNavegador.value) panelNavegadorMinimizado.value = true
   }
 
   const cerrarWhatsapp = () => {
@@ -53,6 +64,7 @@ export function usePanelRedes() {
 
   const cerrarNavegador = () => {
     mostrarPanelNavegador.value = false
+    panelNavegadorMinimizado.value = false
     panelLado.value = 'derecha' // Resetear a derecha
   }
 
@@ -60,14 +72,14 @@ export function usePanelRedes() {
   const panelLateralAbierto = computed(() => {
     return (mostrarPanelWhatsapp.value && panelWhatsappLateral.value) ||
            (mostrarPanelFacebook.value && panelFacebookLateral.value) ||
-           (mostrarPanelNavegador.value && panelNavegadorLateral.value)
+           (mostrarPanelNavegador.value && !panelNavegadorMinimizado.value && panelNavegadorLateral.value)
   })
 
   // Computed para determinar el lado del panel abierto
   const ladoPanelActivo = computed(() => {
     if (mostrarPanelWhatsapp.value && panelWhatsappLateral.value) return panelLado.value
     if (mostrarPanelFacebook.value && panelFacebookLateral.value) return panelLado.value
-    if (mostrarPanelNavegador.value && panelNavegadorLateral.value) return panelLado.value
+    if (mostrarPanelNavegador.value && !panelNavegadorMinimizado.value && panelNavegadorLateral.value) return panelLado.value
     return null
   })
 
@@ -75,6 +87,7 @@ export function usePanelRedes() {
     mostrarPanelWhatsapp,
     mostrarPanelFacebook,
     mostrarPanelNavegador,
+    panelNavegadorMinimizado,
     urlWhatsappInicial,
     solicitudCargaWhatsapp,
     panelWhatsappLateral,
@@ -86,6 +99,7 @@ export function usePanelRedes() {
     abrirWhatsapp,
     abrirFacebook,
     abrirNavegador,
+    minimizarNavegador,
     cerrarWhatsapp,
     cerrarFacebook,
     cerrarNavegador

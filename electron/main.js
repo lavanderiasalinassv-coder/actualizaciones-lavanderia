@@ -1,4 +1,12 @@
-const { app, BrowserWindow, ipcMain, shell, session } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  nativeImage,
+  shell,
+  session,
+} = require("electron");
 const { autoUpdater } = require("electron-updater");
 const fs = require("fs");
 const path = require("path");
@@ -44,18 +52,21 @@ function configurarAutoUpdater() {
     return;
   }
 
-  console.log("🔄 [MAIN] Configurando auto-updater con app version:", app.getVersion());
+  console.log(
+    "🔄 [MAIN] Configurando auto-updater con app version:",
+    app.getVersion(),
+  );
   console.log("🔄 [MAIN] Publisher config:", {
     provider: "github",
     owner: "lavanderiasalinassv-coder",
-    repo: "actualizaciones-lavanderia"
+    repo: "actualizaciones-lavanderia",
   });
 
   // Configuración explícita para asegurar que busque en el repositorio correcto
   autoUpdater.setFeedURL({
     provider: "github",
     owner: "lavanderiasalinassv-coder",
-    repo: "actualizaciones-lavanderia"
+    repo: "actualizaciones-lavanderia",
   });
 
   console.log("🔄 [MAIN] Feed URL configurado");
@@ -66,30 +77,48 @@ function configurarAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = false;
 
   console.log("🔄 [MAIN] autoDownload:", autoUpdater.autoDownload);
-  console.log("🔄 [MAIN] autoInstallOnAppQuit:", autoUpdater.autoInstallOnAppQuit);
+  console.log(
+    "🔄 [MAIN] autoInstallOnAppQuit:",
+    autoUpdater.autoInstallOnAppQuit,
+  );
 
   autoUpdater.on("checking-for-update", () => {
     console.log("🔍 [MAIN] Buscando actualizaciones...");
     if (ventanaPrincipal) {
-      ventanaPrincipal.webContents.send("log-main", "🔍 Buscando actualizaciones...");
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        "🔍 Buscando actualizaciones...",
+      );
     }
   });
 
   autoUpdater.on("update-available", (info) => {
     console.log("✅ [MAIN] Actualización disponible:", info.version);
-    console.log("✅ [MAIN] Detalles completos de actualización:", JSON.stringify(info, null, 2));
+    console.log(
+      "✅ [MAIN] Detalles completos de actualización:",
+      JSON.stringify(info, null, 2),
+    );
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-disponible", info);
-      ventanaPrincipal.webContents.send("log-main", `✅ Actualización disponible: ${info.version}`);
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        `✅ Actualización disponible: ${info.version}`,
+      );
     }
   });
 
   autoUpdater.on("update-not-available", (info) => {
     console.log("ℹ️ [MAIN] La app está en la última versión.");
-    console.log("ℹ️ [MAIN] Info de versión actual:", JSON.stringify(info, null, 2));
+    console.log(
+      "ℹ️ [MAIN] Info de versión actual:",
+      JSON.stringify(info, null, 2),
+    );
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-no-disponible");
-      ventanaPrincipal.webContents.send("log-main", "ℹ️ La app está en la última versión");
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        "ℹ️ La app está en la última versión",
+      );
     }
   });
 
@@ -97,7 +126,10 @@ function configurarAutoUpdater() {
     console.log("📥 [MAIN] Progreso de descarga:", progress.percent);
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-progreso", progress.percent);
-      ventanaPrincipal.webContents.send("log-main", `📥 Progreso de descarga: ${progress.percent}%`);
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        `📥 Progreso de descarga: ${progress.percent}%`,
+      );
     }
   });
 
@@ -105,19 +137,28 @@ function configurarAutoUpdater() {
     console.log("🎉 [MAIN] Actualización descargada:", info.version);
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send("update-lista", info);
-      ventanaPrincipal.webContents.send("log-main", `🎉 Actualización descargada: ${info.version}`);
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        `🎉 Actualización descargada: ${info.version}`,
+      );
     }
   });
 
   autoUpdater.on("error", (err) => {
     console.error("❌ [MAIN] Error en auto-updater:", err);
-    console.error("❌ [MAIN] Detalles del error:", JSON.stringify(err, null, 2));
+    console.error(
+      "❌ [MAIN] Detalles del error:",
+      JSON.stringify(err, null, 2),
+    );
     if (ventanaPrincipal) {
       ventanaPrincipal.webContents.send(
         "update-error",
         err?.message || "Error desconocido",
       );
-      ventanaPrincipal.webContents.send("log-main", `❌ Error: ${err?.message || "Error desconocido"}`);
+      ventanaPrincipal.webContents.send(
+        "log-main",
+        `❌ Error: ${err?.message || "Error desconocido"}`,
+      );
     }
   });
 
@@ -158,41 +199,70 @@ const repoGithub = {
 function obtenerRaizProyecto() {
   if (app.isPackaged) return null;
   const raiz = app.getAppPath();
-  return fs.existsSync(path.join(raiz, "package.json")) && fs.existsSync(path.join(raiz, "electron"))
+  return fs.existsSync(path.join(raiz, "package.json")) &&
+    fs.existsSync(path.join(raiz, "electron"))
     ? raiz
     : null;
 }
 
-ipcMain.handle("puede-publicar-actualizacion", () => Boolean(obtenerRaizProyecto()));
+ipcMain.handle("puede-publicar-actualizacion", () =>
+  Boolean(obtenerRaizProyecto()),
+);
 
 function leerTokenGithub(raiz) {
   const rutaEnv = path.join(raiz, ".env");
   if (!fs.existsSync(rutaEnv)) return "";
-  const linea = fs.readFileSync(rutaEnv, "utf8").split(/\r?\n/).find((lineaEnv) => /^\s*GH_TOKEN\s*=/.test(lineaEnv));
+  const linea = fs
+    .readFileSync(rutaEnv, "utf8")
+    .split(/\r?\n/)
+    .find((lineaEnv) => /^\s*GH_TOKEN\s*=/.test(lineaEnv));
   if (!linea) return "";
-  return linea.replace(/^\s*GH_TOKEN\s*=\s*/, "").replace(/\s+#.*$/, "").trim().replace(/^(['"])(.*)\1$/, "$2");
+  return linea
+    .replace(/^\s*GH_TOKEN\s*=\s*/, "")
+    .replace(/\s+#.*$/, "")
+    .trim()
+    .replace(/^(['"])(.*)\1$/, "$2");
 }
 
 function consultarVersionPublicada(version) {
   return new Promise((resolve, reject) => {
-    const request = https.get({
-      hostname: "api.github.com",
-      path: `/repos/${repoGithub.owner}/${repoGithub.repo}/releases/tags/v${encodeURIComponent(version)}`,
-      headers: { Accept: "application/vnd.github+json", "User-Agent": "Lavanderia-Desktop" },
-    }, (response) => {
-      response.resume();
-      if (response.statusCode === 200) return resolve(true);
-      if (response.statusCode === 404) return resolve(false);
-      reject(new Error(`GitHub respondió con estado ${response.statusCode || "desconocido"}.`));
-    });
-    request.setTimeout(15000, () => request.destroy(new Error("La consulta a GitHub excedió el tiempo límite.")));
+    const request = https.get(
+      {
+        hostname: "api.github.com",
+        path: `/repos/${repoGithub.owner}/${repoGithub.repo}/releases/tags/v${encodeURIComponent(version)}`,
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "Lavanderia-Desktop",
+        },
+      },
+      (response) => {
+        response.resume();
+        if (response.statusCode === 200) return resolve(true);
+        if (response.statusCode === 404) return resolve(false);
+        reject(
+          new Error(
+            `GitHub respondió con estado ${response.statusCode || "desconocido"}.`,
+          ),
+        );
+      },
+    );
+    request.setTimeout(15000, () =>
+      request.destroy(
+        new Error("La consulta a GitHub excedió el tiempo límite."),
+      ),
+    );
     request.on("error", reject);
   });
 }
 
 ipcMain.handle("comprobar-version-publicacion", async () => {
   const raiz = obtenerRaizProyecto();
-  if (!raiz) return { available: false, reason: "Abre la aplicación desde el proyecto de desarrollo para publicar." };
+  if (!raiz)
+    return {
+      available: false,
+      reason:
+        "Abre la aplicación desde el proyecto de desarrollo para publicar.",
+    };
   const version = require(path.join(raiz, "package.json")).version;
   const publicada = await consultarVersionPublicada(version);
   return { available: true, version, publicada };
@@ -200,21 +270,31 @@ ipcMain.handle("comprobar-version-publicacion", async () => {
 
 ipcMain.handle("publicar-actualizacion", async () => {
   const raiz = obtenerRaizProyecto();
-  if (!raiz) throw new Error("La publicación solo está disponible al abrir la aplicación desde el proyecto de desarrollo.");
+  if (!raiz)
+    throw new Error(
+      "La publicación solo está disponible al abrir la aplicación desde el proyecto de desarrollo.",
+    );
   const version = require(path.join(raiz, "package.json")).version;
   if (await consultarVersionPublicada(version)) {
-    throw new Error(`La versión ${version} ya existe como publicación en GitHub. Actualiza package.json antes de publicar.`);
+    throw new Error(
+      `La versión ${version} ya existe como publicación en GitHub. Actualiza package.json antes de publicar.`,
+    );
   }
   const token = leerTokenGithub(raiz);
-  if (!token) throw new Error("No se encontró GH_TOKEN en el archivo .env del proyecto.");
+  if (!token)
+    throw new Error("No se encontró GH_TOKEN en el archivo .env del proyecto.");
 
   return new Promise((resolve, reject) => {
-    const proceso = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "electron:publish"], {
-      cwd: raiz,
-      env: { ...process.env, GH_TOKEN: token },
-      windowsHide: true,
-      shell: process.platform === "win32",
-    });
+    const proceso = spawn(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      ["run", "electron:publish"],
+      {
+        cwd: raiz,
+        env: { ...process.env, GH_TOKEN: token },
+        windowsHide: true,
+        shell: process.platform === "win32",
+      },
+    );
     let salida = "";
     let progreso = 5;
     let finalizado = false;
@@ -239,8 +319,10 @@ ipcMain.handle("publicar-actualizacion", async () => {
         const porcentajePublicado = texto.match(/\b(\d{1,3})%/);
         if (/upload|release|github/i.test(texto) && porcentajePublicado) {
           porcentaje = 60 + Math.round(Number(porcentajePublicado[1]) * 0.39);
-        } else if (/vite build|building|compiling/i.test(texto)) porcentaje = 25;
-        else if (/electron-builder|packaging|building nsis/i.test(texto)) porcentaje = 48;
+        } else if (/vite build|building|compiling/i.test(texto))
+          porcentaje = 25;
+        else if (/electron-builder|packaging|building nsis/i.test(texto))
+          porcentaje = 48;
         else if (/publish|upload/i.test(texto)) porcentaje = 60;
         emitir(texto.slice(-240), porcentaje);
       }
@@ -259,8 +341,13 @@ ipcMain.handle("publicar-actualizacion", async () => {
       clearTimeout(timeout);
       if (codigo !== 0) {
         const detalle = salida.replaceAll(token, "[oculto]").slice(-2000);
-        emitir(`Error al publicar (código ${codigo ?? "desconocido"}). ${detalle}`, progreso);
-        return reject(new Error(`No se pudo publicar la versión ${version}. ${detalle}`));
+        emitir(
+          `Error al publicar (código ${codigo ?? "desconocido"}). ${detalle}`,
+          progreso,
+        );
+        return reject(
+          new Error(`No se pudo publicar la versión ${version}. ${detalle}`),
+        );
       }
       emitir(`Publicación de la versión ${version} completada.`, 100);
       resolve({ version });
@@ -282,8 +369,19 @@ ipcMain.handle("reiniciar-electron", () => {
 
 ipcMain.handle("obtener-configuracion-base-datos-predeterminada", () => {
   const archivoConfiguracion = app.isPackaged
-    ? path.join(process.resourcesPath, "backend", "database", "databaseConfig.js")
-    : path.join(__dirname, "..", "Server-Lavanderia", "database", "databaseConfig.js");
+    ? path.join(
+        process.resourcesPath,
+        "backend",
+        "database",
+        "databaseConfig.js",
+      )
+    : path.join(
+        __dirname,
+        "..",
+        "Server-Lavanderia",
+        "database",
+        "databaseConfig.js",
+      );
   const { leerConfiguracionPredeterminada } = require(archivoConfiguracion);
   return leerConfiguracionPredeterminada();
 });
@@ -295,6 +393,26 @@ ipcMain.handle("abrir-carpeta-respaldo", async () => {
 
 ipcMain.handle("abrir-whatsapp-desktop", async (_event, url) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle("copiar-imagen-cupon-whatsapp", (_event, dataUrl) => {
+  if (typeof dataUrl !== "string" || dataUrl.length > 2_000_000) {
+    throw new Error(
+      "La imagen del cupón no es válida o excede el tamaño permitido.",
+    );
+  }
+
+  const coincidencia = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(
+    dataUrl,
+  );
+  if (!coincidencia)
+    throw new Error("Solo se pueden copiar imágenes PNG de cupones.");
+
+  const imagen = nativeImage.createFromDataURL(dataUrl);
+  if (imagen.isEmpty())
+    throw new Error("No se pudo preparar la imagen del cupón.");
+  clipboard.writeImage(imagen);
+  return true;
 });
 
 function iniciarBackend() {
@@ -316,10 +434,28 @@ function iniciarBackend() {
 }
 
 function createWindow() {
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      let origen = "";
+      try {
+        origen = new URL(details.requestingUrl).origin;
+      } catch {}
+
+      const origenLocal = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+      ].includes(origen);
+      const solicitaCamara =
+        permission === "media" && details.mediaTypes?.includes("video");
+      callback(Boolean(origenLocal && solicitaCamara));
+    },
+  );
+
   // Configurar Content Security Policy para permitir imágenes de cualquier origen
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders;
-    responseHeaders['Access-Control-Allow-Origin'] = '*';
+    responseHeaders["Access-Control-Allow-Origin"] = "*";
     callback({ cancel: false, responseHeaders });
   });
 
@@ -385,16 +521,23 @@ app.whenReady().then(() => {
 
   // Configurar CORS para permitir imágenes externas
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    details.requestHeaders["User-Agent"] =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     callback({ cancel: false, requestHeaders: details.requestHeaders });
   });
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders;
     if (responseHeaders) {
-      responseHeaders['Access-Control-Allow-Origin'] = ['*'];
-      responseHeaders['Access-Control-Allow-Methods'] = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
-      responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+      responseHeaders["Access-Control-Allow-Origin"] = ["*"];
+      responseHeaders["Access-Control-Allow-Methods"] = [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+      ];
+      responseHeaders["Access-Control-Allow-Headers"] = ["*"];
     }
     callback({ cancel: false, responseHeaders });
   });

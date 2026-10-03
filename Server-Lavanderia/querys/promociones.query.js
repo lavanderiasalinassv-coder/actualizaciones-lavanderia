@@ -41,6 +41,11 @@ const mapRow = (row) => ({
   tipoClienteAplica: row.tipo_cliente_aplica,
   minOrdenes: row.min_ordenes ?? undefined,
   vigente: !!row.vigente,
+  generarQr: !!row.generar_qr,
+  maxUsosPorCliente:
+    row.max_usos_por_cliente == null
+      ? undefined
+      : Number(row.max_usos_por_cliente),
   fechaInicio:
     row.fecha_inicio instanceof Date
       ? row.fecha_inicio.toISOString().slice(0, 10)
@@ -89,6 +94,25 @@ const validarPromocion = (datos) => {
     );
   }
 
+  const generarQr =
+    datos.generarQr === true ||
+    datos.generarQr === 1 ||
+    datos.generarQr === "1";
+  const maxUsosPorCliente =
+    datos.maxUsosPorCliente == null || datos.maxUsosPorCliente === ""
+      ? null
+      : Number(datos.maxUsosPorCliente);
+  if (
+    generarQr &&
+    maxUsosPorCliente != null &&
+    (!Number.isInteger(maxUsosPorCliente) || maxUsosPorCliente < 1)
+  ) {
+    throw new AppError(
+      "El máximo de usos por cliente debe ser un entero mayor que cero.",
+      400,
+    );
+  }
+
   return {
     nombre,
     descripcion: normalizarTexto(datos.descripcion),
@@ -100,6 +124,8 @@ const validarPromocion = (datos) => {
         ? Number(datos.minOrdenes)
         : null,
     vigente: datos.vigente !== false,
+    generarQr,
+    maxUsosPorCliente: generarQr ? maxUsosPorCliente : null,
     fechaInicio: datos.fechaInicio,
     fechaFin: datos.fechaFin,
     diasEspecificos: normalizarDiasEspecificos(datos.diasEspecificos),
@@ -118,6 +144,37 @@ const obtenerPromocionPorId = async (id) => {
     id,
   ]);
   return rows.length ? mapRow(rows[0]) : null;
+};
+
+const consultarUsosCuponQr = async (id, telefono) => {
+  const promocion = await obtenerPromocionPorId(id);
+  if (!promocion || !promocion.generarQr) {
+    throw new AppError("No se encontró un cupón QR para esta promoción.", 404);
+  }
+  const clienteTelefono = String(telefono || "").replace(/\D/g, "");
+  if (!clienteTelefono) {
+    throw new AppError(
+      "Se necesita el teléfono del cliente para validar el cupón.",
+      400,
+    );
+  }
+
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS usos
+     FROM promocion_usos_qr uso
+     INNER JOIN ordenes orden ON orden.id = uso.orden_id
+     WHERE uso.promocion_id = ? AND uso.cliente_telefono = ?
+       AND orden.estado NOT IN ('cancelada', 'Cerrada-Cancelada')`,
+    [id, clienteTelefono],
+  );
+  const usos = Number(rows[0]?.usos || 0);
+  const maxUsosPorCliente = promocion.maxUsosPorCliente ?? null;
+
+  return {
+    usos,
+    maxUsosPorCliente,
+    disponible: maxUsosPorCliente == null || usos < maxUsosPorCliente,
+  };
 };
 
 const obtenerPromocionesVigentes = async () => {
@@ -172,8 +229,8 @@ const crearPromocion = async (datos) => {
 
   await pool.query(
     `INSERT INTO promociones
-      (id, nombre, descripcion, tipo_descuento, valor, tipo_cliente_aplica, min_ordenes, vigente, fecha_inicio, fecha_fin, dias_especificos)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, nombre, descripcion, tipo_descuento, valor, tipo_cliente_aplica, min_ordenes, vigente, generar_qr, max_usos_por_cliente, fecha_inicio, fecha_fin, dias_especificos)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       validado.nombre,
@@ -183,6 +240,8 @@ const crearPromocion = async (datos) => {
       validado.tipoClienteAplica,
       validado.minOrdenes,
       validado.vigente ? 1 : 0,
+      validado.generarQr ? 1 : 0,
+      validado.maxUsosPorCliente,
       validado.fechaInicio,
       validado.fechaFin,
       JSON.stringify(validado.diasEspecificos),
@@ -203,7 +262,7 @@ const actualizarPromocion = async (id, cambios) => {
   await pool.query(
     `UPDATE promociones SET
       nombre = ?, descripcion = ?, tipo_descuento = ?, valor = ?, tipo_cliente_aplica = ?,
-      min_ordenes = ?, vigente = ?, fecha_inicio = ?, fecha_fin = ?, dias_especificos = ?
+      min_ordenes = ?, vigente = ?, generar_qr = ?, max_usos_por_cliente = ?, fecha_inicio = ?, fecha_fin = ?, dias_especificos = ?
      WHERE id = ?`,
     [
       validado.nombre,
@@ -213,6 +272,8 @@ const actualizarPromocion = async (id, cambios) => {
       validado.tipoClienteAplica,
       validado.minOrdenes,
       validado.vigente ? 1 : 0,
+      validado.generarQr ? 1 : 0,
+      validado.maxUsosPorCliente,
       validado.fechaInicio,
       validado.fechaFin,
       JSON.stringify(validado.diasEspecificos),
@@ -243,6 +304,7 @@ const calcularDescuentoPromocion = (promocion, subtotal) => {
 module.exports = {
   obtenerPromociones,
   obtenerPromocionPorId,
+  consultarUsosCuponQr,
   obtenerPromocionesVigentes,
   obtenerPromocionesAplicables,
   crearPromocion,

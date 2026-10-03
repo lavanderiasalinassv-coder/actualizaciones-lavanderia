@@ -16,6 +16,16 @@
               <ion-icon :icon="addOutline" />
               Programar semana
             </button>
+            <button
+              class="btn-descargar-horario-pdf"
+              type="button"
+              :disabled="generandoHorarioPdf"
+              title="Descargar horario mensual en PDF"
+              @click="descargarHorarioMensualPdf"
+            >
+              <ion-icon :icon="downloadOutline" />
+              {{ generandoHorarioPdf ? 'Preparando...' : 'Descargar PDF' }}
+            </button>
           </div>
         </div>
 
@@ -813,6 +823,7 @@ import { IonButton, IonIcon, IonModal, onIonViewWillEnter } from '@ionic/vue'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import AppShell from '@/components/AppShell.vue'
 import { useRouter } from 'vue-router'
+import { jsPDF } from 'jspdf'
 import { useHorarios, type TurnoProgramado } from '@/composables/Usehorarios'
 import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica } from '@/composables/useFechas'
 import { useSesion } from '@/composables/useSesion'
@@ -823,6 +834,7 @@ import {
   cashOutline,
   closeOutline,
   createOutline,
+  downloadOutline,
   peopleOutline,
   refreshOutline,
   timeOutline,
@@ -1588,6 +1600,10 @@ type DiaCalendarioAdmin = {
     nombre: string
     horaInicio: string
     horaFin: string
+    horaAlmuerzoInicio?: string | null
+    horaAlmuerzoFin?: string | null
+    horasExtra?: boolean
+    rol?: string
     libre?: boolean
   }>
 }
@@ -1621,8 +1637,12 @@ const calendarioAdminMes = computed<DiaCalendarioAdmin[]>(() => {
       .map((turno) => ({
         id: turno.id,
         nombre: nombreDe(turno.empleadoId),
+        rol: empleados.value.find((empleado) => empleado.id === turno.empleadoId)?.rol,
         horaInicio: turno.horaInicio,
         horaFin: turno.horaFin,
+        horaAlmuerzoInicio: turno.horaAlmuerzoInicio,
+        horaAlmuerzoFin: turno.horaAlmuerzoFin,
+        horasExtra: turno.horasExtra,
         libre: turno.libre
       }))
     dias.push({ clave: fecha, fecha, numero, esRelleno: false, turnos: turnosDia })
@@ -1630,6 +1650,210 @@ const calendarioAdminMes = computed<DiaCalendarioAdmin[]>(() => {
 
   return dias
 })
+
+const generandoHorarioPdf = ref(false)
+
+const descargarHorarioMensualPdf = () => {
+  if (generandoHorarioPdf.value) return
+  generandoHorarioPdf.value = true
+
+  try {
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
+    const ancho = pdf.internal.pageSize.getWidth()
+    const alto = pdf.internal.pageSize.getHeight()
+    const margen = 9
+    const anchoContenido = ancho - margen * 2
+    const tituloMes = nombreMesCalendario.value.replace(/^./, (letra) => letra.toLocaleUpperCase('es-SV'))
+    const turnosMes = calendarioAdminMes.value
+      .filter((dia) => !dia.esRelleno)
+      .flatMap((dia) => dia.turnos.map((turno) => ({ ...turno, fecha: dia.fecha, numeroDia: dia.numero })))
+    const personasMes = new Set(turnosMes.map((turno) => turno.nombre)).size
+
+    const dibujarEncabezado = (subtitulo: string) => {
+      pdf.setFillColor(18, 45, 67)
+      pdf.rect(0, 0, ancho, 30, 'F')
+      pdf.setFillColor(220, 170, 72)
+      pdf.rect(0, 30, ancho, 1.5, 'F')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9)
+      pdf.setTextColor(211, 225, 236)
+      pdf.text('LAVANDERÍA SALINAS  /  EQUIPO', margen, 9)
+      pdf.setFontSize(19)
+      pdf.setTextColor(255, 255, 255)
+      pdf.text('Horario mensual', margen, 19)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      pdf.setTextColor(226, 234, 240)
+      pdf.text(subtitulo, margen, 25)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(15)
+      pdf.setTextColor(255, 255, 255)
+      pdf.text(tituloMes, ancho - margen, 18, { align: 'right' })
+    }
+
+    dibujarEncabezado(`${personasMes} personas · ${turnosMes.length} turnos asignados`)
+
+    const nombresDiasPdf = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    const anchoColumna = anchoContenido / 7
+    const yDias = 36
+    const altoDias = 8
+    nombresDiasPdf.forEach((nombre, indice) => {
+      const x = margen + indice * anchoColumna
+      pdf.setFillColor(231, 237, 241)
+      pdf.roundedRect(x + 0.4, yDias, anchoColumna - 0.8, altoDias, 1.3, 1.3, 'F')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(7.5)
+      pdf.setTextColor(43, 65, 82)
+      pdf.text(nombre, x + anchoColumna / 2, yDias + 5.2, { align: 'center' })
+    })
+
+    const diasCalendario = [...calendarioAdminMes.value]
+    while (diasCalendario.length % 7 !== 0) {
+      diasCalendario.push({ clave: `relleno-final-${diasCalendario.length}`, fecha: '', numero: 0, esRelleno: true, turnos: [] })
+    }
+    const filas = diasCalendario.length / 7
+    const inicioGrid = yDias + altoDias + 1
+    const altoCelda = Math.min(25, (alto - inicioGrid - 15) / filas)
+    const anchoTexto = anchoColumna - 3.4
+
+    diasCalendario.forEach((dia, indice) => {
+      const fila = Math.floor(indice / 7)
+      const columna = indice % 7
+      const x = margen + columna * anchoColumna
+      const y = inicioGrid + fila * altoCelda
+
+      if (dia.esRelleno) pdf.setFillColor(245, 247, 249)
+      else pdf.setFillColor(255, 255, 255)
+      pdf.setDrawColor(214, 223, 229)
+      pdf.setLineWidth(0.25)
+      pdf.roundedRect(x + 0.4, y, anchoColumna - 0.8, altoCelda - 0.6, 1.4, 1.4, 'FD')
+      if (dia.esRelleno) return
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(8)
+      pdf.setTextColor(31, 52, 69)
+      pdf.text(String(dia.numero), x + 2, y + 4.3)
+
+      let yTexto = y + 7.5
+      const maxTurnosVisibles = Math.max(1, Math.floor((altoCelda - 10) / 5.6))
+      if (dia.turnos.length === 0) {
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(6.5)
+        pdf.setTextColor(144, 155, 165)
+        pdf.text('Sin turnos', x + 2, yTexto)
+        return
+      }
+
+      dia.turnos.slice(0, maxTurnosVisibles).forEach((turno) => {
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(6.2)
+        pdf.setTextColor(37, 59, 75)
+        const nombreLineas = pdf.splitTextToSize(turno.nombre, anchoTexto)
+        pdf.text(nombreLineas.slice(0, 1), x + 2, yTexto)
+        yTexto += 2.8
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(5.8)
+        pdf.setTextColor(79, 100, 115)
+        const horario = turno.libre ? 'Día libre' : `${turno.horaInicio || '--:--'} - ${turno.horaFin || '--:--'}`
+        pdf.text(horario, x + 2, yTexto)
+        yTexto += 2.8
+      })
+
+      if (dia.turnos.length > maxTurnosVisibles) {
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(5.8)
+        pdf.setTextColor(41, 104, 133)
+        pdf.text(`+${dia.turnos.length - maxTurnosVisibles} más`, x + 2, y + altoCelda - 2.3)
+      }
+    })
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(7)
+    pdf.setTextColor(105, 120, 132)
+    pdf.text('El detalle completo de turnos y almuerzos continúa en las páginas siguientes.', margen, alto - 7)
+    pdf.setFontSize(6.5)
+    pdf.text('Lavandería Salinas', ancho - margen, alto - 7, { align: 'right' })
+
+    let yDetalle = 44
+    const anchosColumnas = [30, 67, 43, 48, anchoContenido - 188]
+    const encabezados = ['Fecha', 'Persona / rol', 'Turno', 'Almuerzo', 'Notas']
+    const dibujarTablaEncabezados = () => {
+      let x = margen
+      encabezados.forEach((encabezado, indice) => {
+        pdf.setFillColor(18, 45, 67)
+        pdf.rect(x, yDetalle, anchosColumnas[indice], 9, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(255, 255, 255)
+        pdf.text(encabezado, x + 2, yDetalle + 5.8)
+        x += anchosColumnas[indice]
+      })
+      yDetalle += 9
+    }
+
+    const generarPaginaDetalle = () => {
+      pdf.addPage('letter', 'landscape')
+      dibujarEncabezado(`Detalle completo de turnos · ${tituloMes}`)
+      yDetalle = 40
+      dibujarTablaEncabezados()
+    }
+
+    const imprimirTextoCelda = (texto: string, x: number, y: number, anchoCelda: number) => {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7)
+      pdf.setTextColor(43, 61, 76)
+      const lineas = pdf.splitTextToSize(texto || '—', anchoCelda - 4)
+      pdf.text(lineas.slice(0, 2), x + 2, y + 4)
+    }
+
+    const turnosOrdenados = [...turnosMes].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.nombre.localeCompare(b.nombre))
+    if (turnosOrdenados.length) {
+      generarPaginaDetalle()
+      turnosOrdenados.forEach((turno, indice) => {
+        const altoFila = 10
+        if (yDetalle + altoFila > alto - 10) generarPaginaDetalle()
+        const fecha = new Date(`${turno.fecha}T00:00:00`).toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })
+        const nombreRol = turno.rol ? `${turno.nombre}\n${formatearRol(turno.rol)}` : turno.nombre
+        const horario = turno.libre ? 'Día libre' : `${turno.horaInicio} - ${turno.horaFin}`
+        const almuerzo = turno.libre
+          ? '—'
+          : turno.horaAlmuerzoInicio && turno.horaAlmuerzoFin
+            ? `${turno.horaAlmuerzoInicio} - ${turno.horaAlmuerzoFin}`
+            : 'No asignado'
+        const nota = turno.horasExtra ? 'Horas extra autorizadas' : turno.libre ? 'Descanso' : 'Turno regular'
+        if (indice % 2 === 0) pdf.setFillColor(248, 250, 251)
+        else pdf.setFillColor(255, 255, 255)
+        pdf.rect(margen, yDetalle, anchoContenido, altoFila, 'F')
+        pdf.setDrawColor(222, 229, 234)
+        pdf.setLineWidth(0.2)
+        pdf.line(margen, yDetalle + altoFila, margen + anchoContenido, yDetalle + altoFila)
+
+        let x = margen
+        imprimirTextoCelda(fecha, x, yDetalle, anchosColumnas[0]); x += anchosColumnas[0]
+        imprimirTextoCelda(nombreRol, x, yDetalle, anchosColumnas[1]); x += anchosColumnas[1]
+        imprimirTextoCelda(horario, x, yDetalle, anchosColumnas[2]); x += anchosColumnas[2]
+        imprimirTextoCelda(almuerzo, x, yDetalle, anchosColumnas[3]); x += anchosColumnas[3]
+        imprimirTextoCelda(nota, x, yDetalle, anchosColumnas[4])
+        yDetalle += altoFila
+      })
+    } else {
+      pdf.addPage('letter', 'landscape')
+      dibujarEncabezado(`Detalle completo de turnos · ${tituloMes}`)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(12)
+      pdf.setTextColor(110, 126, 138)
+      pdf.text('No hay turnos asignados en este mes.', ancho / 2, 70, { align: 'center' })
+    }
+
+    const nombreArchivo = tituloMes.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').toLowerCase()
+    pdf.save(`horario-mensual-${nombreArchivo}.pdf`)
+  } catch (error) {
+    console.error('No se pudo generar el horario mensual en PDF:', error)
+    window.alert('No se pudo generar el horario mensual en PDF.')
+  } finally {
+    generandoHorarioPdf.value = false
+  }
+}
 
 const calendarioUsuarioMes = computed<DiaCalendarioUsuario[]>(() => {
   const hoy = new Date()
@@ -3085,6 +3309,36 @@ const montoHoyEnVivo = computed(() => {
 .btn-programar:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(18, 58, 102, 0.28);
+}
+
+.btn-descargar-horario-pdf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid rgba(22, 139, 131, 0.28);
+  border-radius: 10px;
+  background: #e8f6f3;
+  color: #126b65;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.btn-descargar-horario-pdf:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(22, 139, 131, 0.5);
+  background: #d9efeb;
+}
+
+.btn-descargar-horario-pdf:disabled {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 /* ── Vista mensual ── */

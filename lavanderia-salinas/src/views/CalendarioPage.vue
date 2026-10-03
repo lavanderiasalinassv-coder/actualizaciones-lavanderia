@@ -41,7 +41,7 @@
           <input
             v-model="busquedaCalendario"
             type="text"
-            placeholder="Buscar por número o cliente..."
+            placeholder="Buscar"
           />
         </div>
 
@@ -229,15 +229,37 @@
       </ion-modal>
 
       <!-- ================= MODAL: DETALLE COMPLETO DE ORDEN ================= -->
-      <ion-modal :is-open="detalleAbierto" class="modal-ordenes" @didDismiss="cerrarDetalle">
+      <OrdenesPage
+        v-if="ordenSeleccionadaId"
+        :solo-detalle-id="ordenSeleccionadaId"
+        :mostrar-restaurar-cerrada="true"
+        @cerrado="cerrarDetalle"
+      />
+
+      <ion-modal :is-open="false" class="modal-ordenes" @didDismiss="cerrarDetalle">
         <div class="modal-detalle force-light">
-          <div class="modal-header">
+          <div
+            class="modal-header orden-header-estado"
+            :style="ordenSeleccionada ? {
+              background: estadoColores[ordenSeleccionada.estado].bg,
+              borderColor: estadoColores[ordenSeleccionada.estado].dot
+            } : {}"
+          >
             <div class="modal-header-left">
-              <div class="modal-icon">
+              <div
+                class="modal-icon"
+                :style="ordenSeleccionada ? {
+                  background: estadoColores[ordenSeleccionada.estado].dot,
+                  color: '#ffffff'
+                } : {}"
+              >
                 <ion-icon :icon="receiptOutline" />
               </div>
               <div>
-                <p class="detalle-numero">Orden {{ ordenSeleccionada?.numero ?? '' }}</p>
+                <p
+                  class="detalle-numero"
+                  :style="ordenSeleccionada ? { color: estadoColores[ordenSeleccionada.estado].textStrong } : {}"
+                >Orden {{ ordenSeleccionada?.numero ?? '' }}</p>
                 <h2>Detalle de orden</h2>
                 <p v-if="ordenSeleccionada?.estado === 'cerrada'" class="orden-cerrada-header">
                   {{ textoCierreOrden(ordenSeleccionada) }}
@@ -993,6 +1015,7 @@
 
 <script setup lang="ts">
 import AppShell from '@/components/AppShell.vue'
+import OrdenesPage from '@/views/OrdenesPage.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { IonIcon, IonModal, IonSpinner, onIonViewWillEnter, toastController } from '@ionic/vue'
 import {
@@ -3187,6 +3210,13 @@ const cambiarEstadoPago = async (id: string) => {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+.modal-header.orden-header-estado {
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .modal-header-left {

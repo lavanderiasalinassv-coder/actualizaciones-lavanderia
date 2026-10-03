@@ -1,5 +1,6 @@
 <template>
   <ion-page class="force-light" :style="estiloLogin">
+    <NieveNavidena />
     <ion-content class="keypad-container" :scroll-y="false" :style="estiloLogin">
       <div v-if="cargando" class="loading-overlay">
         <div class="escena-lavado">
@@ -292,14 +293,18 @@ import { personCircleOutline, fingerPrintOutline as iconoHuella, powerOutline, w
 import { autenticarUsuarioEquipo } from '@/composables/useEquipo'
 import { useSesion } from '@/composables/useSesion'
 import { useApariencia } from '@/composables/useApariencia'
+import NieveNavidena from '@/components/NieveNavidena.vue'
+import { useDiciembre } from '@/composables/useDiciembre'
 import { API_LOCAL_URL, getApiBaseUrl } from '@/composables/useApiConfig'
 import { guardarUsuarioConfiable, obtenerUsuarioConfiable, eliminarUsuarioConfiable } from '@/composables/use2FAConfiable'
+import logoNavidad from '@/assets/logo-navidad.png'
 
 const { apariencia, estiloLogin } = useApariencia()
+const esDiciembre = useDiciembre()
 const logoCloudinaryFallido = ref(false)
 const logoCargando = ref(false)
 const logoConexionError = ref(false)
-const logoActual = computed(() => logoCloudinaryFallido.value ? logo : (apariencia.loginImagen || logo))
+const logoActual = computed(() => esDiciembre.value ? logoNavidad : (logoCloudinaryFallido.value ? logo : (apariencia.loginImagen || logo)))
 const terminarCargaLogo = () => {
   logoCargando.value = false
 }
@@ -336,7 +341,12 @@ const actualizarReloj = () => {
     hour12: true
   })
 
-  fechaHoraActual.value = `${formatoFecha.format(ahora)} — ${formatoHora.format(ahora).toUpperCase()}`
+  const fecha = formatoFecha.formatToParts(ahora)
+    .map((parte) => parte.type === 'month'
+      ? `${parte.value.charAt(0).toLocaleUpperCase('es-ES')}${parte.value.slice(1)}`
+      : parte.value)
+    .join('')
+  fechaHoraActual.value = `${fecha} — ${formatoHora.format(ahora).toUpperCase()}`
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -969,7 +979,6 @@ ion-content {
   --background:
     radial-gradient(circle at 8% 10%,  rgba(18, 58, 102, 0.20) 0%, transparent 30%),
     radial-gradient(circle at 92% 8%,  rgba(169, 216, 238, 0.18) 0%, transparent 25%),
-    radial-gradient(circle at 50% 50%, rgba(207, 233, 245, 0.12) 0%, transparent 40%),
     radial-gradient(circle at 15% 80%, rgba(18, 58, 102, 0.14) 0%, transparent 28%),
     radial-gradient(circle at 85% 75%, rgba(169, 216, 238, 0.12) 0%, transparent 30%),
     linear-gradient(160deg, #f5f9fc 0%, #eef4f8 45%, #e7eff5 100%);
@@ -1103,7 +1112,6 @@ ion-content {
   --background:
     radial-gradient(circle at 8% 10%,  rgba(169, 216, 238, 0.20) 0%, transparent 28%),
     radial-gradient(circle at 90% 6%,  rgba(207, 233, 245, 0.26) 0%, transparent 26%),
-    radial-gradient(circle at 50% 52%, rgba(207, 233, 245, 0.14) 0%, transparent 38%),
     radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
     radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
     linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #123a66) 100%) !important;
@@ -1188,7 +1196,7 @@ ion-content {
   height: 140px;
   right: -40px;
   top: -30px;
-  background: color-mix(in srgb, var(--orb-color-uno) 16%, transparent);
+  background: color-mix(in srgb, var(--orb-color-uno) 2%, transparent);
 }
 
 .orb-two {
@@ -1526,7 +1534,6 @@ ion-content {
     --background:
       radial-gradient(circle at 8% 10%,  rgba(169, 216, 238, 0.20) 0%, transparent 28%),
       radial-gradient(circle at 90% 6%,  rgba(207, 233, 245, 0.26) 0%, transparent 26%),
-      radial-gradient(circle at 50% 52%, rgba(207, 233, 245, 0.14) 0%, transparent 38%),
       radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
       radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
       linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #123a66) 100%) !important;
@@ -1805,7 +1812,7 @@ ion-content {
 .olvide-pin-btn {
   background: transparent;
   border: none;
-  color: #4fb3e0;
+  color: #507383;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;

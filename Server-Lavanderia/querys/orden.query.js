@@ -46,7 +46,9 @@ const obtenerFechaHoraNegocioMySQL = (fecha = new Date()) => {
     second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(fecha);
-  const valores = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+  const valores = Object.fromEntries(
+    partes.map(({ type, value }) => [type, value]),
+  );
   return `${valores.year}-${valores.month}-${valores.day} ${valores.hour}:${valores.minute}:${valores.second}`;
 };
 
@@ -757,11 +759,11 @@ const actualizarCierreAlEliminarAnticipo = async (
     JSON.stringify(resumen),
     cierre.id,
   ]);
-  
+
   const pad = (valor) => String(valor).padStart(2, "0");
   const ahora = new Date();
   const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-  
+
   await conn.execute(
     `INSERT INTO movimientos_caja (id, tipo, monto, concepto, turno_id, numero_caja, usuario, creado_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -796,161 +798,161 @@ const recalcularTotales = (subtotal, orden, totalCargos) => {
 
 const obtenerOrdenes = async (reintento = false) => {
   try {
-  const [ordenRows] = await pool.query(
-    "SELECT * FROM ordenes ORDER BY secuencia DESC LIMIT 500",
-  );
-  if (!ordenRows.length) return [];
+    const [ordenRows] = await pool.query(
+      "SELECT * FROM ordenes ORDER BY secuencia DESC LIMIT 500",
+    );
+    if (!ordenRows.length) return [];
 
-  const ordenIds = ordenRows.map((orden) => orden.id);
-  const placeholdersOrdenes = ordenIds.map(() => "?").join(",");
-  const [
-    itemsRows,
-    fotosRows,
-    cargosRows,
-    anticiposRows,
-    movimientosRows,
-    turnoAbiertoRows,
-  ] = await Promise.all([
-    pool.query(
-      `SELECT * FROM orden_items WHERE orden_id IN (${placeholdersOrdenes})`,
-      ordenIds,
-    ),
-    pool.query(
-      `SELECT * FROM orden_fotos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY posicion ASC`,
-      ordenIds,
-    ),
-    pool.query(
-      `SELECT * FROM orden_cargos_extra WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
-      ordenIds,
-    ),
-    pool.query(
-      `SELECT * FROM orden_anticipos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
-      ordenIds,
-    ),
-    pool.query(
-      `SELECT * FROM orden_movimientos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha DESC`,
-      ordenIds,
-    ),
-    pool.query(
-      "SELECT turno_id FROM turno_caja_actual WHERE id = 1 AND abierto = 1 AND turno_id <> ''",
-    ),
-  ]).then((resultados) => resultados.map(([filas]) => filas));
-
-  const itemIds = itemsRows.map((item) => item.id);
-  const insumosRows = itemIds.length
-    ? (
-        await pool.query(
-          `SELECT * FROM orden_item_insumos WHERE orden_item_id IN (${itemIds.map(() => "?").join(",")})`,
-          itemIds,
-        )
-      )[0]
-    : [];
-  const turnoIds = [
-    ...new Set(
-      [
-        ...ordenRows.map((orden) => orden.turno_id),
-        ...anticiposRows.map((anticipo) => anticipo.turno_id),
-      ].filter(Boolean),
-    ),
-  ];
-  const cierresRows = turnoIds.length
-    ? (
-        await pool.query(
-          `SELECT turno_id, resumen FROM cierres_caja WHERE turno_id IN (${turnoIds.map(() => "?").join(",")})`,
-          turnoIds,
-        )
-      )[0]
-    : [];
-
-  // Incluye el turno abierto: todavía no tiene cierre, pero su ID es válido.
-  const turnosConCierre = new Set(cierresRows.map((row) => row.turno_id));
-  for (const turno of turnoAbiertoRows) turnosConCierre.add(turno.turno_id);
-  const referenciasCierres = obtenerReferenciasDeCierres(cierresRows);
-  const turnosAbiertos = new Set(
-    turnoAbiertoRows.map((turno) => turno.turno_id),
-  );
-
-  const porOrden = (filas, campo = "orden_id") => {
-    const grupos = new Map();
-    for (const fila of filas) {
-      const clave = fila[campo];
-      if (!grupos.has(clave)) grupos.set(clave, []);
-      grupos.get(clave).push(fila);
-    }
-    return grupos;
-  };
-  const itemsPorOrden = porOrden(itemsRows);
-  const fotosPorOrden = porOrden(fotosRows);
-  const cargosPorOrden = porOrden(cargosRows);
-  const anticiposPorOrden = porOrden(anticiposRows);
-  const movimientosPorOrden = porOrden(movimientosRows);
-  const insumosPorItem = porOrden(insumosRows, "orden_item_id");
-
-  return ordenRows.map((row) => {
-    const items = (itemsPorOrden.get(row.id) || []).map((item) => ({
-      id: item.producto_id,
-      nombre: item.nombre,
-      precio: toNumber(item.precio),
-      unidad: item.unidad,
-      cantidad: toNumber(item.cantidad),
-      nota: item.nota || "",
-      insumos: (insumosPorItem.get(item.id) || []).map((insumo) => ({
-        productoId: insumo.producto_id,
-        cantidad: toNumber(insumo.cantidad),
-      })),
-    }));
-    const esEntregaCerrada =
-      row.estado === "entregado" ||
-      row.estado === "cerrada" ||
-      row.estado === "Cerrada-Cancelada";
-    const turnoHuerfano =
-      esEntregaCerrada &&
-      Boolean(row.turno_id) &&
-      (!turnosConCierre.has(row.turno_id) ||
-        (!turnosAbiertos.has(row.turno_id) &&
-          !ordenEstaEnCierre(referenciasCierres.get(row.turno_id), row)));
-    return {
-      ...mapOrdenBase(row),
-      items,
-      fotos: (fotosPorOrden.get(row.id) || []).map((foto) => foto.url),
-      cargosExtra: (cargosPorOrden.get(row.id) || []).map((cargo) => ({
-        id: cargo.id,
-        descripcion: cargo.descripcion,
-        monto: toNumber(cargo.monto),
-        fecha: toISO(cargo.fecha),
-      })),
-      anticipos: (anticiposPorOrden.get(row.id) || []).map((anticipo) => ({
-        id: anticipo.id,
-        monto: toNumber(anticipo.monto),
-        fecha: toISO(anticipo.fecha),
-        turnoId: anticipo.turno_id,
-        cierreHuerfano:
-          Boolean(anticipo.turno_id) &&
-          (!turnosConCierre.has(anticipo.turno_id) ||
-            (!turnosAbiertos.has(anticipo.turno_id) &&
-              !referenciasCierres
-                .get(anticipo.turno_id)
-                ?.anticipos.has(anticipo.id))),
-      })),
-      turnoHuerfano,
-      movimientos: (movimientosPorOrden.get(row.id) || []).map(
-        (movimientoRow) => {
-          const movimiento = obtenerMovimientoLegado(
-            movimientoRow.texto,
-            movimientoRow.usuario_nombre,
-            movimientoRow.usuario_id,
-          );
-          return {
-            id: movimientoRow.id,
-            texto: movimiento.texto,
-            fecha: toISO(movimientoRow.fecha),
-            usuarioId: movimientoRow.usuario_id || null,
-            usuarioNombre: movimiento.usuarioNombre,
-          };
-        },
+    const ordenIds = ordenRows.map((orden) => orden.id);
+    const placeholdersOrdenes = ordenIds.map(() => "?").join(",");
+    const [
+      itemsRows,
+      fotosRows,
+      cargosRows,
+      anticiposRows,
+      movimientosRows,
+      turnoAbiertoRows,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT * FROM orden_items WHERE orden_id IN (${placeholdersOrdenes})`,
+        ordenIds,
       ),
+      pool.query(
+        `SELECT * FROM orden_fotos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY posicion ASC`,
+        ordenIds,
+      ),
+      pool.query(
+        `SELECT * FROM orden_cargos_extra WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
+        ordenIds,
+      ),
+      pool.query(
+        `SELECT * FROM orden_anticipos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha ASC`,
+        ordenIds,
+      ),
+      pool.query(
+        `SELECT * FROM orden_movimientos WHERE orden_id IN (${placeholdersOrdenes}) ORDER BY fecha DESC`,
+        ordenIds,
+      ),
+      pool.query(
+        "SELECT turno_id FROM turno_caja_actual WHERE id = 1 AND abierto = 1 AND turno_id <> ''",
+      ),
+    ]).then((resultados) => resultados.map(([filas]) => filas));
+
+    const itemIds = itemsRows.map((item) => item.id);
+    const insumosRows = itemIds.length
+      ? (
+          await pool.query(
+            `SELECT * FROM orden_item_insumos WHERE orden_item_id IN (${itemIds.map(() => "?").join(",")})`,
+            itemIds,
+          )
+        )[0]
+      : [];
+    const turnoIds = [
+      ...new Set(
+        [
+          ...ordenRows.map((orden) => orden.turno_id),
+          ...anticiposRows.map((anticipo) => anticipo.turno_id),
+        ].filter(Boolean),
+      ),
+    ];
+    const cierresRows = turnoIds.length
+      ? (
+          await pool.query(
+            `SELECT turno_id, resumen FROM cierres_caja WHERE turno_id IN (${turnoIds.map(() => "?").join(",")})`,
+            turnoIds,
+          )
+        )[0]
+      : [];
+
+    // Incluye el turno abierto: todavía no tiene cierre, pero su ID es válido.
+    const turnosConCierre = new Set(cierresRows.map((row) => row.turno_id));
+    for (const turno of turnoAbiertoRows) turnosConCierre.add(turno.turno_id);
+    const referenciasCierres = obtenerReferenciasDeCierres(cierresRows);
+    const turnosAbiertos = new Set(
+      turnoAbiertoRows.map((turno) => turno.turno_id),
+    );
+
+    const porOrden = (filas, campo = "orden_id") => {
+      const grupos = new Map();
+      for (const fila of filas) {
+        const clave = fila[campo];
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(fila);
+      }
+      return grupos;
     };
-  });
+    const itemsPorOrden = porOrden(itemsRows);
+    const fotosPorOrden = porOrden(fotosRows);
+    const cargosPorOrden = porOrden(cargosRows);
+    const anticiposPorOrden = porOrden(anticiposRows);
+    const movimientosPorOrden = porOrden(movimientosRows);
+    const insumosPorItem = porOrden(insumosRows, "orden_item_id");
+
+    return ordenRows.map((row) => {
+      const items = (itemsPorOrden.get(row.id) || []).map((item) => ({
+        id: item.producto_id,
+        nombre: item.nombre,
+        precio: toNumber(item.precio),
+        unidad: item.unidad,
+        cantidad: toNumber(item.cantidad),
+        nota: item.nota || "",
+        insumos: (insumosPorItem.get(item.id) || []).map((insumo) => ({
+          productoId: insumo.producto_id,
+          cantidad: toNumber(insumo.cantidad),
+        })),
+      }));
+      const esEntregaCerrada =
+        row.estado === "entregado" ||
+        row.estado === "cerrada" ||
+        row.estado === "Cerrada-Cancelada";
+      const turnoHuerfano =
+        esEntregaCerrada &&
+        Boolean(row.turno_id) &&
+        (!turnosConCierre.has(row.turno_id) ||
+          (!turnosAbiertos.has(row.turno_id) &&
+            !ordenEstaEnCierre(referenciasCierres.get(row.turno_id), row)));
+      return {
+        ...mapOrdenBase(row),
+        items,
+        fotos: (fotosPorOrden.get(row.id) || []).map((foto) => foto.url),
+        cargosExtra: (cargosPorOrden.get(row.id) || []).map((cargo) => ({
+          id: cargo.id,
+          descripcion: cargo.descripcion,
+          monto: toNumber(cargo.monto),
+          fecha: toISO(cargo.fecha),
+        })),
+        anticipos: (anticiposPorOrden.get(row.id) || []).map((anticipo) => ({
+          id: anticipo.id,
+          monto: toNumber(anticipo.monto),
+          fecha: toISO(anticipo.fecha),
+          turnoId: anticipo.turno_id,
+          cierreHuerfano:
+            Boolean(anticipo.turno_id) &&
+            (!turnosConCierre.has(anticipo.turno_id) ||
+              (!turnosAbiertos.has(anticipo.turno_id) &&
+                !referenciasCierres
+                  .get(anticipo.turno_id)
+                  ?.anticipos.has(anticipo.id))),
+        })),
+        turnoHuerfano,
+        movimientos: (movimientosPorOrden.get(row.id) || []).map(
+          (movimientoRow) => {
+            const movimiento = obtenerMovimientoLegado(
+              movimientoRow.texto,
+              movimientoRow.usuario_nombre,
+              movimientoRow.usuario_id,
+            );
+            return {
+              id: movimientoRow.id,
+              texto: movimiento.texto,
+              fecha: toISO(movimientoRow.fecha),
+              usuarioId: movimientoRow.usuario_id || null,
+              usuarioNombre: movimiento.usuarioNombre,
+            };
+          },
+        ),
+      };
+    });
   } catch (error) {
     const erroresDeConexion = [
       "PROTOCOL_CONNECTION_LOST",
@@ -958,7 +960,9 @@ const obtenerOrdenes = async (reintento = false) => {
       "ETIMEDOUT",
     ];
     if (!reintento && erroresDeConexion.includes(error.code)) {
-      console.warn("Conexión MySQL interrumpida al listar órdenes; reintentando una vez.");
+      console.warn(
+        "Conexión MySQL interrumpida al listar órdenes; reintentando una vez.",
+      );
       return obtenerOrdenes(true);
     }
     throw error;
@@ -971,10 +975,126 @@ const obtenerOrdenPorId = async (id) => {
   return orden;
 };
 
+const validarCanjeCuponQr = async (conn, datos) => {
+  const promocionId = String(datos.promocionQrId || "").trim();
+  if (!promocionId) return null;
+
+  const [[promocion]] = await conn.query(
+    "SELECT * FROM promociones WHERE id = ? FOR UPDATE",
+    [promocionId],
+  );
+  if (!promocion || !toBool(promocion.generar_qr)) {
+    throw new AppError(
+      "El código no corresponde a una promoción QR válida.",
+      400,
+    );
+  }
+  if (!toBool(promocion.vigente)) {
+    throw new AppError("La promoción está inactiva.", 409);
+  }
+
+  const hoy = obtenerFechaHoraNegocioMySQL().slice(0, 10);
+  const fechaInicio = toDateStr(promocion.fecha_inicio);
+  const fechaFin = toDateStr(promocion.fecha_fin);
+  if (fechaFin < hoy) throw new AppError("Promoción expirada", 409);
+  if (fechaInicio > hoy) {
+    throw new AppError("Esta promoción todavía no está disponible.", 409);
+  }
+
+  let diasAplicables = promocion.dias_especificos;
+  if (typeof diasAplicables === "string") {
+    try {
+      diasAplicables = JSON.parse(diasAplicables);
+    } catch {
+      diasAplicables = [];
+    }
+  }
+  const diaEnIngles = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: "America/Guatemala",
+  })
+    .format(new Date())
+    .toLowerCase();
+  const diasSemana = {
+    monday: "lunes",
+    tuesday: "martes",
+    wednesday: "miercoles",
+    thursday: "jueves",
+    friday: "viernes",
+    saturday: "sabado",
+    sunday: "domingo",
+  };
+  if (
+    Array.isArray(diasAplicables) &&
+    diasAplicables.length > 0 &&
+    !diasAplicables.includes(diasSemana[diaEnIngles])
+  ) {
+    throw new AppError("Esta promoción no aplica hoy.", 409);
+  }
+
+  const clienteTelefono =
+    `${datos.codigoPais || ""}${datos.telefono || ""}`.replace(/\D/g, "");
+  if (!clienteTelefono) {
+    throw new AppError(
+      "Se necesita el teléfono del cliente para validar el cupón.",
+      400,
+    );
+  }
+  const [[cliente]] = await conn.query(
+    "SELECT total_ordenes FROM clientes WHERE celular = ? LIMIT 1",
+    [clienteTelefono],
+  );
+  const totalOrdenesCliente = Number(cliente?.total_ordenes || 0);
+  if (promocion.tipo_cliente_aplica === "registrados" && !cliente) {
+    throw new AppError(
+      "Esta promoción es exclusiva para clientes registrados.",
+      409,
+    );
+  }
+  if (
+    promocion.tipo_cliente_aplica === "recurrentes" &&
+    (!cliente ||
+      totalOrdenesCliente <= 5 ||
+      (promocion.min_ordenes &&
+        totalOrdenesCliente < Number(promocion.min_ordenes)))
+  ) {
+    throw new AppError(
+      "El cliente no cumple los requisitos de esta promoción.",
+      409,
+    );
+  }
+
+  const maxUsos =
+    promocion.max_usos_por_cliente == null
+      ? null
+      : Number(promocion.max_usos_por_cliente);
+  if (maxUsos != null) {
+    const [[resultado]] = await conn.query(
+      `SELECT COUNT(*) AS usos
+       FROM promocion_usos_qr uso
+       INNER JOIN ordenes orden ON orden.id = uso.orden_id
+       WHERE uso.promocion_id = ? AND uso.cliente_telefono = ?
+         AND orden.estado NOT IN ('cancelada', 'Cerrada-Cancelada')`,
+      [promocionId, clienteTelefono],
+    );
+    const usos = Number(resultado?.usos || 0);
+    if (usos >= maxUsos) {
+      throw new AppError(
+        "El cliente excedió el máximo de usos permitido para este cupón.",
+        409,
+      );
+    }
+  }
+
+  return { promocionId, clienteTelefono };
+};
+
 const crearOrden = async (datos, usuario = "Sistema") => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    const canjeCuponQr = await validarCanjeCuponQr(conn, datos);
 
     const id = randomUUID();
     const subtotal = calcularSubtotal(datos.items || []);
@@ -1041,7 +1161,7 @@ const crearOrden = async (datos, usuario = "Sistema") => {
     const pad = (valor) => String(valor).padStart(2, "0");
     const ahora = new Date();
     const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-    
+
     await conn.execute(
       `INSERT INTO ordenes (
         id, estado, turno_id, nombre_cliente, codigo_pais, telefono, correo,
@@ -1088,6 +1208,20 @@ const crearOrden = async (datos, usuario = "Sistema") => {
         fechaLocalMySQL,
       ],
     );
+
+    if (canjeCuponQr) {
+      await conn.execute(
+        `INSERT INTO promocion_usos_qr
+          (id, promocion_id, orden_id, cliente_telefono)
+         VALUES (?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          canjeCuponQr.promocionId,
+          id,
+          canjeCuponQr.clienteTelefono,
+        ],
+      );
+    }
 
     const anticipoId = montoRecibido > 0 ? randomUUID() : null;
     let fechaAnticipo = new Date();
@@ -1431,7 +1565,14 @@ const actualizarPago = async (
         anticipoId = randomUUID();
         await conn.execute(
           "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?,COALESCE(?, ?))",
-          [anticipoId, id, turnoActualId, saldoPendiente, fechaPago, fechaLocalMySQL],
+          [
+            anticipoId,
+            id,
+            turnoActualId,
+            saldoPendiente,
+            fechaPago,
+            fechaLocalMySQL,
+          ],
         );
       }
 
@@ -1550,7 +1691,14 @@ const registrarAnticipo = async (
       const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
       await conn.execute(
         "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?, COALESCE(?, ?))",
-        [anticipoId, id, turnoId, montoAplicado, fechaAnticipoValor, fechaLocalMySQL],
+        [
+          anticipoId,
+          id,
+          turnoId,
+          montoAplicado,
+          fechaAnticipoValor,
+          fechaLocalMySQL,
+        ],
       );
       numeroCaja = await actualizarCierreConAnticipo(
         conn,
@@ -2090,9 +2238,13 @@ const eliminarOrden = async (id) => {
     );
     await conn.execute("DELETE FROM orden_items WHERE orden_id = ?", [id]);
     await conn.execute("DELETE FROM orden_fotos WHERE orden_id = ?", [id]);
-    await conn.execute("DELETE FROM orden_cargos_extra WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_cargos_extra WHERE orden_id = ?", [
+      id,
+    ]);
     await conn.execute("DELETE FROM orden_anticipos WHERE orden_id = ?", [id]);
-    await conn.execute("DELETE FROM orden_movimientos WHERE orden_id = ?", [id]);
+    await conn.execute("DELETE FROM orden_movimientos WHERE orden_id = ?", [
+      id,
+    ]);
     await conn.execute("DELETE FROM ordenes WHERE id = ?", [id]);
     await conn.commit();
     return true;
@@ -2493,7 +2645,7 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
     const pad = (valor) => String(valor).padStart(2, "0");
     const ahora = new Date();
     const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-    
+
     await conn.execute(
       "UPDATE ordenes SET estado = ?, estado_pago = ?, monto_recibido = ?, cambio = ?, turno_id = ?, updated_at = ? WHERE id = ?",
       [
@@ -2544,11 +2696,11 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
           "DELETE FROM movimientos_caja WHERE turno_id = ? AND tipo = 'cierre' AND monto > 0 AND concepto LIKE ?",
           [orden.turno_id, `%${formatearNumero(orden.secuencia)}%`],
         );
-        
+
         const pad = (valor) => String(valor).padStart(2, "0");
         const ahora = new Date();
         const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-        
+
         await conn.execute(
           `INSERT INTO movimientos_caja (id, tipo, monto, concepto, turno_id, numero_caja, usuario, creado_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -2580,58 +2732,77 @@ const aplicarDescuentoOrden = async (id, tipo, valor, usuario = "Sistema") => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    
+
     const [[orden]] = await conn.query(
       "SELECT * FROM ordenes WHERE id = ? FOR UPDATE",
       [id],
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
-    
+
     if (orden.estado === "cerrada" || orden.estado === "Cerrada-Cancelada") {
-      throw new AppError("No se puede aplicar descuento a una orden cerrada.", 400);
+      throw new AppError(
+        "No se puede aplicar descuento a una orden cerrada.",
+        400,
+      );
     }
-    
+
     const subtotal = toNumber(orden.subtotal);
     let descuentoAplicado = 0;
-    
+
     if (tipo === "porcentaje") {
       const porcentaje = Math.max(0, Math.min(100, Number(valor)));
       descuentoAplicado = Number((subtotal * (porcentaje / 100)).toFixed(2));
     } else if (tipo === "monto") {
       descuentoAplicado = Math.max(0, Math.min(subtotal, Number(valor)));
     } else {
-      throw new AppError("Tipo de descuento inválido. Use 'porcentaje' o 'monto'.", 400);
+      throw new AppError(
+        "Tipo de descuento inválido. Use 'porcentaje' o 'monto'.",
+        400,
+      );
     }
-    
-    const total = Math.max(0, Number((subtotal - descuentoAplicado).toFixed(2)));
+
+    const total = Math.max(
+      0,
+      Number((subtotal - descuentoAplicado).toFixed(2)),
+    );
     const montoRecibido = toNumber(orden.monto_recibido);
     const cambio = Math.max(0, Number((montoRecibido - total).toFixed(2)));
-    
-    const estadoPago = montoRecibido >= total && total > 0
-      ? "pagado"
-      : montoRecibido > 0
-        ? "anticipo"
-        : "porCobrar";
-    
+
+    const estadoPago =
+      montoRecibido >= total && total > 0
+        ? "pagado"
+        : montoRecibido > 0
+          ? "anticipo"
+          : "porCobrar";
+
     const pad = (valor) => String(valor).padStart(2, "0");
     const ahora = new Date();
     const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-    
+
     await conn.execute(
       `UPDATE ordenes 
        SET descuento = ?, descuento_manual = ?, total = ?, cambio = ?, estado_pago = ?, updated_at = ? 
        WHERE id = ?`,
-      [descuentoAplicado, descuentoAplicado, total, cambio, estadoPago, fechaLocalMySQL, id],
+      [
+        descuentoAplicado,
+        descuentoAplicado,
+        total,
+        cambio,
+        estadoPago,
+        fechaLocalMySQL,
+        id,
+      ],
     );
-    
-    const textoTipo = tipo === "porcentaje" ? `${valor}%` : `$${Number(valor).toFixed(2)}`;
+
+    const textoTipo =
+      tipo === "porcentaje" ? `${valor}%` : `$${Number(valor).toFixed(2)}`;
     await registrarMovimientoConn(
       conn,
       id,
       `Descuento aplicado: ${textoTipo} (-$${descuentoAplicado.toFixed(2)})`,
       usuario,
     );
-    
+
     await conn.commit();
     return await obtenerOrdenCompleta(id);
   } catch (error) {

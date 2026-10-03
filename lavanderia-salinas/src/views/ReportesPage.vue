@@ -4,17 +4,17 @@
       <section class="turno-panel">
         <div class="turno-panel-left">
           <div class="turno-panel-icon">
-            <ion-icon :icon="cardOutline" />
+            <ion-icon :icon="cashOutline" />
           </div>
-          <div>
+          <div class="turno-panel-info">
             <p class="turno-panel-label">{{ turno.abierto ? 'Caja abierta' : 'Caja cerrada' }}</p>
-            <h2>{{ turno.abierto ? `Caja #${turno.numeroCaja}` : 'Inicia un turno' }}</h2>
-            <p v-if="turno.abierto" class="turno-panel-meta">
-              <ion-icon :icon="timeOutline" />
-              {{ tiempoTranscurrido }}
-              <span>·</span>
-              {{ usuario.nombre }}
-            </p>
+            <div class="turno-panel-heading">
+              <h2>{{ turno.abierto ? `Caja #${turno.numeroCaja}` : 'Inicia un turno' }}</h2>
+              <p v-if="turno.abierto" class="turno-panel-meta">
+                <ion-icon :icon="timeOutline" />
+                <span>{{ tiempoTranscurrido }}</span>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -50,52 +50,76 @@
 
       <!-- ───────── Totales del turno ───────── -->
       <section v-if="(!esCajero || esAdministrador) && resumenReportesExpandido" class="kpi-grid">
-        <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'efectivo' }" :disabled="ventasHoy - totalGastosTurnoActual <= 0" @click="seleccionarFiltroKpi('efectivo')">
-          <p class="label">Efectivo en Caja</p>
+        <button type="button" class="kpi-card kpi-card-interactivo kpi-efectivo" :class="{ activo: filtroKpi === 'efectivo' }" :disabled="ventasHoy - totalGastosTurnoActual <= 0" @click="seleccionarFiltroKpi('efectivo')">
+          <div class="kpi-card-top">
+            <p class="label">Efectivo en caja</p>
+            <span class="kpi-card-icon"><ion-icon :icon="cashOutline" /></span>
+          </div>
           <strong class="kpi-monto">${{ (ventasHoy - totalGastosTurnoActual).toFixed(2) }}</strong>
-          <span class="kpi-meta">{{ ordenesHoy.length }} órdenes de la caja abierta</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">{{ ordenesHoy.length }} órdenes de la caja abierta</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
 
-        <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'cobrado' }" :disabled="cobradoHoy <= 0" @click="seleccionarFiltroKpi('cobrado')">
-          <p class="label">Cobrado del turno</p>
+        <button type="button" class="kpi-card kpi-card-interactivo kpi-cobrado" :class="{ activo: filtroKpi === 'cobrado' }" :disabled="cobradoHoy <= 0" @click="seleccionarFiltroKpi('cobrado')">
+          <div class="kpi-card-top">
+            <p class="label">Cobrado del turno</p>
+            <span class="kpi-card-icon"><ion-icon :icon="checkmarkCircleOutline" /></span>
+          </div>
           <strong class="kpi-monto verde">${{ cobradoHoy.toFixed(2) }}</strong>
-          <span class="kpi-meta">No incluye los gastos</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">No incluye los gastos</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
 
-         <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'ventas' }" :disabled="ventaDelDiaTurnoActual <= 0" @click="seleccionarFiltroKpi('ventas')">
-          <p class="label">Venta del Día</p>
+         <button type="button" class="kpi-card kpi-card-interactivo kpi-ventas" :class="{ activo: filtroKpi === 'ventas' }" :disabled="ventaDelDiaTurnoActual <= 0" @click="seleccionarFiltroKpi('ventas')">
+          <div class="kpi-card-top">
+            <p class="label">Venta del día</p>
+            <span class="kpi-card-icon"><ion-icon :icon="cardOutline" /></span>
+          </div>
           <strong class="kpi-monto gris">${{ventaDelDiaTurnoActual.toFixed(2)}}</strong>
-          <span class="kpi-meta">Suma de ordenes creadas en el turno actual</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">Suma de órdenes creadas en el turno actual</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
 
-        <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'anticipo' }" :disabled="anticiposHoy <= 0" @click="seleccionarFiltroKpi('anticipo')">
-          <p class="label">Anticipos del turno</p>
+        <button type="button" class="kpi-card kpi-card-interactivo kpi-anticipos" :class="{ activo: filtroKpi === 'anticipo' }" :disabled="anticiposHoy <= 0" @click="seleccionarFiltroKpi('anticipo')">
+          <div class="kpi-card-top">
+            <p class="label">Anticipos del turno</p>
+            <span class="kpi-card-icon"><ion-icon :icon="timeOutline" /></span>
+          </div>
           <strong class="kpi-monto azul">${{ anticiposHoy.toFixed(2) }}</strong>
-          <span class="kpi-meta">Anticipos de órdenes con saldo pendiente</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">Anticipos de órdenes con saldo pendiente</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
 
-        <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'pendiente' }" :disabled="pendienteCobroTotal <= 0" @click="seleccionarFiltroKpi('pendiente')">
-          <p class="label">Pendiente de cobrar</p>
+        <button type="button" class="kpi-card kpi-card-interactivo kpi-pendiente" :class="{ activo: filtroKpi === 'pendiente' }" :disabled="pendienteCobroTotal <= 0" @click="seleccionarFiltroKpi('pendiente')">
+          <div class="kpi-card-top">
+            <p class="label">Pendiente de cobrar</p>
+            <span class="kpi-card-icon"><ion-icon :icon="timeOutline" /></span>
+          </div>
           <strong class="kpi-monto ambar">${{ pendienteCobroTotal.toFixed(2) }}</strong>
-          <span class="kpi-meta">{{ ordenesPendientesCobro.length }} órdenes</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">{{ ordenesPendientesCobro.length }} órdenes</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
 
-        <div class="kpi-card">
-          <p class="label">Cancelaciones</p>
+        <div class="kpi-card kpi-cancelaciones">
+          <div class="kpi-card-top">
+            <p class="label">Cancelaciones</p>
+            <span class="kpi-card-icon"><ion-icon :icon="closeOutline" /></span>
+          </div>
           <strong class="kpi-monto rojo">${{ canceladasTotalPerdido.toFixed(2) }}</strong>
           <span class="kpi-meta">{{ ordenesCanceladas.length }} órdenes canceladas</span>
         </div>
 
-        <button type="button" class="kpi-card kpi-card-interactivo" :class="{ activo: filtroKpi === 'gastos' }" :disabled="totalGastosTurnoActual <= 0" @click="seleccionarFiltroGastos">
-          <p class="label">Gastos</p>
+        <button type="button" class="kpi-card kpi-card-interactivo kpi-gastos" :class="{ activo: filtroKpi === 'gastos' }" :disabled="totalGastosTurnoActual <= 0" @click="seleccionarFiltroGastos">
+          <div class="kpi-card-top">
+            <p class="label">Gastos</p>
+            <span class="kpi-card-icon"><ion-icon :icon="receiptOutline" /></span>
+          </div>
           <strong class="kpi-monto rojo">${{ totalGastosTurnoActual.toFixed(2) }}</strong>
-          <span class="kpi-meta">{{ gastosTurnoActual.length }} movimientos de este turno</span>
+          <div class="kpi-card-footer"><span class="kpi-meta">{{ gastosTurnoActual.length }} movimientos de este turno</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
       </section>
 
       <!-- ───────── Gráficas ───────── -->
-      <section v-if="(!esCajero || esAdministrador) && resumenReportesExpandido" class="graficas-grid">
-        <div class="grafica-card">
+      <section
+        v-if="(!esCajero || esAdministrador) && resumenReportesExpandido"
+        class="graficas-grid"
+      >
+        <div v-if="resumenReportesExpandido" class="grafica-card grafica-card-barras">
           <div class="grafica-header">
             <div class="grafica-titulo">
               <button type="button" class="rango-flecha" title="Rango anterior" aria-label="Ver rango anterior" @click="irRangoAnterior">
@@ -124,7 +148,7 @@
           </div>
         </div>
 
-        <div class="grafica-card">
+        <div v-if="resumenReportesExpandido" class="grafica-card grafica-card-distribucion">
           <div class="grafica-header">
             <strong>Distribución de órdenes</strong>
             <span class="grafica-total">{{ totalEstadosGrafico }} en el rango</span>
@@ -145,6 +169,48 @@
             </div>
           </div>
         </div>
+
+        <section ref="movimientosCardRef" class="movimientos-card">
+          <div class="movimientos-header">
+            <strong>Gastos de caja</strong>
+            <span class="grafica-total">{{ gastosTurnoActual.length }} gastos · ${{ totalGastosTurnoActual.toFixed(2) }}</span>
+          </div>
+
+          <div class="movimientos-scroll">
+            <article v-for="mov in movimientosTurnoActual" :key="mov.id" class="movimiento-item">
+              <div class="movimiento-indicador" :class="`tipo-${mov.tipo}`"></div>
+              <div class="movimiento-info">
+                <div class="movimiento-titulo-row">
+                  <strong>{{ etiquetaMovimiento(mov.tipo) }}</strong>
+                  <span v-if="mov.tipo === 'gasto' && extraerTipoGasto(mov.concepto).tipo" class="movimiento-tipo-gasto">
+                    {{ extraerTipoGasto(mov.concepto).tipo }}
+                  </span>
+                </div>
+                <p>{{ mov.tipo === 'gasto' ? extraerTipoGasto(mov.concepto).motivo : mov.concepto }}</p>
+                <small>{{ formatearFechaHora(mov.creadoAt) }} · Caja #{{ mov.numeroCaja || '—' }}</small>
+                <small v-if="mov.tipo === 'gasto'" class="movimiento-usuario">
+                  Reportado por: {{ mov.usuario || 'Usuario no disponible' }}
+                </small>
+                <a v-if="mov.comprobanteUrl" :href="mov.comprobanteUrl" target="_blank" rel="noreferrer" class="comprobante-link">Ver foto</a>
+              </div>
+              <div class="movimiento-acciones">
+                <strong class="alinear-derecha">${{ mov.monto.toFixed(2) }}</strong>
+                <button
+                  v-if="mov.tipo === 'gasto' && esAdministrador"
+                  class="btn-eliminar-gasto"
+                  @click="eliminarGastoConfirmado(mov.id)"
+                  title="Eliminar gasto"
+                >
+                  <ion-icon :icon="trashOutline" />
+                </button>
+              </div>
+            </article>
+
+            <div v-if="movimientosTurnoActual.length === 0" class="historial-vacio">
+              Todavía no hay movimientos de caja registrados en este turno.
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- ───────── Historial (órdenes / cierres) + Movimientos de caja ───────── -->
@@ -347,49 +413,6 @@
             </div>
           </div>
         </section>
-
-        <!-- Columna derecha: movimientos de caja -->
-        <section ref="movimientosCardRef" class="movimientos-card">
-          <div class="movimientos-header">
-            <strong>Movimientos de caja</strong>
-            <span class="grafica-total">{{ gastosTurnoActual.length }} gastos · ${{ totalGastosTurnoActual.toFixed(2) }}</span>
-          </div>
-
-          <div class="movimientos-scroll">
-            <article v-for="mov in movimientosTurnoActual" :key="mov.id" class="movimiento-item">
-              <div class="movimiento-indicador" :class="`tipo-${mov.tipo}`"></div>
-              <div class="movimiento-info">
-                <div class="movimiento-titulo-row">
-                  <strong>{{ etiquetaMovimiento(mov.tipo) }}</strong>
-                  <span v-if="mov.tipo === 'gasto' && extraerTipoGasto(mov.concepto).tipo" class="movimiento-tipo-gasto">
-                    {{ extraerTipoGasto(mov.concepto).tipo }}
-                  </span>
-                </div>
-                <p>{{ mov.tipo === 'gasto' ? extraerTipoGasto(mov.concepto).motivo : mov.concepto }}</p>
-                <small>{{ formatearFechaHora(mov.creadoAt) }} · Caja #{{ mov.numeroCaja || '—' }}</small>
-                <small v-if="mov.tipo === 'gasto'" class="movimiento-usuario">
-                  Reportado por: {{ mov.usuario || 'Usuario no disponible' }}
-                </small>
-                <a v-if="mov.comprobanteUrl" :href="mov.comprobanteUrl" target="_blank" rel="noreferrer" class="comprobante-link">Ver foto</a>
-              </div>
-              <div class="movimiento-acciones">
-                <strong class="alinear-derecha">${{ mov.monto.toFixed(2) }}</strong>
-                <button 
-                  v-if="mov.tipo === 'gasto' && esAdministrador" 
-                  class="btn-eliminar-gasto" 
-                  @click="eliminarGastoConfirmado(mov.id)"
-                  title="Eliminar gasto"
-                >
-                  <ion-icon :icon="trashOutline" />
-                </button>
-              </div>
-            </article>
-
-            <div v-if="movimientosTurnoActual.length === 0" class="historial-vacio">
-              Todavía no hay movimientos de caja registrados en este turno.
-            </div>
-          </div>
-        </section>
       </div>
     </div>
 
@@ -425,12 +448,12 @@
       </div>
     </ion-modal>
 
-    <ion-modal v-if="!esCajero || esAdministrador" :is-open="mostrarModalDetalle" class="modal-turno" @didDismiss="mostrarModalDetalle = false">
+    <ion-modal v-if="!esCajero || esAdministrador" :is-open="mostrarModalDetalle" class="modal-turno modal-detalle-turno" @didDismiss="mostrarModalDetalle = false">
       <div class="modal-contenido">
         <div class="modal-header">
           <div class="modal-header-left">
             <div class="modal-header-icon">
-              <ion-icon :icon="cardOutline" />
+              <ion-icon :icon="cashOutline" />
             </div>
             <div>
               <p class="modal-titulo">Caja #{{ turno.numeroCaja }}</p>
@@ -442,23 +465,23 @@
           </button>
         </div>
 
-        <div class="detalle-seccion">
+        <div class="detalle-seccion turno-detalle-seccion">
           <p class="detalle-label">Información de la Caja</p>
           <div class="detalle-item">
             <span class="detalle-clave">Número de Caja:</span>
             <span class="detalle-valor">#{{ turno.numeroCaja }}</span>
           </div>
           <div class="detalle-item">
-            <span class="detalle-clave">Usuario:</span>
+            <span class="detalle-clave">Usuario que aperturó:</span>
             <span class="detalle-valor">{{ turno.usuario }}</span>
           </div>
           <div class="detalle-item">
             <span class="detalle-clave">Monto Inicial:</span>
-            <span class="detalle-valor">${{ turno.apertura.toFixed(2) }}</span>
+            <span class="detalle-valor turno-monto-destacado">${{ turno.apertura.toFixed(2) }}</span>
           </div>
         </div>
 
-        <div class="detalle-seccion">
+        <div class="detalle-seccion turno-detalle-seccion">
           <p class="detalle-label">Fecha y Hora</p>
           <div class="detalle-item">
             <span class="detalle-clave">Abierta:</span>
@@ -701,7 +724,7 @@ import AppShell from '@/components/AppShell.vue'
 import OrdenesPage from '@/views/OrdenesPage.vue'
 import { IonButton, IonIcon, IonModal } from '@ionic/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { searchOutline, cardOutline, timeOutline, eyeOutline, closeOutline, chevronBackOutline, chevronForwardOutline, chevronUpOutline, chevronDownOutline, trashOutline } from 'ionicons/icons'
+import { searchOutline, cardOutline, cashOutline, checkmarkCircleOutline, receiptOutline, timeOutline, eyeOutline, closeOutline, chevronBackOutline, chevronForwardOutline, chevronUpOutline, chevronDownOutline, trashOutline } from 'ionicons/icons'
 import { useReportes } from '@/composables/useReportes'
 import { useOrdenes } from '@/composables/useOrdenes'
 import type { Orden, OrdenEstado, EstadoPago } from '@/composables/useOrdenes'
@@ -1417,7 +1440,7 @@ const confirmarRestaurarOrden = async () => {
 
 .reportes-dos-columnas {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -1448,15 +1471,20 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .turno-panel-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
   display: grid;
   place-items: center;
-  background: #123a66;
+  background: linear-gradient(145deg, #0f766e, #155e75);
   color: #ffffff;
-  font-size: 24px;
+  font-size: 27px;
   flex: 0 0 auto;
+  box-shadow: 0 5px 12px rgba(15, 118, 110, 0.2);
+}
+
+.turno-panel-info {
+  min-width: 0;
 }
 
 .turno-panel-label {
@@ -1471,23 +1499,36 @@ const confirmarRestaurarOrden = async () => {
 .turno-panel h2 {
   margin: 0;
   color: #0a1f38;
-  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  font-size: 1.38rem;
   font-weight: 900;
 }
 
-.turno-panel-meta {
-  margin: 6px 0 0;
-  color: #58738f;
-  display: inline-flex;
+.turno-panel-heading {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.92rem;
-  font-weight: 600;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
+.turno-panel-meta {
+  margin: 0;
+  min-height: 34px;
+  padding: 6px 11px;
+  color: #11634f;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.1);
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .turno-panel-meta ion-icon {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .turno-panel-actions {
@@ -1586,18 +1627,95 @@ const confirmarRestaurarOrden = async () => {
 /* ── KPIs ── */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(7, minmax(170px, 1fr));
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px 2px 10px;
 }
 
 .kpi-card {
-  border: 1px solid rgba(10, 31, 56, 0.08);
-  border-radius: 16px;
-  padding: 16px;
-  background: #ffffff;
+  --kpi-accent: #123a66;
+  --kpi-surface: #eef3f8;
+  min-width: 0;
+  min-height: 154px;
+  border: 1px solid color-mix(in srgb, var(--kpi-accent) 17%, #ffffff);
+  border-bottom: 4px solid var(--kpi-accent);
+  border-radius: 12px;
+  padding: 15px 15px 13px;
+  background: linear-gradient(145deg, var(--kpi-surface) 0%, #ffffff 88%);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 11px;
+  box-shadow: 0 5px 14px rgba(10, 31, 56, 0.055), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.kpi-efectivo {
+  --kpi-accent: #0f766e;
+  --kpi-surface: #e0f4eb;
+}
+
+.kpi-cobrado {
+  --kpi-accent: #15803d;
+  --kpi-surface: #e5f4e7;
+}
+
+.kpi-ventas {
+  --kpi-accent: #2563eb;
+  --kpi-surface: #e8efff;
+}
+
+.kpi-anticipos {
+  --kpi-accent: #0284c7;
+  --kpi-surface: #e1f3fa;
+}
+
+.kpi-pendiente {
+  --kpi-accent: #d97706;
+  --kpi-surface: #fff1d4;
+}
+
+.kpi-cancelaciones {
+  --kpi-accent: #dc2626;
+  --kpi-surface: #ffeded;
+}
+
+.kpi-gastos {
+  --kpi-accent: #be123c;
+  --kpi-surface: #fbeaf0;
+}
+
+.kpi-card-top,
+.kpi-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kpi-card-top .label {
+  color: #314a60;
+  line-height: 1.35;
+  font-size: 0.72rem;
+}
+
+.kpi-card-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--kpi-accent) 84%, #ffffff), var(--kpi-accent));
+  color: #ffffff;
+  box-shadow: 0 3px 7px color-mix(in srgb, var(--kpi-accent) 24%, transparent);
+}
+
+.kpi-card-icon ion-icon {
+  font-size: 19px;
 }
 
 .kpi-card-interactivo {
@@ -1606,21 +1724,45 @@ const confirmarRestaurarOrden = async () => {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
 }
 
 .kpi-card-interactivo:hover,
 .kpi-card-interactivo.activo {
-  border-color: rgba(22, 139, 131, 0.45);
-  box-shadow: 0 8px 18px rgba(18, 58, 102, 0.1);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--kpi-accent) 28%, #ffffff);
+  border-bottom-color: var(--kpi-accent);
+  box-shadow: 0 10px 20px rgba(10, 31, 56, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateY(-3px);
+}
+
+.kpi-card-interactivo:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--kpi-accent) 32%, #ffffff);
+  outline-offset: 2px;
 }
 
 .kpi-card-interactivo:disabled {
   cursor: default;
-  opacity: 0.62;
+  opacity: 0.58;
   box-shadow: none;
   transform: none;
+}
+
+.kpi-card-arrow {
+  flex: 0 0 auto;
+  color: var(--kpi-accent);
+  font-size: 16px;
+  opacity: 0.55;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.kpi-card-interactivo:hover .kpi-card-arrow,
+.kpi-card-interactivo.activo .kpi-card-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.kpi-card-interactivo:disabled .kpi-card-arrow {
+  visibility: hidden;
 }
 
 .label {
@@ -1633,8 +1775,11 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .kpi-monto {
-  font-size: 1.4rem;
-  color: #123a66;
+  color: #17324a;
+  font-size: 1.62rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
 }
 
 .kpi-monto.verde {
@@ -1659,7 +1804,8 @@ const confirmarRestaurarOrden = async () => {
 
 .kpi-meta {
   color: #7c8fa6;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 .modal-input-fecha {
@@ -1710,25 +1856,61 @@ const confirmarRestaurarOrden = async () => {
 /* ── Gráficas ── */
 .graficas-grid {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  grid-auto-rows: 380px;
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 8px;
+}
+
+.graficas-grid-solo-gastos {
+  grid-template-columns: minmax(280px, 1fr);
+  grid-auto-rows: 380px;
 }
 
 @media (max-width: 900px) {
   .graficas-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(280px, 1fr));
   }
 }
 
 .grafica-card {
   border: 1px solid rgba(10, 31, 56, 0.08);
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 14px;
+  padding: 17px;
   background: #ffffff;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.graficas-grid > .grafica-card,
+.graficas-grid > .movimientos-card {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+}
+
+.grafica-card-barras .barras-chart,
+.grafica-card-distribucion .donut-contenedor {
+  flex: 1;
+}
+
+.grafica-card-barras {
+  border-color: rgba(15, 118, 110, 0.16);
+  border-bottom: 4px solid #0f766e;
+  background: linear-gradient(145deg, #e5f5ef 0%, #edf4ff 52%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(20, 71, 83, 0.08);
+}
+
+.grafica-card-distribucion {
+  border-color: rgba(57, 103, 133, 0.16);
+  border-bottom: 4px solid #14cf97;
+  background: linear-gradient(135deg, #e8f0ff 0%, #edf8f2 45%, #fff6e8 76%, #fff0ed 100%);
+  box-shadow: 0 8px 22px rgba(37, 73, 132, 0.08);
 }
 
 .grafica-header {
@@ -1737,7 +1919,7 @@ const confirmarRestaurarOrden = async () => {
   align-items: center;
   gap: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #edf1f4;
+  border-bottom: 1px solid rgba(38, 95, 113, 0.14);
 }
 
 .grafica-header strong {
@@ -1778,34 +1960,41 @@ const confirmarRestaurarOrden = async () => {
 
 .grafica-total {
   margin-left: 14px;
-  padding: 6px 10px;
-  border-radius: 7px;
-  background: #edf8f0;
-  color: #16a34a;
+  padding: 7px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #0f766e;
   font-weight: 800;
   font-size: 0.85rem;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .barras-chart {
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  height: 190px;
-  padding: 26px 4px 0;
-  border-bottom: 1px solid #dbe5ed;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 38px,
-    rgba(18, 58, 102, .055) 39px,
-    transparent 40px
-  );
+  gap: 8px;
+  height: 220px;
+  padding: 34px 14px 0;
+  overflow: hidden;
+  border: 1px solid rgba(38, 95, 113, 0.14);
+  border-radius: 11px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 39px,
+      rgba(39, 91, 111, 0.09) 40px,
+      transparent 41px
+    ),
+    linear-gradient(155deg, #dff4ed 0%, #eaf2ff 58%, #f8fbff 100%);
   box-sizing: border-box;
 }
 
 .barra-col {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1816,6 +2005,7 @@ const confirmarRestaurarOrden = async () => {
 .barra-wrap {
   flex: 1;
   width: 100%;
+  min-height: 0;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1823,94 +2013,130 @@ const confirmarRestaurarOrden = async () => {
 
 .barra {
   position: relative;
-  width: min(100%, 46px);
-  background: linear-gradient(180deg, #66c2b8 0%, #168b83 48%, #123a66 100%);
-  border: 1px solid rgba(18, 58, 102, .18);
-  border-radius: 7px 7px 2px 2px;
+  width: min(100%, 48px);
+  background: linear-gradient(180deg, #6ee7c5 0%, #22a891 42%, #176b83 100%);
+  border: 1px solid rgba(15, 93, 105, 0.22);
+  border-radius: 8px 8px 3px 3px;
   min-height: 4px;
-  box-shadow: 0 5px 10px rgba(18, 58, 102, .16);
-  transition: height 0.2s ease, filter 0.2s ease;
+  box-shadow: 0 6px 12px rgba(16, 91, 103, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  transition: height 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .barra:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.06) saturate(1.08);
+  box-shadow: 0 8px 16px rgba(16, 91, 103, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .barra-valor {
   position: absolute;
   bottom: calc(100% + 7px);
   left: 50%;
-  color: #123a66;
-  font-size: 0.64rem;
-  font-weight: 800;
+  color: #173c52;
+  font-size: 0.66rem;
+  font-weight: 850;
   transform: translateX(-50%);
   white-space: nowrap;
 }
 
 .barra-label {
-  padding-top: 4px;
-  font-size: 0.64rem;
-  color: #9aaaba;
+  padding-top: 5px;
+  font-size: 0.66rem;
+  color: #526b80;
+  font-weight: 700;
   text-align: center;
 }
 
 .donut-contenedor {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
+  min-height: 210px;
+  padding: 16px;
+  border: 1px solid rgba(57, 103, 133, 0.13);
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(230, 240, 255, 0.92), rgba(236, 248, 243, 0.94) 52%, rgba(255, 247, 233, 0.94));
 }
 
 .donut {
-  width: 108px;
-  height: 108px;
+  position: relative;
+  width: 136px;
+  height: 136px;
   border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.86);
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  box-shadow:
+    0 9px 16px rgba(30, 64, 100, 0.2),
+    inset 0 2px 4px rgba(255, 255, 255, 0.52),
+    inset 0 -6px 10px rgba(24, 47, 77, 0.16);
+}
+
+.donut::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: inherit;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 48%, rgba(12, 38, 68, 0.1));
+  content: '';
+  pointer-events: none;
 }
 
 .donut-centro {
-  width: 66px;
-  height: 66px;
+  position: relative;
+  z-index: 1;
+  width: 82px;
+  height: 82px;
   border-radius: 50%;
-  background: #ffffff;
+  border: 5px solid rgba(255, 255, 255, 0.94);
+  background: radial-gradient(circle at 35% 28%, #ffffff 0%, #fbfdff 58%, #eaf0f7 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 12px rgba(20, 45, 75, 0.17), inset 0 1px 2px #ffffff;
 }
 
 .donut-centro strong {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: #0a1f38;
+  font-variant-numeric: tabular-nums;
 }
 
 .donut-centro span {
-  font-size: 0.66rem;
-  color: #9aaaba;
+  font-size: 0.68rem;
+  color: #63788f;
+  font-weight: 700;
 }
 
 .donut-leyenda {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
 
 .leyenda-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: #4a627e;
+  gap: 9px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid rgba(37, 73, 132, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  font-size: 0.78rem;
+  color: #405970;
 }
 
 .leyenda-dot {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.82), 0 1px 4px rgba(10, 31, 56, 0.16);
 }
 
 .leyenda-label {
@@ -1922,8 +2148,10 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .leyenda-valor {
-  color: #9aaaba;
-  font-weight: 700;
+  color: #314b65;
+  font-size: 0.74rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
@@ -1941,10 +2169,26 @@ const confirmarRestaurarOrden = async () => {
   min-height: 0;
 }
 
+.historial-card {
+  border-color: rgba(37, 99, 235, 0.15);
+  border-bottom: 4px solid #48749e;
+  background: linear-gradient(145deg, #eaf1ff 0%, #f3f6ff 42%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(37, 73, 132, 0.065);
+}
+
+.movimientos-card {
+  border-color: rgba(194, 65, 45, 0.16);
+  border-bottom: 4px solid #d65a3a;
+  background: linear-gradient(145deg, #fff0e9 0%, #fff7ed 48%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(155, 70, 43, 0.07);
+}
+
 .historial-header {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(37, 73, 132, 0.12);
 }
 
 .historial-header-top {
@@ -2383,6 +2627,8 @@ const confirmarRestaurarOrden = async () => {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(194, 65, 45, 0.14);
 }
 
 .movimientos-header strong {
@@ -2390,11 +2636,24 @@ const confirmarRestaurarOrden = async () => {
   font-size: 0.98rem;
 }
 
+.movimientos-header .grafica-total {
+  border: 1px solid rgba(214, 90, 58, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+  color: #b54735;
+}
+
 .movimientos-lista,
 .movimientos-scroll {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.graficas-grid .movimientos-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
 }
 
 .movimiento-item {
@@ -2511,6 +2770,41 @@ const confirmarRestaurarOrden = async () => {
   overflow: auto;
 }
 
+.modal-detalle-turno {
+  --width: min(94vw, 560px);
+  --border-radius: 18px;
+}
+
+:deep(ion-modal.modal-detalle-turno::part(content)) {
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  box-shadow: 0 22px 60px rgba(10, 45, 55, 0.22);
+}
+
+.modal-detalle-turno .modal-contenido {
+  background: linear-gradient(150deg, #effaf6 0%, #f4f7ff 50%, #ffffff 100%);
+}
+
+.modal-detalle-turno .modal-header {
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(15, 118, 110, 0.16);
+}
+
+.modal-detalle-turno .modal-header-icon {
+  background: linear-gradient(145deg, #0f766e, #155e75);
+  color: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 118, 110, 0.22);
+}
+
+.modal-detalle-turno .modal-titulo {
+  color: #123347;
+  font-size: 1.18rem;
+}
+
+.modal-detalle-turno .modal-subtitulo {
+  color: #567587;
+}
+
 .modal-confirmacion .modal-contenido {
   max-height: 90vh;
   overflow: auto;
@@ -2600,6 +2894,38 @@ const confirmarRestaurarOrden = async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.modal-detalle-turno .turno-detalle-seccion {
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(42, 92, 112, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 12px rgba(10, 31, 56, 0.035);
+}
+
+.modal-detalle-turno .detalle-label {
+  color: #0f766e;
+}
+
+.modal-detalle-turno .turno-detalle-seccion .detalle-item {
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(42, 92, 112, 0.08);
+}
+
+.modal-detalle-turno .turno-detalle-seccion .detalle-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.modal-detalle-turno .turno-monto-destacado {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #e4f6ed;
+  color: #11634f;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .detalle-label {
@@ -2734,6 +3060,140 @@ const confirmarRestaurarOrden = async () => {
 }
 
 @media (max-width: 700px) {
+  .graficas-grid,
+  .graficas-grid-solo-gastos {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 380px;
+    overflow-x: hidden;
+  }
+
+  .grafica-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .grafica-header,
+  .movimientos-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .grafica-header strong,
+  .movimientos-header strong {
+    font-size: 0.84rem;
+  }
+
+  .grafica-total,
+  .movimientos-header .grafica-total {
+    margin-left: 0;
+    padding: 5px 8px;
+    font-size: 0.7rem;
+  }
+
+  .grafica-titulo {
+    flex: 1 1 100%;
+  }
+
+  .grafica-titulo strong {
+    flex: 1;
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .barras-chart {
+    gap: 4px;
+    padding: 28px 7px 0;
+  }
+
+  .barra-valor {
+    font-size: 0.56rem;
+  }
+
+  .donut-contenedor {
+    gap: 8px;
+    min-height: 0;
+    padding: 8px;
+  }
+
+  .donut {
+    width: 88px;
+    height: 88px;
+  }
+
+  .donut-centro {
+    width: 58px;
+    height: 58px;
+    border-width: 4px;
+  }
+
+  .donut-centro strong {
+    font-size: 0.95rem;
+  }
+
+  .donut-centro span {
+    font-size: 0.58rem;
+  }
+
+  .donut-leyenda {
+    gap: 4px;
+  }
+
+  .leyenda-item {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: 5px;
+    min-height: 28px;
+    padding: 4px 6px;
+    font-size: 0.68rem;
+  }
+
+  .leyenda-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .leyenda-valor {
+    font-size: 0.64rem;
+  }
+
+  .movimiento-item {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 9px 7px;
+  }
+
+  .movimiento-info p {
+    overflow-wrap: anywhere;
+  }
+
+  .movimiento-info small {
+    display: block;
+    font-size: 0.68rem;
+    line-height: 1.3;
+  }
+
+  .turno-panel {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .turno-panel-left {
+    flex: 1 1 auto;
+  }
+
+  .turno-panel-heading {
+    gap: 8px 10px;
+  }
+
+  .turno-panel h2 {
+    font-size: 1.2rem;
+  }
+
+  .turno-panel-meta {
+    min-height: 30px;
+    padding: 5px 9px;
+    font-size: 0.78rem;
+  }
+
   .turno-panel-actions ion-button {
     min-width: 0;
     width: auto;
@@ -2749,7 +3209,7 @@ const confirmarRestaurarOrden = async () => {
   }
 
   .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(150px, 1fr));
   }
 
   .historial-fila {

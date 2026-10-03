@@ -12,11 +12,15 @@
         <div class="whatsapp-panel-actions">
           <button type="button" title="Colocar a la izquierda" aria-label="Colocar WhatsApp a la izquierda" :class="{ activa: lateral && lado === 'izquierda' }" @click="colocarLateral('izquierda')"><span class="panel-placement-icon panel-placement-left" aria-hidden="true"><i></i></span></button>
           <button type="button" title="Colocar a la derecha" aria-label="Colocar WhatsApp a la derecha" :class="{ activa: lateral && lado === 'derecha' }" @click="colocarLateral('derecha')"><span class="panel-placement-icon panel-placement-right" aria-hidden="true"><i></i></span></button>
-          <button type="button" :title="lateral ? 'Abrir WhatsApp centrado' : 'Volver WhatsApp al lateral'" :aria-label="lateral ? 'Abrir WhatsApp centrado' : 'Volver WhatsApp al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
+          <button type="button" :title="lateral ? 'Maximizar WhatsApp a pantalla completa' : 'Restaurar WhatsApp al lateral'" :aria-label="lateral ? 'Maximizar WhatsApp a pantalla completa' : 'Restaurar WhatsApp al lateral'" @click="alternarModo"><ion-icon :icon="lateral ? expandOutline : contractOutline" /></button>
           <button type="button" title="Recargar WhatsApp" aria-label="Recargar WhatsApp" @click="recargarWebview"><ion-icon :icon="refreshOutline" /></button>
           <button class="whatsapp-panel-close" type="button" aria-label="Cerrar WhatsApp" title="Cerrar WhatsApp" @click="$emit('cerrar')"><ion-icon :icon="closeOutline" /></button>
         </div>
       </header>
+
+      <div v-if="estadoAdjunto" class="whatsapp-adjunto-estado" role="status" aria-live="polite">
+        {{ estadoAdjunto }}
+      </div>
 
       <div ref="bodyRef" class="whatsapp-panel-body">
         <webview
@@ -44,8 +48,20 @@ import { IonIcon } from '@ionic/vue'
 import { closeOutline, contractOutline, expandOutline, logoWhatsapp, refreshOutline } from 'ionicons/icons'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
-const props = defineProps<{ abierto: boolean; urlInicial?: string; solicitudCarga?: number }>()
-const emit = defineEmits<{ cerrar: []; 'modo-cambio': [lateral: boolean]; 'lado-cambio': [lado: 'izquierda' | 'derecha'] }>()
+const props = defineProps<{
+  abierto: boolean
+  urlInicial?: string
+  solicitudCarga?: number
+  imagenPendiente?: string
+  textoAdjunto?: string
+  solicitudAdjunto?: number
+}>()
+const emit = defineEmits<{
+  cerrar: []
+  'modo-cambio': [lateral: boolean]
+  'lado-cambio': [lado: 'izquierda' | 'derecha']
+  'adjunto-resuelto': []
+}>()
 const lateral = ref(true)
 const lado = ref<'izquierda' | 'derecha'>('derecha') // Siempre derecha por defecto
 
@@ -102,6 +118,9 @@ const bodyRef = ref<HTMLDivElement | null>(null)
 const webviewRef = ref<any>(null)
 const webviewListo = ref(false)
 let ultimaSolicitudCargaAplicada = props.solicitudCarga ?? 0
+let ultimaSolicitudAdjuntoAplicada = props.solicitudAdjunto ?? 0
+let cargaWhatsappEnCurso: Promise<void> | null = null
+const estadoAdjunto = ref('')
 
 let resizeObserver: ResizeObserver | null = null
 let frameProgramado = false
@@ -131,6 +150,7 @@ const onWebviewListo = () => {
     // noop
   }
   aplicarSolicitudCargaWhatsapp()
+  void adjuntarImagenCupon()
   forzarReajuste()
   // Un segundo empujón tras el primer pintado, por si la página
   // todavía no había terminado de montar su layout inicial.
@@ -167,7 +187,10 @@ onUnmounted(() => {
 watch(
   () => props.abierto,
   async (abierto) => {
-    if (!abierto) return
+    if (!abierto) {
+      estadoAdjunto.value = ''
+      return
+    }
     await nextTick()
     forzarReajuste()
     if (!resizeObserver) observarTamano()
@@ -183,15 +206,105 @@ const aplicarSolicitudCargaWhatsapp = () => {
 
   ultimaSolicitudCargaAplicada = solicitud
   try {
-    Promise.resolve(webview.loadURL(url)).catch((error) => {
+    cargaWhatsappEnCurso = Promise.resolve(webview.loadURL(url)).then(() => {
+      cargaWhatsappEnCurso = null
+      void adjuntarImagenCupon()
+    }).catch((error) => {
+      cargaWhatsappEnCurso = null
       console.warn('No se pudo volver a cargar la plantilla de WhatsApp:', error)
+      estadoAdjunto.value = 'No se pudo abrir el chat de WhatsApp.'
     })
   } catch (error) {
+    cargaWhatsappEnCurso = null
     console.warn('No se pudo volver a cargar la plantilla de WhatsApp:', error)
+    estadoAdjunto.value = 'No se pudo abrir el chat de WhatsApp.'
   }
 }
 
 watch(() => props.solicitudCarga, aplicarSolicitudCargaWhatsapp)
+
+const adjuntarImagenCupon = async () => {
+  const solicitud = props.solicitudAdjunto ?? 0
+  const dataUrl = props.imagenPendiente || ''
+  if (!solicitud || solicitud === ultimaSolicitudAdjuntoAplicada || !dataUrl || !webviewListo.value) return
+  if (cargaWhatsappEnCurso) await cargaWhatsappEnCurso.catch(() => {})
+  if (solicitud !== (props.solicitudAdjunto ?? 0) || solicitud === ultimaSolicitudAdjuntoAplicada) return
+
+  const coincidencia = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl)
+  if (!coincidencia) {
+    ultimaSolicitudAdjuntoAplicada = solicitud
+    finalizarSolicitudAdjunto('La imagen del cupón no tiene un formato válido.')
+    return
+  }
+
+  ultimaSolicitudAdjuntoAplicada = solicitud
+  estadoAdjunto.value = 'Adjuntando el QR al chat...'
+
+  try {
+    const editorListo = await webviewRef.value.executeJavaScript(`new Promise(resolve => {
+      let intentos = 0;
+      const buscarEditor = () => {
+        const editor = document.querySelector('[contenteditable="true"][data-tab="10"]') ||
+          document.querySelector('[contenteditable="true"][role="textbox"]');
+        if (editor) {
+          editor.focus();
+          resolve(true);
+          return;
+        }
+        intentos += 1;
+        if (intentos >= 40) {
+          resolve(false);
+          return;
+        }
+        setTimeout(buscarEditor, 250);
+      };
+      buscarEditor();
+    })`)
+    if (!editorListo) {
+      finalizarSolicitudAdjunto('Abre el chat de WhatsApp y vuelve a compartir el cupón.')
+      return
+    }
+
+    const apiElectron = (window as Window & {
+      electronAPI?: { copiarImagenCuponWhatsApp?: (imagen: string) => Promise<boolean> }
+    }).electronAPI
+    if (!apiElectron?.copiarImagenCuponWhatsApp) {
+      finalizarSolicitudAdjunto('No se pudo acceder al portapapeles de la app. Descarga el QR y adjúntalo manualmente.')
+      return
+    }
+
+    await apiElectron.copiarImagenCuponWhatsApp(`data:image/png;base64,${coincidencia[1]}`)
+    webviewRef.value.focus()
+    const editorEnfocado = await webviewRef.value.executeJavaScript(`(() => {
+      const editor = document.querySelector('[contenteditable="true"][data-tab="10"]') ||
+        document.querySelector('[contenteditable="true"][role="textbox"]');
+      if (!editor) return false;
+      editor.focus();
+      editor.click();
+      return document.activeElement === editor;
+    })()`)
+    if (!editorEnfocado) {
+      finalizarSolicitudAdjunto('El chat no está listo para recibir la imagen. Abre la conversación e inténtalo de nuevo.')
+      return
+    }
+    webviewRef.value.sendInputEvent({ type: 'keyDown', keyCode: 'V', modifiers: ['control'] })
+    webviewRef.value.sendInputEvent({ type: 'keyUp', keyCode: 'V', modifiers: ['control'] })
+    finalizarSolicitudAdjunto('Cupón agregado, presiona enviar.')
+  } catch (error) {
+    console.error('No se pudo pegar el QR en WhatsApp:', error)
+    finalizarSolicitudAdjunto('No se pudo pegar el QR. Descárgalo y adjúntalo manualmente al chat.')
+  }
+}
+
+const finalizarSolicitudAdjunto = (mensaje: string) => {
+  estadoAdjunto.value = mensaje
+  emit('adjunto-resuelto')
+}
+
+watch(() => props.solicitudAdjunto, () => {
+  estadoAdjunto.value = ''
+  void adjuntarImagenCupon()
+})
 
 const abrirEnNavegador = () => {
   window.open('https://web.whatsapp.com', '_blank', 'noopener,noreferrer')
@@ -238,7 +351,7 @@ const recargarWebview = () => {
   border-right: 1px solid #d7dde3;
   box-shadow: 12px 0 34px rgba(12, 34, 48, 0.2);
 }
-.whatsapp-panel-centrado { top: 7vh; right: 50%; bottom: auto; left: 50%; width: min(860px, 92vw); height: 86vh; transform: translateX(-50%); border: 0; border-radius: 18px; box-shadow: 0 24px 70px rgba(12, 34, 48, 0.34); }
+.whatsapp-panel-centrado { z-index: 7000; inset: 0; width: 100vw; min-width: 0; max-width: none; height: 100dvh; transform: none; border: 0; border-radius: 0; box-shadow: none; }
 
 .whatsapp-panel-header {
   display: flex;
@@ -302,6 +415,16 @@ const recargarWebview = () => {
 .panel-placement-icon::after { content: ''; position: absolute; top: 2px; bottom: 2px; width: 4px; border-radius: 1px; background: currentColor; }
 .panel-placement-left::after { left: 2px; }
 .panel-placement-right::after { right: 2px; }
+
+.whatsapp-adjunto-estado {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  background: #e4f2e8;
+  color: #195c36;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
 
 .whatsapp-panel-body {
   position: relative;

@@ -11,18 +11,19 @@
           <h1>Inventario de insumos</h1>
         </div>
 
-        <ion-button class="btn-primario" @click="abrirFormulario()">
-          <ion-icon :icon="addOutline" slot="start" />
-          Agregar insumo
-        </ion-button>
-        <ion-button class="btn-refill" @click="abrirRefill()">
-          <ion-icon :icon="refreshOutline" slot="start" />
-          Refill
-        </ion-button>
-        <ion-button class="btn-refill" @click="refrescarInventario()">
-          <ion-icon :icon="refreshOutline" slot="start" />
-          Actualizar
-        </ion-button>
+        <div class="header-actions">
+          <ion-button class="btn-primario" @click="abrirFormulario()">
+            <ion-icon :icon="addOutline" slot="start" />
+            Agregar insumo
+          </ion-button>
+          <ion-button class="btn-refill" @click="abrirRefill()">
+            <ion-icon :icon="refreshOutline" slot="start" />
+            Refill
+          </ion-button>
+          <ion-button class="btn-actualizar" title="Actualizar inventario" aria-label="Actualizar inventario" @click="refrescarInventario()">
+            <ion-icon :icon="refreshOutline" />
+          </ion-button>
+        </div>
       </div>
 
       <div class="stats-row">
@@ -62,8 +63,20 @@
         </div>
       </div>
 
+      <nav v-if="totalPaginas > 1" class="paginacion-inventario" aria-label="Paginación del inventario">
+        <span>Página {{ paginaActual }} de {{ totalPaginas }}</span>
+        <button type="button" class="btn-pagina" :disabled="paginaActual === 1" @click="paginaActual--">
+          <ion-icon :icon="chevronBackOutline" />
+          Anterior
+        </button>
+        <button type="button" class="btn-pagina" :disabled="paginaActual === totalPaginas" @click="paginaActual++">
+          Siguiente
+          <ion-icon :icon="chevronForwardOutline" />
+        </button>
+      </nav>
+
       <div v-if="productosFiltrados.length" class="grid-productos">
-        <article v-for="producto in productosFiltrados" :key="producto.id" class="producto-card">
+        <article v-for="producto in productosPaginados" :key="producto.id" class="producto-card">
           <div class="producto-media">
             <img v-if="producto.imagenUrl" :src="producto.imagenUrl" :alt="producto.nombre" />
             <div v-else class="producto-placeholder">
@@ -78,9 +91,14 @@
                 <h3>{{ producto.nombre }}</h3>
                 <p>{{ producto.categoria }}</p>
               </div>
-              <button class="icon-btn" @click="abrirFormulario(producto)">
-                <ion-icon :icon="createOutline" />
-              </button>
+              <div class="producto-acciones">
+                <button type="button" class="icon-btn" title="Editar insumo" :aria-label="`Editar ${producto.nombre}`" @click="abrirFormulario(producto)">
+                  <ion-icon :icon="createOutline" />
+                </button>
+                <button type="button" class="icon-btn icon-btn-danger" title="Eliminar insumo" :aria-label="`Eliminar ${producto.nombre}`" @click="confirmarEliminar(producto)">
+                  <ion-icon :icon="trashOutline" />
+                </button>
+              </div>
             </div>
 
             <div class="producto-data">
@@ -104,15 +122,12 @@
 
             <div class="producto-footer">
               <span class="meta-texto">Actualizado {{ formatoFecha(producto.actualizadoEn) }}</span>
-              <ion-button fill="clear" class="btn-icon danger" @click="confirmarEliminar(producto)">
-                <ion-icon :icon="trashOutline" />
-              </ion-button>
             </div>
           </div>
         </article>
       </div>
 
-      <div v-else class="empty-state">
+      <div v-if="productosFiltrados.length === 0" class="empty-state">
         <ion-icon :icon="cubeOutline" />
         <h3>No hay insumos registrados</h3>
         <p>Agrega el primer producto para empezar a controlar el inventario real de la lavanderia.</p>
@@ -270,9 +285,11 @@
 <script setup lang="ts">
 import AppShell from '@/components/AppShell.vue'
 import { IonButton, IonIcon, IonModal, IonSpinner, toastController } from '@ionic/vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   addOutline,
+  chevronBackOutline,
+  chevronForwardOutline,
   closeOutline,
   createOutline,
   cubeOutline,
@@ -305,6 +322,8 @@ onMounted(() => {
 
 const busqueda = ref('')
 const filtroCategoria = ref<'todas' | string>('todas')
+const paginaActual = ref(1)
+const productosPorPagina = 9
 const mostrarFormulario = ref(false)
 const mostrarModalRefill = ref(false)
 const modoEdicion = ref(false)
@@ -352,6 +371,21 @@ const productosFiltrados = computed(() => {
       producto.descripcion.toLowerCase().includes(q)
     return coincideCategoria && coincideBusqueda
   })
+})
+
+const totalPaginas = computed(() => Math.ceil(productosFiltrados.value.length / productosPorPagina))
+
+const productosPaginados = computed(() => {
+  const inicio = (paginaActual.value - 1) * productosPorPagina
+  return productosFiltrados.value.slice(inicio, inicio + productosPorPagina)
+})
+
+watch([busqueda, filtroCategoria], () => {
+  paginaActual.value = 1
+})
+
+watch(totalPaginas, (total) => {
+  if (paginaActual.value > total) paginaActual.value = Math.max(1, total)
 })
 
 const productosRefillFiltrados = computed(() => {
@@ -601,10 +635,25 @@ const formatearCantidad = (cantidad: number) => Number(cantidad).toFixed(3)
 
 .header-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-actions ion-button {
+  min-height: 42px;
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
 .eyebrow {
@@ -646,6 +695,35 @@ h1 {
   font-weight: 700;
 }
 
+.btn-actualizar {
+  --background: #eef8f6;
+  --background-hover: #dff1ed;
+  --color: #11634f;
+  --border-width: 1px;
+  --border-style: solid;
+  --border-color: rgba(17, 99, 79, 0.18);
+  --border-radius: 12px;
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --box-shadow: 0 4px 10px rgba(17, 99, 79, 0.12);
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  font-weight: 700;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.btn-actualizar ion-icon {
+  font-size: 19px;
+}
+
+.btn-actualizar:hover {
+  transform: translateY(-1px);
+  --box-shadow: 0 7px 14px rgba(17, 99, 79, 0.18);
+}
+
 .btn-fantasma {
   --background: transparent;
   --color: #123a66;
@@ -658,7 +736,7 @@ h1 {
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
   gap: 12px;
 }
 
@@ -741,26 +819,73 @@ h1 {
 
 .grid-productos {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.paginacion-inventario {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.paginacion-inventario > span {
+  margin-right: 4px;
+  color: #6d829c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-pagina {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #123a66;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-pagina:disabled {
+  background: #f2f5f7;
+  color: #9aaaba;
+  cursor: not-allowed;
 }
 
 .producto-card {
-  background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.08);
-  border-radius: 20px;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  background: linear-gradient(160deg, #ffffff 0%, #f8fbfd 100%);
+  border: 1px solid rgba(18, 58, 102, 0.11);
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 8px 20px rgba(10, 31, 56, 0.06);
-  display: flex;
-  flex-direction: column;
-  min-height: 390px;
-  max-height: 390px;
+  box-shadow: 0 5px 16px rgba(10, 31, 56, 0.055);
+  min-height: 232px;
+  max-height: 252px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.producto-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(15, 118, 110, 0.25);
+  box-shadow: 0 12px 24px rgba(10, 31, 56, 0.1);
 }
 
 .producto-media {
   position: relative;
-  height: 150px;
-  background: linear-gradient(135deg, #e8f3fb 0%, #d7eaf7 100%);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e4f4ee 0%, #e8f1fb 100%);
 }
 
 .producto-media img,
@@ -768,6 +893,14 @@ h1 {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.producto-media img {
+  transition: transform 0.3s ease;
+}
+
+.producto-card:hover .producto-media img {
+  transform: scale(1.035);
 }
 
 .producto-placeholder {
@@ -783,11 +916,13 @@ h1 {
   left: 12px;
   padding: 6px 10px;
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 3px 10px rgba(10, 31, 56, 0.08);
 }
 
 .con-stock { background: rgba(34, 197, 94, 0.16); color: #166534; }
@@ -808,6 +943,22 @@ h1 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  height: 54px;
+  min-height: 54px;
+  overflow: hidden;
+}
+
+.producto-head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.producto-acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .producto-head h3 {
@@ -815,37 +966,71 @@ h1 {
   color: #0a1f38;
   font-size: 1rem;
   font-weight: 900;
+  line-height: 1.25;
+  max-height: 2.5em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .producto-head p {
   margin: 0;
   color: #6d829c;
   font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-btn {
-  border: none;
-  background: rgba(18, 58, 102, 0.08);
+  flex: 0 0 36px;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  background: #f0f5f8;
   color: #123a66;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.icon-btn:hover {
+  background: #123a66;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.icon-btn-danger {
+  border-color: rgba(185, 28, 28, 0.12);
+  background: #fff1f1;
+  color: #b91c1c;
+}
+
+.icon-btn-danger:hover {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #ffffff;
 }
 
 .producto-data {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
+.producto-data div:last-child {
+  grid-column: 1 / -1;
+}
+
 .producto-data div {
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: #f8fbff;
-  border: 1px solid rgba(10, 31, 56, 0.08);
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #f1f7f8 0%, #ffffff 100%);
+  border: 1px solid rgba(18, 58, 102, 0.08);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -862,6 +1047,7 @@ h1 {
   color: #123a66;
   font-size: 0.9rem;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 .producto-descripcion {
@@ -881,6 +1067,8 @@ h1 {
   justify-content: space-between;
   gap: 10px;
   margin-top: auto;
+  padding-top: 5px;
+  border-top: 1px solid rgba(18, 58, 102, 0.07);
 }
 
 .meta-texto {
@@ -894,8 +1082,6 @@ h1 {
   --padding-top: 8px;
   --padding-bottom: 8px;
 }
-
-.btn-icon.danger { --color: #b91c1c; }
 
 .empty-state {
   background: rgba(255, 255, 255, 0.85);
@@ -1226,6 +1412,10 @@ textarea {
 }
 
 @media (max-width: 860px) {
+  .grid-productos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .stats-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1252,6 +1442,17 @@ textarea {
     margin: 0;
   }
 
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .header-actions .btn-primario {
+    grid-column: 1 / -1;
+  }
+
   .stats-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -1271,18 +1472,20 @@ textarea {
   }
 
   .grid-productos {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
 
   .producto-card {
-    min-height: 0;
+    grid-template-columns: 96px minmax(0, 1fr);
+    min-height: 210px;
     max-height: none;
-    border-radius: 16px;
+    border-radius: 14px;
   }
 
   .producto-media {
-    height: 118px;
+    height: 100%;
+    min-height: 210px;
   }
 
   .producto-body {
@@ -1334,20 +1537,25 @@ textarea {
   }
 
   .producto-data {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
 
+  .producto-data div:last-child {
+    grid-column: 1 / -1;
+  }
+
   .producto-data div {
-    padding: 7px 8px;
+    padding: 7px 6px;
   }
 
   .dato-label {
-    font-size: 0.66rem;
+    font-size: 0.58rem;
+    line-height: 1.2;
   }
 
   .producto-data strong {
-    font-size: 0.82rem;
+    font-size: 0.72rem;
   }
 
   .producto-descripcion {

@@ -1,6 +1,7 @@
 const {
   obtenerPromociones,
   obtenerPromocionPorId,
+  consultarUsosCuponQr,
   obtenerPromocionesVigentes,
   obtenerPromocionesAplicables,
   crearPromocion,
@@ -34,6 +35,18 @@ const obtenerUnaPromocion = async (req, res) => {
       return res.status(404).json({ error: "No se encontró la promoción." });
     }
     res.status(200).json(promocion);
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
+const consultarUsosCupon = async (req, res) => {
+  try {
+    const resultado = await consultarUsosCuponQr(
+      req.params.id,
+      req.body.telefono,
+    );
+    res.status(200).json(resultado);
   } catch (error) {
     manejarError(res, error);
   }
@@ -92,6 +105,7 @@ const eliminarUnaPromocion = async (req, res) => {
 module.exports = {
   listarPromociones,
   obtenerUnaPromocion,
+  consultarUsosCupon,
   listarVigentes,
   listarAplicables,
   crearUnaPromocion,

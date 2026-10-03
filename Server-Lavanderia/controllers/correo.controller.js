@@ -41,7 +41,14 @@ transporter.verify((error, success) => {
 
 const enviarCorreoHTML = async (req, res) => {
   try {
-    const { correo, html, asunto, nombreCliente } = req.body;
+    const {
+      correo,
+      html,
+      asunto,
+      nombreCliente,
+      imagenCupon,
+      adjuntarLogo = true,
+    } = req.body;
 
     if (!correo || !html) {
       return res.status(400).json({ error: "correo y html son obligatorios." });
@@ -49,18 +56,42 @@ const enviarCorreoHTML = async (req, res) => {
 
     console.log(`Enviando correo HTML a ${correo}`);
 
+    const adjuntos = [];
+    if (adjuntarLogo !== false) {
+      adjuntos.push({
+        filename: "logo.jpg",
+        path: obtenerRutaLogo(),
+        cid: "logo-factura",
+      });
+    }
+    if (imagenCupon) {
+      const coincidencia =
+        /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(imagenCupon);
+      if (!coincidencia) {
+        return res
+          .status(400)
+          .json({ error: "La imagen del cupón no es válida." });
+      }
+      const contenidoCupon = Buffer.from(coincidencia[1], "base64");
+      if (!contenidoCupon.length || contenidoCupon.length > 300_000) {
+        return res
+          .status(400)
+          .json({ error: "La imagen del cupón excede el tamaño permitido." });
+      }
+      adjuntos.push({
+        filename: "cupon-lavanderia-salinas.png",
+        content: contenidoCupon,
+        contentType: "image/png",
+        cid: "codigo-cupon",
+      });
+    }
+
     await transporter.sendMail({
       from: "Lavandería Salinas <lavanderiasalinassv@gmail.com>",
       to: correo,
       subject: asunto || "Tu orden - Lavandería Salinas",
       html: `<div style="font-family: Arial, sans-serif;">${html}</div>`,
-      attachments: [
-        {
-          filename: "logo.jpg",
-          path: obtenerRutaLogo(),
-          cid: "logo-factura",
-        },
-      ],
+      attachments: adjuntos,
     });
 
     console.log(`Correo enviado exitosamente a ${correo}`);
