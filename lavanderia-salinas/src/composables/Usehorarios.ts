@@ -170,6 +170,15 @@ function generarId() {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+const formatearMinutosComoHoras = (minutos: number) => {
+  const total = Math.max(0, Math.floor(minutos))
+  const horas = Math.floor(total / 60)
+  const minutosRestantes = total % 60
+  if (horas === 0) return `${minutosRestantes} min`
+  if (minutosRestantes === 0) return `${horas} h`
+  return `${horas} h ${minutosRestantes} min`
+}
+
 function normalizarRegistro(registro: RegistroJornada): RegistroJornada {
   if (Array.isArray(registro.segmentos)) {
     return {
@@ -459,7 +468,7 @@ export function useHorarios() {
         fecha: fechaHoy(),
         hora: registro?.horaEntrada ?? new Date().toISOString(),
         minutos: puntualidad.minutos,
-        mensaje: `${empleado.nombre} llegó tarde ${puntualidad.minutos} min al turno de ${turno.horaInicio} - ${turno.horaFin}.`,
+        mensaje: `${empleado.nombre} llegó tarde ${formatearMinutosComoHoras(puntualidad.minutos)} al turno de ${turno.horaInicio} - ${turno.horaFin}.`,
       })
       agregarNotificacion({
         destinatario: 'usuario',
@@ -469,7 +478,7 @@ export function useHorarios() {
         fecha: fechaHoy(),
         hora: registro?.horaEntrada ?? new Date().toISOString(),
         minutos: puntualidad.minutos,
-        mensaje: `Tu llegada quedó registrada con ${puntualidad.minutos} min de retraso.`,
+        mensaje: `Tu llegada quedó registrada con ${formatearMinutosComoHoras(puntualidad.minutos)} de retraso.`,
       })
     }
 

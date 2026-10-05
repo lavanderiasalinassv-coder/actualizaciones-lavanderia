@@ -2,9 +2,6 @@
   <AppShell>
     <main class="facturas-page force-light">
       <header class="page-header">
-        <div>
-          <h1>Facturas</h1>
-        </div>
         <button class="download-button" type="button" :disabled="!factura || generandoPdf" @click="descargarPdf">
           <ion-icon :icon="downloadOutline" />
           {{ generandoPdf ? 'Generando...' : 'Descargar PDF' }}

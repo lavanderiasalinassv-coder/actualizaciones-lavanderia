@@ -1,6 +1,9 @@
 const { pool } = require("../database/MySQLConexion");
 const { consultarConocimiento } = require("./saliConocimiento.controller");
-const { obtenerOrdenes } = require("../querys/orden.query");
+const {
+  obtenerOrdenes,
+  obtenerOrdenesPorTerminos,
+} = require("../querys/orden.query");
 const { obtenerEquipo } = require("../querys/equipo.query");
 const { listarMovimientos } = require("../querys/movimientosCaja.query");
 const { obtenerTurno } = require("../querys/turno.query");
@@ -10,6 +13,61 @@ const MAX_MENSAJE = 2000;
 const MAX_HISTORIAL = 12;
 const esperar = (milisegundos) =>
   new Promise((resolve) => setTimeout(resolve, milisegundos));
+
+const esPreguntaDeProcedimiento = (mensaje) =>
+  /\b(?:c[oó]mo\s+(?:puedo\s+)?(?:cambiar|modificar|editar|actualizar|crear|registrar|abrir|cerrar|usar|agregar|quitar|eliminar|consultar|buscar|ver)|d[oó]nde\s+(?:puedo\s+)?(?:ver|buscar|consultar))\b/i.test(
+    mensaje,
+  );
+
+const requiereDatosOperativos = (mensaje) =>
+  !esPreguntaDeProcedimiento(mensaje) &&
+  /\b(?:cu[aá]nt[oa]s?|total|resumen|muestra|mostrar|lista|listar|busca|buscar|consulta|consultar|revisa|revisar|estado|estatus|pendientes?|stock|existencias?|disponibles?|ventas?|gastos?|cierre|turno|saldos?|monto|hay|tenemos|quedan|queda|existe|cu[aá]l(?:es)?\s+(?:es|fue|son))\b/i.test(
+    mensaje,
+  ) &&
+  /\b(?:orden(?:es)?|pedido(?:s)?|caja|turno|inventario|insumo(?:s)?|producto(?:s)?|cliente(?:s)?|equipo|promoci[oó]n(?:es)?|cat[aá]logo|tarea(?:s)?|gasto(?:s)?|venta(?:s)?|cierre(?:s)?)\b/i.test(
+    mensaje,
+  );
+
+const requiereBuscarOrden = (mensaje) =>
+  /\b(?:orden(?:es)?|pedido(?:s)?)\b/i.test(mensaje) &&
+  (/\d/.test(mensaje) ||
+    (!esPreguntaDeProcedimiento(mensaje) &&
+      /\b(?:busca|buscar|consulta|consultar|revisa|revisar|estado|estatus|cliente|tel[eé]fono|n[uú]mero|qui[eé]n|quien|c[oó]mo va|c[oó]mo est[aá])\b/i.test(
+        mensaje,
+      )));
+
+const extraerTerminosConsultaOrden = (mensaje) => {
+  const numeros = mensaje.match(/\d{1,15}/g) || [];
+  if (numeros.length) {
+    return {
+      numeros: [...new Set(numeros)],
+      nombre: "",
+      buscarTelefono:
+        numeros[0].length >= 7 || /\b(?:tel[eé]fono|celular|m[oó]vil)\b/i.test(mensaje),
+    };
+  }
+
+  const palabrasIgnoradas = new Set([
+    "orden", "ordenes", "pedido", "pedidos", "estado", "estatus",
+    "busca", "buscar", "consulta", "consultar", "revisa", "revisar",
+    "dime", "decir", "quiero", "saber", "ver", "muestra", "mostrar",
+    "cliente", "telefono", "numero", "cual", "como", "esta", "estan",
+    "por", "favor", "de", "del", "la", "el", "los", "las", "una", "un",
+    "que", "para", "con", "me", "mi",
+  ]);
+  const nombre = mensaje
+    .replace(/\d{1,15}/g, " ")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((palabra) => palabra.length >= 3 && !palabrasIgnoradas.has(palabra))
+    .slice(0, 5)
+    .join(" ");
+
+  return { numeros: [...new Set(numeros)], nombre, buscarTelefono: false };
+};
 
 const CONOCIMIENTO_BASE_SALI = `
 Guía base de Lavandería Salinas:
@@ -23,6 +81,7 @@ Guía base de Lavandería Salinas:
 - Inventario administra insumos, cantidades, costo, valor y reposición (refill); los productos con cantidad baja necesitan revisión.
 - Promociones crea y edita descuentos por porcentaje o dinero, vigencia, fechas y tipo de cliente. Facturas prepara una factura a partir de una orden.
 - Equipo administra usuarios y roles. Horarios gestiona turnos, asistencia, entradas, salidas, pausas, tardanzas y pagos. Tareas permite revisar y completar tareas asignadas.
+- Guía es el centro de ayuda de la aplicación: tendrá un índice y buscador de instrucciones de uso, además de tutoriales en video. Si el usuario pregunta dónde encontrar ayuda, indícale que abra el menú de la campana de notificaciones y seleccione Guía; si pide que lo lleves a la Guía, la aplicación puede abrir esa vista.
 - Configuración incluye apariencia, conexión API, respaldo, base de datos, mantenimiento y, solo para el modo desarrollador, Entrenamiento de Burbujita. Entrenamiento de Burbujita agrega conocimiento personalizado; no es necesario usarlo para esta guía base.
 `;
 
@@ -132,61 +191,6 @@ const motivoIntervencionOrden = (orden) => {
   }
 
   return motivos;
-};
-
-// --- Búsqueda puntual de una orden por número, nombre o teléfono ---
-// Ya no hace SQL propio: filtra sobre lo que obtenerOrdenes() ya trajo
-// (mismo objeto usado para armar ordenesPorEstado/ordenesCerradas/etc.), así
-// que cada orden encontrada ya trae items, fotos, cargosExtra, anticipos y
-// movimientos (con usuarioNombre, texto y fecha de cada acción).
-const extraerTerminosBusqueda = (mensaje) => {
-  const terminos = [];
-
-  const numeros = mensaje.match(/\d{1,15}/g);
-  if (numeros) terminos.push(...numeros);
-
-  const posibleNombre = mensaje
-    .replace(/\d{1,15}/g, "")
-    .replace(/[^\p{L}\s]/gu, "")
-    .trim();
-  if (posibleNombre.length >= 3 && posibleNombre.length <= 60) {
-    terminos.push(posibleNombre);
-  }
-
-  return [...new Set(terminos)].slice(0, 4);
-};
-
-const coincideOrden = (orden, termino) => {
-  const terminoTexto = termino.toLowerCase();
-  const secuenciaTexto = String(orden.secuencia ?? "");
-  const numeroTexto = String(orden.numero ?? "").toLowerCase();
-  const telefono = String(orden.telefono || "");
-  const nombreCliente = String(orden.nombreCliente || "").toLowerCase();
-
-  return (
-    secuenciaTexto === terminoTexto ||
-    numeroTexto.includes(terminoTexto) ||
-    telefono.includes(termino) ||
-    (terminoTexto.length >= 3 && nombreCliente.includes(terminoTexto))
-  );
-};
-
-const buscarOrdenesRelacionadas = (mensaje, ordenesDetalladas) => {
-  const terminos = extraerTerminosBusqueda(mensaje);
-  if (!terminos.length) return [];
-
-  const vistos = new Set();
-  const resultados = [];
-  for (const termino of terminos) {
-    for (const orden of ordenesDetalladas) {
-      if (vistos.has(orden.id)) continue;
-      if (coincideOrden(orden, termino)) {
-        vistos.add(orden.id);
-        resultados.push(orden);
-      }
-    }
-  }
-  return resultados.slice(0, 5);
 };
 
 const construirContextoOperacion = async (ordenesDetalladas) => {
@@ -313,19 +317,19 @@ const construirInstruccionSistema = ({
   const permisos = obtenerPermisos(rol);
 
   const instruccionSaludo = esPrimerMensaje
-    ? `Este es el primer mensaje de la conversación: puedes saludar a ${nombre} brevemente una sola vez.`
-    : `Ya van varios mensajes en esta conversación: NO vuelvas a decir "Hola" ni repitas el nombre de ${nombre} en cada respuesta. Ve directo a responder, de forma natural, como seguiría hablando alguien que ya está en medio de una charla. Usa su nombre solo de vez en cuando, no en cada mensaje.`;
+    ? `Este es el primer mensaje de la conversación. Empieza con un saludo breve, casual y natural, y llama a la persona por su nombre (${nombre}) si el nombre está disponible. No te presentes ni digas "Soy Burbujita", "Soy tu asistente" ni repitas el nombre de la aplicación en el saludo; responde enseguida a su pregunta.`
+    : `Esta conversación ya empezó: no vuelvas a saludar ni repitas el nombre de ${nombre} en cada respuesta. Ve directo a responder de forma natural.`;
 
-  return `Tu nombre es Burbujita. Eres el asistente de la aplicación de lavandería Salinas que puede usar emojis para la conversacion. Preséntate como Burbujita solo cuando sea natural; responde siempre en español pero si alguien te escribe en ingles puedes hacerlo, de forma clara y breve. Puedes analizar el resumen operativo y el conocimiento personalizado que se te entregan, pero no inventes datos ni afirmes haber realizado cambios: eres solo de consulta. Cuando haya conocimientoRelevante, úsalo como referencia prioritaria para responder. No solicites ni reveles PINes, códigos de acceso, correos, direcciones u otra información sensible, salvo el teléfono/nombre cuando forme parte de una orden que el propio usuario está consultando por su número, nombre o teléfono.
+  return `Eres Burbujita, asistente de consulta de la aplicación de lavandería Salinas. Responde siempre en español, salvo que te escriban en otro idioma, y hazlo de forma clara, breve y natural. Puedes usar emojis con moderación. Sigue estas reglas de saludo: ${instruccionSaludo} Nunca empieces una respuesta con "Soy Burbujita, tu asistente en Salinas" ni otra presentación equivalente. Puedes analizar el resumen operativo y el conocimiento personalizado que se te entregan, pero no inventes datos ni afirmes haber realizado cambios: eres solo de consulta. Cuando haya conocimientoRelevante, úsalo como referencia prioritaria para responder. No solicites ni reveles PINes, códigos de acceso, correos, direcciones u otra información sensible, salvo el teléfono/nombre cuando forme parte de una orden que el propio usuario está consultando por su número, nombre o teléfono.
 
 Cuando el usuario solicite una lista o comparación de varias promociones, órdenes, productos u otros registros, responde con una tabla Markdown real usando esta estructura: | Columna | ... |, seguida de una fila | --- | ... | y después una fila por registro. No pongas esa tabla dentro de un bloque de código y no reemplaces las barras verticales por texto corrido.
 
-Estás hablando con ${nombre}, cuyo rol es ${rol}. ${instruccionSaludo}
+Estás hablando con ${nombre}, cuyo rol es ${rol}.
 
 Permisos de ${nombre} (rol ${rol}): ${permisos.descripcion}
 El resumen operativo que se te adjunta ya viene filtrado según ese rol: solo contiene lo que ${nombre} tiene permitido ver. Si ${nombre} pregunta por algo que no aparece en el resumen (caja, cierres, montos agregados, órdenes con intervención, cantidad de clientes, gastos o datos del equipo/nómina), responde con amabilidad que esa información es exclusiva de un Administrador y sugiere que lo consulte con uno, sin especular sobre cifras ni detalles que no tienes.
 
-Si el campo "ordenesEncontradas" trae resultados, son las órdenes que coinciden con lo que ${nombre} preguntó (por número, nombre de cliente o teléfono), con su detalle completo: items, fotos, cargos extra, anticipos y movimientos (cada movimiento indica quién hizo el cambio en "usuarioNombre", qué hizo en "texto" y cuándo en "fecha"). Úsalas para responder directamente sobre el estado de esa orden y quién modificó o eliminó algo si te lo preguntan. Si "ordenesEncontradas" está vacío pero el mensaje parece pedir una orden específica, dile que no encontraste una orden que coincida y pídele el número, nombre o teléfono correcto.
+Si el campo "ordenesEncontradas" trae resultados, son las órdenes que coinciden con lo que ${nombre} preguntó (por número, nombre de cliente o teléfono), con su detalle completo: items, fotos, cargos extra, anticipos y movimientos (cada movimiento indica quién hizo el cambio en "usuarioNombre", qué hizo en "texto" y cuándo en "fecha"). Debes usar esos registros como fuente de verdad y responder directamente. Nunca digas que una orden no existe si "ordenesEncontradas" trae una o más órdenes; el número de orden corresponde a su campo "numero". Si "ordenesEncontradas" está vacío pero el mensaje parece pedir una orden específica, dile que no encontraste una orden que coincida y pídele el número, nombre o teléfono correcto.
 
 ${CONOCIMIENTO_BASE_SALI}
 Resumen operativo actual (ya filtrado para este usuario): ${JSON.stringify(contexto)}`;
@@ -358,7 +362,7 @@ const pedirRespuestaGemini = async ({
   contenidos.push({ role: "user", parts: [{ text: mensaje }] });
 
   const controlador = new AbortController();
-  const timeout = setTimeout(() => controlador.abort(), 30000);
+  const timeout = setTimeout(() => controlador.abort(), 15000);
   try {
     const respuesta = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -395,7 +399,7 @@ const pedirRespuestaGemini = async ({
       const errorTemporal = [408, 429, 500, 502, 503, 504].includes(
         respuesta.status,
       );
-      if (errorTemporal && intento < 2) {
+      if (errorTemporal && intento < 1) {
         await esperar((intento + 1) * 1200 + Math.floor(Math.random() * 350));
         return pedirRespuestaGemini({
           mensaje,
@@ -467,7 +471,7 @@ const pedirRespuestaGroq = async ({
   ];
 
   const controlador = new AbortController();
-  const timeout = setTimeout(() => controlador.abort(), 30000);
+  const timeout = setTimeout(() => controlador.abort(), 15000);
   try {
     const respuesta = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -492,20 +496,6 @@ const pedirRespuestaGroq = async ({
         "Groq rechazó la solicitud:",
         datos?.error?.message || respuesta.status,
       );
-      const errorTemporal = [408, 429, 500, 502, 503, 504].includes(
-        respuesta.status,
-      );
-      if (errorTemporal && intento < 1) {
-        await esperar(1200 + Math.floor(Math.random() * 350));
-        return pedirRespuestaGroq({
-          mensaje,
-          historial,
-          usuario,
-          contexto,
-          esPrimerMensaje,
-          intento: intento + 1,
-        });
-      }
       const error = new Error(
         "Burbujita no está disponible en este momento. Intenta nuevamente en unos segundos.",
       );
@@ -547,6 +537,8 @@ const pedirRespuestaIA = async (parametros) => {
 };
 
 const responderAyuda = async (req, res) => {
+  const inicioConsulta = Date.now();
+  let etapaConsulta = "contexto";
   const mensaje = textoSeguro(req.body?.mensaje);
   if (!mensaje)
     return res
@@ -566,26 +558,41 @@ const responderAyuda = async (req, res) => {
   const usuario = req.body?.usuario;
   const rol = usuario?.rol;
   const esPrimerMensaje = historial.length === 0;
+  const necesitaContextoOperativo = requiereDatosOperativos(mensaje);
+  const necesitaBuscarOrden = requiereBuscarOrden(mensaje);
+  const necesitaDatosOrdenes =
+    necesitaContextoOperativo &&
+    !necesitaBuscarOrden &&
+    /\b(?:orden(?:es)?|pedido(?:s)?)\b/i.test(mensaje);
+  const necesitaContextoGeneral =
+    necesitaContextoOperativo && !necesitaBuscarOrden;
+  const terminosConsultaOrden = extraerTerminosConsultaOrden(mensaje);
 
   try {
-    // Se obtiene UNA sola vez y se reutiliza tanto para el resumen operativo
-    // (ordenesPorEstado, ordenesCerradas, ordenesConIntervencion) como para la
-    // búsqueda puntual por número/nombre/teléfono. Ya viene con movimientos,
-    // anticipos y cargosExtra incluidos por obtenerOrdenes().
-    //
-    // Se reintenta una vez si el fallo es de conexión (ECONNRESET, etc.): con
-    // 8 queries en paralelo, basta que el pool entregue una conexión que la
-    // base de datos ya había cerrado por inactividad para que todo el
-    // Promise.all truene, aunque la base de datos esté disponible.
-    let ordenesDetalladas;
-    let contextoCompleto;
+    let ordenesDetalladas = [];
+    let contextoCompleto = {};
     let conocimiento;
-    try {
-      ordenesDetalladas = await obtenerOrdenes();
+    const cargarContexto = async () => {
+      if (necesitaDatosOrdenes) {
+        ordenesDetalladas = await obtenerOrdenes();
+      } else if (
+        necesitaBuscarOrden &&
+        (terminosConsultaOrden.numeros.length || terminosConsultaOrden.nombre.length >= 3)
+      ) {
+        ordenesDetalladas = await obtenerOrdenesPorTerminos(terminosConsultaOrden);
+      } else {
+        ordenesDetalladas = [];
+      }
       [contextoCompleto, conocimiento] = await Promise.all([
-        construirContextoOperacion(ordenesDetalladas),
+        necesitaContextoGeneral
+          ? construirContextoOperacion(ordenesDetalladas)
+          : Promise.resolve({}),
         consultarConocimiento(mensaje),
       ]);
+    };
+
+    try {
+      await cargarContexto();
     } catch (errorDatos) {
       if (!esErrorConexionTemporal(errorDatos)) throw errorDatos;
       console.warn(
@@ -593,17 +600,24 @@ const responderAyuda = async (req, res) => {
         errorDatos.code,
       );
       await esperar(400);
-      ordenesDetalladas = await obtenerOrdenes();
-      [contextoCompleto, conocimiento] = await Promise.all([
-        construirContextoOperacion(ordenesDetalladas),
-        consultarConocimiento(mensaje),
-      ]);
+      await cargarContexto();
     }
 
-    const ordenesEncontradas = buscarOrdenesRelacionadas(
-      mensaje,
-      ordenesDetalladas,
-    );
+    const tiempoContexto = Date.now() - inicioConsulta;
+    const ordenesEncontradas = ordenesDetalladas;
+
+    if (
+      necesitaBuscarOrden &&
+      terminosConsultaOrden.numeros.length > 0 &&
+      ordenesEncontradas.length === 0
+    ) {
+      console.info(
+        `[ayuda-ia] búsqueda orden sin resultados números=${terminosConsultaOrden.numeros.join(",")}`,
+      );
+      return res.json({
+        respuesta: `No encontré una orden con el número ${terminosConsultaOrden.numeros[0]}. Revisa el número e inténtalo de nuevo.`,
+      });
+    }
 
     // Se filtra el resumen operativo según el rol ANTES de mandarlo a la IA.
     // "ordenesEncontradas" se agrega SIEMPRE, sin filtrar por rol: es consulta
@@ -616,6 +630,8 @@ const responderAyuda = async (req, res) => {
       ordenesEncontradas,
     };
 
+    etapaConsulta = "proveedor-ia";
+    const inicioIA = Date.now();
     const respuesta = await pedirRespuestaIA({
       mensaje,
       historial,
@@ -623,9 +639,15 @@ const responderAyuda = async (req, res) => {
       contexto: contextoFiltrado,
       esPrimerMensaje,
     });
+    console.info(
+      `[ayuda-ia] completada contexto=${tiempoContexto}ms ia=${Date.now() - inicioIA}ms total=${Date.now() - inicioConsulta}ms`,
+    );
     return res.json({ respuesta });
   } catch (error) {
-    console.error("Error en ayuda IA:", error.message);
+    console.error(
+      `[ayuda-ia] error etapa=${etapaConsulta} total=${Date.now() - inicioConsulta}ms:`,
+      error.message,
+    );
     return res
       .status(error.statusCode || 500)
       .json({ error: error.message || "No se pudo procesar tu pregunta." });

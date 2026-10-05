@@ -98,7 +98,6 @@
                   <div>
                     <p class="wizard-step">{{ pasoClienteActiva + 1 }} de {{ pasosCliente.length }}</p>
                     <h4>{{ pasosCliente[pasoClienteActiva].title }}</h4>
-                    <p>{{ pasosCliente[pasoClienteActiva].description }}</p>
                   </div>
                   <div class="wizard-dots">
                     <span
@@ -487,7 +486,17 @@
               <div class="prendas-card">
                 <div class="prendas-header">
                   <h4>📊 Cantidad de prendas recibidas</h4>
-                  <p>Este campo es obligatorio</p>
+                  <div class="prendas-header-acciones">
+                    <button
+                      type="button"
+                      class="prendas-cero-btn"
+                      :aria-pressed="Number(pedido.cantidadPrendas) === 0"
+                      :disabled="Number(pedido.cantidadPrendas) === 0 && cantidadPrendasAntesDeCero === null"
+                      @click="alternarCantidadPrendasCero"
+                    >
+                      {{ Number(pedido.cantidadPrendas) === 0 && cantidadPrendasAntesDeCero !== null ? 'Deshacer' : 'Dejar en cero' }}
+                    </button>
+                  </div>
                 </div>
 
                 <div class="prendas-input-group">
@@ -496,22 +505,27 @@
                     <input
                       v-model.number="pedido.cantidadPrendas"
                       type="number"
-                      min="1"
+                      min="0"
+                      step="1"
                       class="input-texto"
                       placeholder="Ej: 5"
-                      :class="{ error: pedido.cantidadPrendas <= 0 }"
+                      :class="{ error: !cantidadPrendasValida }"
+                      @input="manejarCambioCantidadPrendas"
                     />
-                    <p v-if="pedido.cantidadPrendas <= 0" class="ayuda-error">
-                      Ingresa al menos una prenda
+                    <p v-if="!cantidadPrendasValida" class="ayuda-error">
+                      Ingresa una cantidad válida o usa “Dejar en cero”
                     </p>
                   </label>
+                  <p v-if="Number(pedido.cantidadPrendas) === 0" class="prendas-nota-notificacion">
+                    <span class="prendas-nota-icono" aria-hidden="true">i</span>
+                    Si dejas la cantidad en 0, no enviaremos este dato por WhatsApp ni correo al cliente.
+                  </p>
                 </div>
               </div>
 
               <div class="prendas-card">
                 <div class="prendas-header">
                   <h4>📝 Detalles adicionales</h4>
-                  <p>Información opcional sobre las prendas</p>
                 </div>
 
                 <div class="prendas-textarea-group">
@@ -748,7 +762,7 @@
             </div>
 
             <div
-              v-if="pedido.nombreCliente || pedido.telefono || pedido.correo || (etapaActiva >= 2 && Number(pedido.cantidadPrendas) > 0) || (etapaActiva >= 3 && (pedido.fechaEntregaActiva || pedido.envioDomicilio)) || (etapaActiva >= 2 && pedido.detallesPrendas)"
+              v-if="pedido.nombreCliente || pedido.telefono || pedido.correo || etapaActiva >= 2 || (etapaActiva >= 3 && (pedido.fechaEntregaActiva || pedido.envioDomicilio)) || (etapaActiva >= 2 && pedido.detallesPrendas)"
               class="factura-datos"
             >
               <div v-if="pedido.nombreCliente" class="factura-linea">
@@ -763,7 +777,7 @@
                 <span>Correo</span>
                 <strong>{{ pedido.correo }}</strong>
               </div>
-              <div v-if="etapaActiva >= 2 && Number(pedido.cantidadPrendas) > 0" class="factura-linea">
+              <div v-if="etapaActiva >= 2" class="factura-linea">
                 <span>Prendas recibidas</span>
                 <strong>{{ pedido.cantidadPrendas }}</strong>
               </div>
@@ -1049,6 +1063,8 @@ const {
   descuentoTotal,
   cantidadTotal,
   cantidadPrendasServicios,
+  marcarCantidadPrendasManual,
+  dejarCantidadPrendasEnCero,
   telefonoValido,
   turnoAbierto,
   ultimaOrdenCreada,
@@ -1138,13 +1154,11 @@ const enviandoCorreo = ref(false)
 const pasosCliente = [
   {
     id: 'datos',
-    title: 'Datos del cliente',
-    description: 'Ingresa la información de contacto del cliente.'
+    title: 'Datos del cliente'
   },
   {
     id: 'promocion',
-    title: 'Promociones y descuento',
-    description: 'Selecciona una promoción o agrega un descuento manual.'
+    title: 'Promociones y descuento'
   }
 ]
 
@@ -1442,6 +1456,36 @@ const descuentoManualMonto = computed(() => {
   return Math.max(0, subtotal.value * valor / 100)
 })
 const saldoPendiente = computed(() => Math.max(0, total.value - pedido.montoRecibido))
+const cantidadPrendasValida = computed(() =>
+  String(pedido.cantidadPrendas).trim() !== '' &&
+  Number.isFinite(Number(pedido.cantidadPrendas)) &&
+  Number(pedido.cantidadPrendas) >= 0
+)
+const cantidadPrendasAntesDeCero = ref<number | null>(null)
+const manejarCambioCantidadPrendas = (evento: Event) => {
+  cantidadPrendasAntesDeCero.value = null
+  marcarCantidadPrendasManual()
+  const input = evento.currentTarget as HTMLInputElement
+  const cantidad = Number(input.value)
+  if (input.value !== '' && Number.isFinite(cantidad) && cantidad < 0) {
+    pedido.cantidadPrendas = 0
+    input.value = '0'
+  }
+}
+const alternarCantidadPrendasCero = () => {
+  if (Number(pedido.cantidadPrendas) === 0 && cantidadPrendasAntesDeCero.value !== null) {
+    marcarCantidadPrendasManual()
+    pedido.cantidadPrendas = cantidadPrendasAntesDeCero.value
+    cantidadPrendasAntesDeCero.value = null
+    return
+  }
+
+  const cantidadActual = Number(pedido.cantidadPrendas)
+  cantidadPrendasAntesDeCero.value = Number.isFinite(cantidadActual) && cantidadActual > 0
+    ? cantidadActual
+    : null
+  dejarCantidadPrendasEnCero()
+}
 
 const pasoActualPermiteAvanzar = computed(() => {
   if (etapaActiva.value === 0) {
@@ -1451,7 +1495,7 @@ const pasoActualPermiteAvanzar = computed(() => {
     return pedido.items.length > 0
   }
   if (etapaActiva.value === 2) {
-    return pedido.cantidadPrendas > 0
+    return cantidadPrendasValida.value
   }
   if (etapaActiva.value === 3) {
     const domicilioValido = !pedido.envioDomicilio || pedido.direccionEntrega.trim().length > 0
@@ -1497,6 +1541,7 @@ const abrirNuevaOrden = () => {
 
 const reiniciarFlujo = () => {
   reiniciarPedido()
+  cantidadPrendasAntesDeCero.value = null
   pedido.codigoPais = '+503'
   pedido.fechaEntregaActiva = true
   pedido.fechaEntrega = fechaMinima
@@ -2047,7 +2092,7 @@ const construirMensajeWhatsApp = () => {
     `ORDEN  : ${orden.numero}`,
     `FECHA  : ${new Date(orden.createdAt).toLocaleDateString('es-ES')}`,
     `CLIENTE: ${orden.nombreCliente}`,
-    `PRENDAS: ${Number(orden.cantidadPrendas || 0)}`,
+    Number(orden.cantidadPrendas) > 0 ? `PRENDAS: ${Number(orden.cantidadPrendas)}` : '',
     '----------',
     `🧼 *SERVICIOS*`,
     servicios,
@@ -2190,7 +2235,7 @@ const generarHtmlOrden = (orden: any) => {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
           <p style="margin: 4px 0;"><strong>Cliente:</strong> ${escaparHtml(orden.nombreCliente)}</p>
           <p style="margin: 4px 0;"><strong>Fecha:</strong> ${fecha}</p>
-          <p style="margin: 4px 0;"><strong>Prendas recibidas:</strong> ${Number(orden.cantidadPrendas || 0)}</p>
+          ${Number(orden.cantidadPrendas || 0) > 0 ? `<p style="margin: 4px 0;"><strong>Prendas recibidas:</strong> ${Number(orden.cantidadPrendas)}</p>` : ''}
           ${orden.detallesPrendas ? `<p style="margin: 4px 0;"><strong>Detalles:</strong> ${escaparHtml(orden.detallesPrendas)}</p>` : ''}
           <p style="margin: 4px 0;"><strong>Pago:</strong> <span style="color:${orden.estadoPago === 'pagado' ? '#15803d' : orden.estadoPago === 'anticipo' ? '#2563eb' : '#d97706'}; font-weight:bold;">${orden.estadoPago === 'pagado' ? 'Pagado' : orden.estadoPago === 'anticipo' ? 'Anticipo' : 'Por cobrar'}</span></p>
         </div>
@@ -2625,6 +2670,9 @@ onMounted(() => {
   padding: 18px;
   display: grid;
   gap: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(79, 179, 224, 0.045), transparent 38%),
+    linear-gradient(145deg, #fbfcfe 0%, #f7f9fc 52%, #f9fbfd 100%);
 }
 
 .pasos-nav {
@@ -2863,6 +2911,78 @@ onMounted(() => {
 
 .paso-color-prendas .prendas-card {
   padding: 8px 0;
+}
+
+.paso-color-prendas .prendas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.prendas-header-acciones {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.prendas-header-acciones p {
+  margin: 0;
+}
+
+.prendas-cero-btn {
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid #c6d7e8;
+  border-radius: 9px;
+  background: #edf3f9;
+  color: #123a66;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.prendas-cero-btn:hover,
+.prendas-cero-btn[aria-pressed="true"] {
+  border-color: #557da5;
+  background: #dce9f5;
+  box-shadow: 0 3px 8px rgba(18, 58, 102, 0.12);
+}
+
+.prendas-cero-btn:focus-visible {
+  outline: 3px solid rgba(79, 179, 224, 0.35);
+  outline-offset: 2px;
+}
+
+.prendas-nota-notificacion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 9px 0 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(49, 95, 141, 0.14);
+  border-radius: 10px;
+  background: #f2f6fa;
+  color: #526b83;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.prendas-nota-icono {
+  display: grid;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 50%;
+  background: #dce9f5;
+  color: #315f8d;
+  font-size: 0.68rem;
+  font-weight: 900;
 }
 
 .paso-color-prendas .prendas-card + .prendas-card {
@@ -4205,7 +4325,7 @@ onMounted(() => {
   width: 100%;
   max-width: 80mm;
   margin-inline: auto;
-  background: linear-gradient(180deg, #fffefa 0%, #ffffff 100%);
+  background: #ffffff;
   border: 1px dashed #aaa99f;
   border-radius: 3px;
   padding: 18px 16px;

@@ -1,18 +1,12 @@
 <template>
   <component :is="soloDetalleId ? 'div' : AppShell">
     <div class="ordenes-page force-light" :class="{ 'modo-solo-detalle': soloDetalleId }">
-      <!-- Overlay de carga para eliminación -->
       <div v-if="eliminandoOrdenIndividual" class="loading-overlay">
         <div class="loading-content">
           <ion-spinner name="crescent" />
           <p>Eliminando orden...</p>
         </div>
       </div>
-
-      <div class="header-row">
-        <h1>Órdenes</h1>
-      </div>
-
       <div class="ordenes-resumen">
         <span class="resumen-chip">{{ ordenesFiltradas.length }} Ordenes</span>
         <span v-if="cargando" class="loading-indicator">Cargando...</span>
@@ -422,21 +416,56 @@
             <div class="modal-columna acciones-columna">
               <p class="columna-titulo">⚙️ Opciones de modificacion</p>
 
-              <section v-if="ordenSeleccionada.estado !== 'cerrada'" class="estado-deslizador">
+              <section class="estado-deslizador">
                 <div class="detalle-bloque-head">
                   <div>
                     <p class="label">📍 Estado</p>
-                    <strong>Selecciona el estado de la orden</strong>
                   </div>
                 </div>
 
-                <div class="estado-cuadritos">
+                <div
+                  class="estado-progreso-barra"
+                  :class="{ 'estado-progreso-cerrada': ordenCerradaEstable }"
+                  :style="{ '--estado-progreso-color': colorBarraProgresoEstado }"
+                >
+                  <div class="estado-progreso-fila">
+                    <div class="estado-progreso-track">
+                      <div
+                        class="estado-progreso-track-fill"
+                        :style="{ width: progresoBarraEstadoPct + '%' }"
+                      ></div>
+                    </div>
+                    <div
+                      v-for="(estado, idx) in estadosCambio"
+                      :key="estado.value"
+                      class="estado-progreso-punto"
+                      :class="{ actual: idx === indiceEstadoActualBarra }"
+                    >
+                      <span
+                        v-if="idx === indiceEstadoActualBarra"
+                        class="estado-progreso-etiqueta"
+                        :style="{ background: estadoColores[ordenSeleccionada.estado].bg, color: estadoColores[ordenSeleccionada.estado].text }"
+                      >{{ textoEstado(ordenSeleccionada.estado) }}</span>
+                      <span
+                        class="estado-progreso-punto-dot"
+                        :class="{ completado: idx < indiceEstadoActualBarra, actual: idx === indiceEstadoActualBarra }"
+                      ></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="ordenSeleccionada.estado !== 'cerrada'" class="estado-cuadritos">
                   <button
                     v-for="estado in estadosCambioVisibles"
                     :key="estado.value"
                     type="button"
                     class="estado-cuadrito"
                     :class="{ actual: ordenSeleccionada.estado === estado.value }"
+                    :style="{
+                      '--estado-cuadrito-color': estadoColores[estado.value].dot,
+                      '--estado-cuadrito-fondo': estadoColores[estado.value].bg,
+                      '--estado-cuadrito-texto': estadoColores[estado.value].text
+                    }"
                     :disabled="peticionOrdenEnCurso || ordenSeleccionada.estado === estado.value || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || turnoCerrado"
                     :title="ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
                     @click="solicitarCambioEstado(ordenSeleccionada.id, estado.value, 'detalle')"
@@ -454,7 +483,7 @@
                 </div>
 
                 <button
-                  v-if="esAdministrador && ordenSeleccionada.estado !== 'cancelada'"
+                  v-if="ordenSeleccionada.estado !== 'cerrada' && esAdministrador && ordenSeleccionada.estado !== 'cancelada'"
                   type="button"
                   class="cancelar-orden-boton"
                   @click="abrirModalCancelarOrden"
@@ -498,9 +527,20 @@
                       v-model.number="cantidadPrendasBorrador"
                       type="number"
                       min="0"
+                      step="1"
                       class="prendas-editable-input"
                       :disabled="!esAdministrador || guardandoPrendas || ordenSeleccionada.estado === 'cerrada'"
+                      @input="corregirCantidadPrendasNegativa"
                     />
+                    <button
+                      v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada'"
+                      type="button"
+                      class="prendas-editable-cero"
+                      :disabled="guardandoPrendas || (Number(cantidadPrendasBorrador) === 0 && cantidadPrendasAntesDeCero === null)"
+                      @click="alternarCantidadPrendasCero"
+                    >
+                      {{ Number(cantidadPrendasBorrador) === 0 && cantidadPrendasAntesDeCero !== null ? 'Deshacer' : 'Dejar en cero' }}
+                    </button>
                     <button
                       v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada'"
                       type="button"
@@ -511,6 +551,10 @@
                       {{ guardandoPrendas ? 'Guardando...' : '💾 Guardar' }}
                     </button>
                   </div>
+                  <p v-if="Number(cantidadPrendasBorrador) === 0" class="prendas-editable-ayuda">
+                    <span class="prendas-editable-ayuda-icono" aria-hidden="true">i</span>
+                    Si la cantidad queda en 0, omitiremos este dato a ser enviado por WhatsApp o por correo al cliente.
+                  </p>
                 </div>
 
                 <div class="servicios-lista">
@@ -632,12 +676,17 @@
                     <p class="label">👤 Informacion del cliente</p>
                     <strong v-if="!editandoCliente">{{ ordenSeleccionada.nombreCliente }}</strong>
                   </div>
-                  <span
-                    class="pill estado-pill"
-                    :style="{ background: estadoColores[ordenSeleccionada.estado].bg, color: estadoColores[ordenSeleccionada.estado].text }"
+                  <div
+                    v-if="clienteFrecuenteOrdenSeleccionada"
+                    class="cliente-lealtad-insignia"
+                    :title="`Cliente recurrente · ${clienteFrecuenteOrdenSeleccionada.totalOrdenes} órdenes`"
                   >
-                    {{ textoEstado(ordenSeleccionada.estado) }}
-                  </span>
+                    <ion-icon :icon="starOutline" aria-hidden="true" />
+                    <span class="cliente-lealtad-detalle">
+                      <strong>Recurrente</strong>
+                      <span>{{ clienteFrecuenteOrdenSeleccionada.totalOrdenes }} órdenes</span>
+                    </span>
+                  </div>
                 </div>
 
                 <template v-if="editandoCliente && ordenSeleccionada.estado !== 'cerrada'">
@@ -645,7 +694,15 @@
                   <input v-model="clienteBorrador.nombre" class="modal-input-texto" type="text" />
                   <label class="modal-label cliente-edicion-label">Celular</label>
                   <div class="cliente-telefono-edicion">
-                    <span>{{ ordenSeleccionada.codigoPais }}</span>
+                    <input
+                      v-model="clienteBorrador.codigoPais"
+                      class="modal-input-texto cliente-codigo-pais-input"
+                      type="tel"
+                      inputmode="tel"
+                      maxlength="5"
+                      aria-label="Código de país"
+                      placeholder="+503"
+                    />
                     <input v-model="clienteBorrador.telefono" class="modal-input-texto" type="tel" inputmode="numeric" />
                   </div>
                   <label class="modal-label cliente-edicion-label">Correo electronico</label>
@@ -707,11 +764,27 @@
                 {{ guardandoFechas ? 'Actualizando...' : '💾 Guardar fechas' }}
               </button>
 
-              <section v-if="puedeVerMontos" class="total-box">
-                <span :class="{ 'total-box-pagada': ordenSeleccionada.estadoPago === 'pagado' }">
-                  {{ ordenSeleccionada.estadoPago === 'pagado' ? '✓ Orden pagada' : '💵 Total a pagar' }}
-                </span>
-                <strong>${{ totalFinalOrden(ordenSeleccionada).toFixed(2) }} USD</strong>
+              <section
+                v-if="puedeVerMontos"
+                class="total-box"
+                :class="ordenSeleccionada.estadoPago === 'pagado' ? 'total-box-pagado' : 'total-box-pendiente'"
+              >
+                <div class="total-box-principal">
+                  <span>
+                    {{ ordenSeleccionada.estadoPago === 'pagado'
+                      ? '✓ Orden pagada'
+                      : (ordenSeleccionada.estadoPago === 'anticipo' ? '💵 Saldo restante' : '💵 Total a pagar') }}
+                  </span>
+                  <strong>${{ totalFinalOrden(ordenSeleccionada).toFixed(2) }} USD</strong>
+                </div>
+                <div v-if="ordenSeleccionada.estadoPago === 'anticipo'" class="total-box-detalle">
+                  <span>➖ Anticipo recibido</span>
+                  <strong>-${{ ordenSeleccionada.montoRecibido.toFixed(2) }}</strong>
+                </div>
+                <div v-if="ordenSeleccionada.estadoPago === 'anticipo'" class="total-box-detalle total-box-total">
+                  <span>🧾 Total de la orden</span>
+                  <strong>${{ ordenSeleccionada.total.toFixed(2) }}</strong>
+                </div>
               </section>
 
               <section v-if="puedeVerMontos" class="detalle-bloque pago-box">
@@ -1327,6 +1400,7 @@ import {
 } from '@/composables/useOrdenes'
 import { fechaHoyCentroamerica, fechaISOaCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
 import { useCatalogo } from '@/composables/Usecatalogo'
+import { useClientes } from '@/composables/useClientes'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
 import { useTurno } from '@/composables/useTurno'
 import { useSesion } from '@/composables/useSesion'
@@ -1355,11 +1429,13 @@ import {
   warningOutline,
   printOutline,
   shirtOutline,
+  starOutline,
 } from 'ionicons/icons'
 const route = useRoute()
 const router = useRouter()
 
 const { servicios, cargarCatalogo } = useCatalogo()
+const { clientesConEstado } = useClientes()
 const { turno } = useTurno()
 const { esAdministrador, esOperador, usuarioActual, rol } = useSesion()
 const puedeVerMontos = computed(() => esAdministrador.value || rol.value === 'cajero')
@@ -1410,7 +1486,7 @@ const errorNota = ref('')
 const editandoCliente = ref(false)
 const guardandoCliente = ref(false)
 const errorEdicionCliente = ref('')
-const clienteBorrador = ref({ nombre: '', telefono: '', correo: '' })
+const clienteBorrador = ref({ nombre: '', codigoPais: '', telefono: '', correo: '' })
 
 const estadoColores: Record<OrdenEstado, { dot: string; bg: string; text: string; textStrong: string }> = {
   pendiente: { dot: '#e8a317', bg: 'rgba(232, 163, 23, 0.16)', text: '#8a5a09', textStrong: '#a5691c' },
@@ -1506,6 +1582,29 @@ const estadosCambioVisibles = computed(() =>
     ? estadosCambio.filter((estado) => estado.value === 'en_proceso' || estado.value === 'listo')
     : estadosCambio
 )
+
+// Una orden cerrada ya completó todo el flujo: la barra queda fija en gris,
+// 100% llena y sin el destello del último punto.
+const ordenCerradaEstable = computed(() => ordenSeleccionada.value?.estado === 'cerrada')
+
+const colorBarraProgresoEstado = computed(() => {
+  if (ordenCerradaEstable.value) return '#9aabbd'
+  if (!ordenSeleccionada.value) return '#9aabbd'
+  return estadoColores[ordenSeleccionada.value.estado].dot
+})
+
+const indiceEstadoActualBarra = computed(() => {
+  if (ordenCerradaEstable.value) return estadosCambio.length - 1
+  if (!ordenSeleccionada.value) return 0
+  return estadosCambio.findIndex((estado) => estado.value === ordenSeleccionada.value!.estado)
+})
+
+const progresoBarraEstadoPct = computed(() => {
+  if (ordenCerradaEstable.value) return 100
+  const idx = indiceEstadoActualBarra.value
+  if (idx < 0) return 0
+  return (idx / (estadosCambio.length - 1)) * 100
+})
 
 const estadosVisibles: OrdenEstado[] = [
   'pendiente',
@@ -1988,6 +2087,7 @@ const turnoIdEntregaAntigua = ref('')
 const fechaCreacionBorrador = ref('')
 const fechaEntregaBorrador = ref('')
 const cantidadPrendasBorrador = ref(0)
+const cantidadPrendasAntesDeCero = ref<number | null>(null)
 const guardandoPrendas = ref(false)
 const horaEntregaBorrador = ref('')
 const guardandoFechas = ref(false)
@@ -2052,6 +2152,7 @@ const textoMovimientoVisible = (texto: string) =>
 const claseMovimiento = (texto: string) => {
   const textoLimpio = texto.toLowerCase()
   if (textoLimpio.includes('se elimin')) return 'movimiento-rojo'
+  if (textoLimpio.includes('descuento aplicado')) return 'movimiento-naranja'
   if (textoLimpio.includes('pagado') || textoLimpio.includes('entregado')) return 'movimiento-verde'
   return ''
 }
@@ -2063,6 +2164,7 @@ const claseMovimientoBullet = (texto: string) => {
 const claseTextoMovimiento = (texto: string) => {
   const textoLimpio = texto.toLowerCase()
   if (textoLimpio.includes('se elimin')) return 'movimiento-texto-rojo'
+  if (textoLimpio.includes('descuento aplicado')) return 'movimiento-texto-naranja'
   if (textoLimpio.includes('pagado') || textoLimpio.includes('entregado')) return 'movimiento-texto-verde'
   return ''
 }
@@ -2384,6 +2486,21 @@ const ordenSeleccionada = computed(() =>
   ordenSeleccionadaId.value ? obtenerOrdenPorId(ordenSeleccionadaId.value) : null
 )
 
+const clienteFrecuenteOrdenSeleccionada = computed(() => {
+  const orden = ordenSeleccionada.value
+  if (!orden) return null
+
+  const telefonosOrden = new Set(
+    [`${orden.codigoPais}${orden.telefono}`, orden.telefono]
+      .map((telefono) => telefono.replace(/\D/g, ''))
+      .filter(Boolean)
+  )
+  const cliente = clientesConEstado.value.find((registro) =>
+    telefonosOrden.has(registro.celular.replace(/\D/g, ''))
+  )
+  return cliente?.esRecurrente ? cliente : null
+})
+
 const anticiposDelTurnoEntrega = computed(() => {
   const orden = ordenSeleccionada.value
   if (!orden?.turnoId) return []
@@ -2405,6 +2522,7 @@ const iniciarEdicionCliente = () => {
   if (!esAdministrador.value || !orden) return
   clienteBorrador.value = {
     nombre: orden.nombreCliente,
+    codigoPais: orden.codigoPais || '+503',
     telefono: orden.telefono,
     correo: orden.correo
   }
@@ -2420,6 +2538,7 @@ const cancelarEdicionCliente = () => {
 const guardarEdicionCliente = async () => {
   const orden = ordenSeleccionada.value
   const nombre = clienteBorrador.value.nombre.trim()
+  const codigoPaisDigitos = clienteBorrador.value.codigoPais.replace(/\D/g, '')
   const telefono = clienteBorrador.value.telefono.replace(/\D/g, '')
   const correo = clienteBorrador.value.correo.trim().toLowerCase()
 
@@ -2432,6 +2551,10 @@ const guardarEdicionCliente = async () => {
     errorEdicionCliente.value = 'El celular debe tener entre 7 y 15 dígitos.'
     return
   }
+  if (!/^\d{1,4}$/.test(codigoPaisDigitos)) {
+    errorEdicionCliente.value = 'Ingresa un código de país válido de 1 a 4 dígitos.'
+    return
+  }
   if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
     errorEdicionCliente.value = 'Ingresa un correo electrónico válido.'
     return
@@ -2440,7 +2563,12 @@ const guardarEdicionCliente = async () => {
   guardandoCliente.value = true
   errorEdicionCliente.value = ''
   try {
-    await actualizarOrden(orden.id, { nombreCliente: nombre, telefono, correo })
+    await actualizarOrden(orden.id, {
+      nombreCliente: nombre,
+      codigoPais: `+${codigoPaisDigitos}`,
+      telefono,
+      correo
+    })
     editandoCliente.value = false
   } catch (error) {
     errorEdicionCliente.value = error instanceof Error ? error.message : 'No se pudieron guardar los datos.'
@@ -2550,11 +2678,36 @@ const guardarCantidadPrendas = async () => {
   guardandoPrendas.value = true
   try {
     await actualizarOrden(orden.id, { cantidadPrendas: cantidad })
+    cantidadPrendasAntesDeCero.value = null
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo actualizar la cantidad de prendas.')
   } finally {
     guardandoPrendas.value = false
   }
+}
+
+const corregirCantidadPrendasNegativa = (evento: Event) => {
+  cantidadPrendasAntesDeCero.value = null
+  const input = evento.currentTarget as HTMLInputElement
+  const cantidad = Number(input.value)
+  if (input.value !== '' && Number.isFinite(cantidad) && cantidad < 0) {
+    cantidadPrendasBorrador.value = 0
+    input.value = '0'
+  }
+}
+
+const alternarCantidadPrendasCero = () => {
+  if (Number(cantidadPrendasBorrador.value) === 0 && cantidadPrendasAntesDeCero.value !== null) {
+    cantidadPrendasBorrador.value = cantidadPrendasAntesDeCero.value
+    cantidadPrendasAntesDeCero.value = null
+    return
+  }
+
+  const cantidadActual = Number(cantidadPrendasBorrador.value)
+  cantidadPrendasAntesDeCero.value = Number.isFinite(cantidadActual) && cantidadActual > 0
+    ? cantidadActual
+    : null
+  cantidadPrendasBorrador.value = 0
 }
 
 watch(ordenSeleccionada, (orden) => {
@@ -2563,6 +2716,7 @@ watch(ordenSeleccionada, (orden) => {
   fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
   horaEntregaBorrador.value = orden.horaEntrega ?? ''
   cantidadPrendasBorrador.value = Number(orden.cantidadPrendas || 0)
+  cantidadPrendasAntesDeCero.value = null
 }, { immediate: true })
 
 watch([ordenSeleccionada, () => turno.abierto], ([orden]) => {
@@ -4211,54 +4365,95 @@ onBeforeUnmount(() => {
 }
 
 .modal-detalle {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  background-color: rgba(238, 244, 246, 0.96);
+  background-color: #ffffff;
   background-image:
-    radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 20%, transparent), transparent 42%),
-    radial-gradient(ellipse at 100% 18%, color-mix(in srgb, var(--modal-estado-color, #6985b0) 16%, transparent), transparent 38%),
-    linear-gradient(
-      150deg,
-      color-mix(in srgb, var(--modal-estado-color, #5b9da5) 10%, #f6f9fa),
-      color-mix(in srgb, var(--modal-estado-color, #6985b0) 8%, #e5edf0)
-    );
-  backdrop-filter: blur(20px) saturate(112%);
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 40%, transparent), transparent 50%),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 40%, transparent), transparent 50%),
+    radial-gradient(ellipse at 0% 100%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 40%, transparent), transparent 50%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--modal-estado-color, #5b9da5) 40%, transparent), transparent 50%);
+  border-radius: 24px;
   overflow: hidden;
+}
+
+@property --borde-angulo {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.modal-detalle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 3px;
+  background: conic-gradient(
+    from var(--borde-angulo),
+    transparent 0deg,
+    transparent 260deg,
+    color-mix(in srgb, var(--modal-estado-color, #5b9da5) 55%, transparent) 310deg,
+    var(--modal-estado-color, #5b9da5) 335deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: borde-recorrido 4.5s linear infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@keyframes borde-recorrido {
+  to {
+    --borde-angulo: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-detalle::before {
+    animation: none;
+  }
 }
 
 .modal-detalle .detalle-bloque,
 .modal-detalle .mini-card,
 .modal-detalle .estado-cuadrito:not(.actual):not(:disabled),
 .modal-detalle .foto-vacia,
-.modal-detalle .servicio-linea,
-.modal-detalle .movimiento {
-  background: rgba(226, 235, 239, 0.78);
-  border-color: rgba(86, 111, 124, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+.modal-detalle .servicio-linea {
+  background: #ffffff;
+  border-color: rgba(10, 31, 56, 0.12);
+  box-shadow: 0 2px 8px rgba(10, 31, 56, 0.08);
 }
 
 .modal-detalle .estado-deslizador {
-  background: linear-gradient(145deg, rgba(232, 240, 243, 0.94), rgba(219, 230, 234, 0.9));
+  background: linear-gradient(180deg, #ffffff 0%, #f9fcfd 100%);
+  border-color: rgba(10, 31, 56, 0.12);
+  box-shadow: 0 2px 8px rgba(10, 31, 56, 0.08);
 }
 
 .modal-detalle .fecha-orden-input,
 .modal-detalle .prendas-editable-input,
 .modal-detalle .nota-input {
-  background: rgba(239, 244, 246, 0.92);
-  border-color: rgba(86, 111, 124, 0.18);
+  background: #f8fbfd;
+  border-color: #cbdde9;
 }
 
 .modal-detalle .notas,
 .modal-detalle .prendas-editable,
 .modal-detalle .total-box {
-  background: rgba(194, 215, 218, 0.34);
+  box-shadow: 0 2px 8px rgba(10, 31, 56, 0.08);
 }
 
 .modal-detalle .btn-outline {
-  background: rgba(226, 235, 239, 0.84);
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 31, 56, 0.08);
 }
 
 .modal-detalle,
@@ -4439,15 +4634,15 @@ onBeforeUnmount(() => {
 
 .columna-titulo {
   margin: 0;
-  font-size: 0.76rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.075em;
   text-transform: uppercase;
   color: #123a66;
-  background: rgba(18, 58, 102, 0.08);
-  border: 1px solid rgba(18, 58, 102, 0.14);
-  border-radius: 10px;
-  padding: 8px 10px;
+  background: linear-gradient(90deg, rgba(102, 194, 184, 0.13), rgba(18, 58, 102, 0.035));
+  border: 1px solid rgba(18, 58, 102, 0.09);
+  border-radius: 11px;
+  padding: 8px 11px;
 }
 
 .detalle-bloque {
@@ -4475,14 +4670,95 @@ onBeforeUnmount(() => {
   margin: 0;
   color: #9aaaba;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.065em;
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.25;
+}
+
+.modal-detalle .label {
+  color: #587087;
+  font-size: 0.65rem;
+  font-weight: 850;
+}
+
+.modal-detalle .detalle-bloque-head .label,
+.modal-detalle .mini-card > .label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 7px;
+  color: #426078;
+}
+
+.modal-detalle .detalle-bloque-head .label::after,
+.modal-detalle .mini-card > .label::after {
+  content: '';
+  width: 100%;
+  height: 2px;
+  border-radius: 99px;
+  background: #66c2b8;
 }
 
 .cliente-box strong {
   font-size: 1.05rem;
   color: #0a1f38;
+}
+
+.cliente-lealtad-insignia {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  max-width: 56%;
+  padding: 7px 10px;
+  border: 1px solid #d6b85d;
+  border-radius: 12px;
+  color: #805f0b;
+  background: linear-gradient(135deg, #fff9df, #f4e6ad);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 3px 9px rgba(138, 101, 0, 0.16);
+}
+
+.cliente-lealtad-insignia > ion-icon {
+  flex: 0 0 auto;
+  color: #c08c12;
+  font-size: 1.15rem;
+}
+
+.cliente-lealtad-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cliente-lealtad-detalle strong {
+  color: #765607;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.cliente-lealtad-detalle span {
+  color: #806f41;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+@media (max-width: 560px) {
+  .cliente-lealtad-insignia {
+    max-width: 52%;
+    padding: 6px 8px;
+  }
+
+  .cliente-lealtad-detalle span {
+    font-size: 0.6rem;
+  }
 }
 
 .cliente-box span {
@@ -4504,6 +4780,11 @@ onBeforeUnmount(() => {
 
 .cliente-telefono-edicion .modal-input-texto {
   flex: 1;
+}
+
+.cliente-telefono-edicion .cliente-codigo-pais-input {
+  flex: 0 0 82px;
+  text-align: center;
 }
 
 .cliente-edicion-acciones {
@@ -4552,6 +4833,130 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.estado-progreso-barra {
+  margin: 4px 2px 14px;
+}
+
+.estado-progreso-fila {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 40px;
+  padding: 0 1px;
+}
+
+.estado-progreso-punto {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.estado-progreso-etiqueta {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--estado-progreso-color) 28%, #ffffff);
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.estado-progreso-track {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(18, 58, 102, 0.12);
+  overflow: hidden;
+  z-index: 0;
+}
+
+.estado-progreso-track-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background-color: var(--estado-progreso-color, #66c2b8);
+  transition: width 0.4s ease;
+}
+
+.estado-progreso-punto-dot {
+  position: relative;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid rgba(18, 58, 102, 0.22);
+  transition: background 0.3s ease, border-color 0.3s ease, width 0.3s ease, height 0.3s ease;
+}
+
+.estado-progreso-punto-dot.completado {
+  background: var(--estado-progreso-color);
+  border-color: var(--estado-progreso-color);
+}
+
+.estado-progreso-punto-dot.actual {
+  width: 14px;
+  height: 14px;
+  background: var(--estado-progreso-color);
+  border-color: var(--estado-progreso-color);
+  color: var(--estado-progreso-color);
+  box-shadow: 0 0 0 3px #ffffff;
+}
+
+.estado-progreso-punto-dot.actual::before,
+.estado-progreso-punto-dot.actual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  z-index: -1;
+  animation: estado-progreso-onda 2.4s ease-out infinite;
+}
+
+.estado-progreso-punto-dot.actual::after {
+  animation-delay: 1.2s;
+}
+
+@keyframes estado-progreso-onda {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estado-progreso-punto-dot.actual::before,
+  .estado-progreso-punto-dot.actual::after {
+    animation: none;
+  }
+}
+
+/* Orden cerrada: barra fija en gris, sin destello en el punto final. */
+.estado-progreso-cerrada .estado-progreso-punto-dot.actual::before,
+.estado-progreso-cerrada .estado-progreso-punto-dot.actual::after {
+  content: none;
+  animation: none;
+}
+
 .estado-cuadritos {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4593,6 +4998,13 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
+.estado-cuadrito.actual {
+  border-color: var(--estado-cuadrito-color);
+  background: var(--estado-cuadrito-fondo);
+  color: var(--estado-cuadrito-texto);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--estado-cuadrito-color) 28%, transparent);
+}
+
 .estado-cuadrito-emoji {
   font-size: 1.45rem;
   line-height: 1;
@@ -4600,8 +5012,8 @@ onBeforeUnmount(() => {
 }
 
 .estado-cuadrito.actual .estado-cuadrito-emoji {
-  filter: grayscale(1);
-  opacity: 0.7;
+  filter: none;
+  opacity: 1;
 }
 
 .estado-cuadrito-progreso {
@@ -4862,9 +5274,53 @@ onBeforeUnmount(() => {
 .seccion-titulo {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 12px;
+  margin-bottom: 11px;
+}
+
+.modal-detalle .seccion-titulo > strong {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-height: 25px;
+  padding: 0 0 6px;
+  color: #193c5c;
+  font-size: 0.77rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.modal-detalle .seccion-titulo > strong::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 99px;
+  background: #66c2b8;
+}
+
+.modal-detalle .seccion-titulo .link,
+.modal-detalle .seccion-titulo .btn-subir-foto-link {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 0.76rem;
+}
+
+@media (max-width: 560px) {
+  .modal-detalle .seccion-titulo {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .modal-detalle .seccion-titulo-acciones {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 .fotos-grid {
@@ -4951,6 +5407,35 @@ onBeforeUnmount(() => {
   background: rgba(102, 194, 184, 0.06);
 }
 
+.prendas-editable-ayuda {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 0 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(49, 95, 141, 0.14);
+  border-radius: 9px;
+  background: #f2f6fa;
+  color: #526b83;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.prendas-editable-ayuda-icono {
+  display: grid;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: #dce9f5;
+  color: #315f8d;
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
 .prendas-editable-label {
   font-weight: 700;
   color: #0a1f38;
@@ -4961,6 +5446,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .prendas-editable-input {
@@ -4976,6 +5462,23 @@ onBeforeUnmount(() => {
 .prendas-editable-input:disabled {
   opacity: 0.6;
   background: #f1f5f7;
+}
+
+.prendas-editable-cero {
+  border: 1px solid #c6d7e8;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #edf3f9;
+  color: #123a66;
+  font-weight: 800;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prendas-editable-cero:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .prendas-editable-guardar {
@@ -5086,26 +5589,71 @@ onBeforeUnmount(() => {
 
 .total-box {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid rgba(102, 194, 184, 0.35);
-  background: rgba(102, 194, 184, 0.08);
+  background: #ffffff;
 }
 
-.total-box span {
+.total-box-principal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-box-principal span {
   font-weight: 700;
   color: #0a1f38;
 }
 
-.total-box .total-box-pagada {
-  color: #123a66;
-}
-
-.total-box strong {
+.total-box-principal strong {
   font-size: 1.35rem;
   color: #2c7f78;
+}
+
+.total-box-pendiente {
+  background: #fdf1e2;
+  border-color: #f2b566;
+}
+
+.total-box-pendiente .total-box-principal span,
+.total-box-pendiente .total-box-principal strong {
+  color: #b9610a;
+}
+
+.total-box-pagado {
+  background: #e7f8ed;
+  border-color: #7fd49c;
+}
+
+.total-box-pagado .total-box-principal span,
+.total-box-pagado .total-box-principal strong {
+  color: #15803d;
+}
+
+.total-box-detalle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(10, 31, 56, 0.14);
+}
+
+.total-box-detalle span {
+  font-size: 0.82rem;
+  color: #6f8399;
+  font-weight: 700;
+}
+
+.total-box-detalle strong {
+  font-size: 0.92rem;
+  color: #0a1f38;
+}
+
+.total-box-total strong {
+  color: #123a66;
 }
 
 .saldo-pendiente-box {
@@ -5157,27 +5705,54 @@ onBeforeUnmount(() => {
 }
 
 .movimientos-lista {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
+  padding: 4px 0 4px 30px;
+}
+
+.movimientos-lista::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #66c2b8, #66c2b8 45%, rgba(102, 194, 184, 0.18));
 }
 
 .movimiento {
+  position: relative;
   display: flex;
-  gap: 10px;
+  gap: 0;
   align-items: flex-start;
 }
 
+.movimiento:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -10px;
+  left: 0;
+  height: 1px;
+  background: #c5cbd2;
+}
+
 .movimiento-bullet {
-  width: 30px;
-  height: 30px;
+  position: absolute;
+  left: -24px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: rgba(102, 194, 184, 0.15);
+  --bullet-color: #66c2b8;
+  background: var(--bullet-color);
   color: #66c2b8;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  flex-shrink: 0;
+  font-size: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 3px #ffffff;
 }
 
 .movimiento-verde .movimiento-bullet,
@@ -5190,12 +5765,59 @@ onBeforeUnmount(() => {
   color: #dc2626;
 }
 
+.movimiento-naranja .movimiento-bullet,
+.movimiento-naranja .movimiento-texto-naranja {
+  color: #ea580c;
+}
+
 .movimiento-verde .movimiento-bullet {
-  background: rgba(34, 197, 94, 0.12);
+  --bullet-color: #16a34a;
 }
 
 .movimiento-rojo .movimiento-bullet {
-  background: rgba(239, 68, 68, 0.12);
+  --bullet-color: #dc2626;
+}
+
+.movimiento-naranja .movimiento-bullet {
+  --bullet-color: #f97316;
+}
+
+.movimiento:not(:first-child) .movimiento-bullet {
+  background: color-mix(in srgb, var(--bullet-color) 40%, #ffffff 60%);
+}
+
+/* El movimiento más reciente (primero en el arreglo) queda como punto activo */
+.movimiento:first-child .movimiento-bullet {
+  width: 16px;
+  height: 16px;
+  left: -25px;
+  top: 1px;
+}
+
+.movimiento:first-child .movimiento-bullet::before,
+.movimiento:first-child .movimiento-bullet::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  z-index: -1;
+  animation: movimiento-onda 2.4s ease-out infinite;
+}
+
+.movimiento:first-child .movimiento-bullet::after {
+  animation-delay: 1.2s;
+}
+
+@keyframes movimiento-onda {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
 }
 
 .movimiento strong {

@@ -5,11 +5,6 @@
         <button class="volver-btn" type="button" title="Volver a configuración" @click="volver">
           <ion-icon :icon="arrowBackOutline" />
         </button>
-        <div>
-          <p class="eyebrow">Conexión</p>
-          <h2>Base de datos</h2>
-          <p>Configura el servidor MySQL que utiliza la aplicación.</p>
-        </div>
       </header>
 
       <form class="config-card" @submit.prevent="guardar">

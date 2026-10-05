@@ -43,6 +43,10 @@
                         {{ totalNotificacionesNoLeidas }}
                       </div>
                     </button>
+                    <button class="notificacion-menu-item" @click="mostrarMenuNotificaciones = false; irA('/tabs/guia')">
+                      <ion-icon :icon="bookOutline" />
+                      <span>Guía</span>
+                    </button>
                     <button v-if="!esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalReportarProblema = true; mostrarMenuNotificaciones = false">
                       <ion-icon :icon="documentTextOutline" />
                       <span>Reportar problema</span>
@@ -177,6 +181,10 @@
                         {{ totalNotificacionesNoLeidas }}
                       </div>
                     </button>
+                    <button class="notificacion-menu-item" @click="mostrarMenuNotificaciones = false; irA('/tabs/guia')">
+                      <ion-icon :icon="bookOutline" />
+                      <span>Guía</span>
+                    </button>
                     <button v-if="!esUsuarioDesarrollador" class="notificacion-menu-item" @click="mostrarModalReportarProblema = true; mostrarMenuNotificaciones = false">
                       <ion-icon :icon="documentTextOutline" />
                       <span>Reportar problema</span>
@@ -259,9 +267,9 @@
                   <ion-icon :icon="cutOutline" />
                   <span>Gasto</span>
                 </button>
-                <button class="banner-btn banner-btn-compacta" :disabled="recargandoApp" title="Actualizar toda la aplicación" @click="refrescarAplicacion">
+                <button class="banner-btn banner-btn-compacta" :disabled="recargandoApp" title="Reiniciar toda la aplicación" @click="refrescarAplicacion">
                   <ion-icon :icon="refreshOutline" />
-                  <span>{{ recargandoApp ? 'Actualizando...' : 'Actualizar' }}</span>
+                  <span>{{ recargandoApp ? 'Reiniciando...' : 'Reiniciar' }}</span>
                 </button>
                 <button v-if="!esOperador && !esRecepcionista && !esCajero" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="mostrarModalCierres = true">
                   <ion-icon :icon="lockClosedOutline" />
@@ -273,6 +281,10 @@
                 </button>
               </div>
             </div>
+          </div>
+
+          <div class="shell-view-boundary-alert" aria-live="polite">
+            <slot name="view-boundary-alert" />
           </div>
 
           <!-- Contenido de cada vista (scrollable real) -->
@@ -291,31 +303,35 @@
     </ion-content>
 
     <!-- Modal: gasto -->
-    <ion-modal :is-open="mostrarModalGasto" class="modal-shell" @didDismiss="mostrarModalGasto = false">
+    <ion-modal :is-open="mostrarModalGasto" class="modal-shell modal-gasto-shell" @didDismiss="mostrarModalGasto = false">
       <div class="modal-contenido modal-gasto-contenido force-light">
-        <div class="modal-header">
+        <div class="modal-header modal-gasto-header">
           <div class="modal-header-left">
-            <div class="modal-header-icon">
+            <div class="modal-header-icon modal-gasto-icon">
               <ion-icon :icon="cutOutline" />
             </div>
             <div>
               <p class="modal-titulo">Registrar gasto</p>
-              <p class="modal-subtitulo">Salida de efectivo de la caja</p>
+              <p class="modal-subtitulo">Registra una salida de efectivo de la caja</p>
             </div>
           </div>
-          <button class="modal-cerrar" @click="mostrarModalGasto = false">
+          <button class="modal-cerrar" type="button" aria-label="Cerrar registro de gasto" @click="mostrarModalGasto = false">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
 
-        <label class="modal-label">Monto</label>
-        <div class="modal-input-monto">
-          <span>$</span>
-          <input v-model.number="montoGasto" type="number" min="0" step="0.01" />
+        <div class="modal-gasto-campo modal-gasto-monto-campo">
+          <label class="modal-label" for="shell-gasto-monto">Monto del gasto</label>
+          <div class="modal-input-monto modal-gasto-monto">
+            <span aria-hidden="true">$</span>
+            <input id="shell-gasto-monto" v-model.number="montoGasto" type="number" min="0" step="0.01" placeholder="0.00" />
+            <span class="modal-gasto-moneda">USD</span>
+          </div>
         </div>
 
-        <label class="modal-label">Tipo de gasto</label>
-          <select v-model="tipoGasto" class="modal-input-select">
+        <div class="modal-gasto-campo">
+          <label class="modal-label" for="shell-gasto-tipo">Tipo de gasto</label>
+          <select id="shell-gasto-tipo" v-model="tipoGasto" class="modal-input-select">
             <option v-for="tipo in tiposGasto" :key="tipo" :value="tipo">
               {{ tipo }}
             </option>
@@ -323,26 +339,32 @@
           <p v-if="tipoGasto" class="gasto-tipo-preview">
             Se registrará como: <strong>{{ tipoGasto }}</strong>
           </p>
+        </div>
 
-        <label class="modal-label">Motivo</label>
-        <textarea v-model="motivoGasto" class="modal-textarea" placeholder="Ej: compra de detergente" required></textarea>
+        <div class="modal-gasto-campo">
+          <label class="modal-label" for="shell-gasto-motivo">Motivo</label>
+          <textarea id="shell-gasto-motivo" v-model="motivoGasto" class="modal-textarea" placeholder="Ej.: compra de detergente" required></textarea>
+          <span class="modal-gasto-ayuda">Agrega un detalle para identificar fácilmente este egreso.</span>
+        </div>
 
-        <label v-if="esAdministrador" class="toggle-check">
+        <label v-if="esAdministrador" class="toggle-check modal-gasto-antiguo">
           <input v-model="registrarGastoAntiguo" type="checkbox" />
           Registrar gasto de caja antiguo
         </label>
 
         <template v-if="registrarGastoAntiguo">
-          <label class="modal-label">Caja</label>
-          <select v-model="turnoIdGasto" class="modal-input-select">
-            <option value="" disabled>Selecciona una caja</option>
-            <option v-for="opcion in turnosParaGasto" :key="opcion.id" :value="opcion.id">
-              {{ opcion.etiqueta }}
-            </option>
-          </select>
+          <div class="modal-gasto-campo">
+            <label class="modal-label" for="shell-gasto-caja">Caja</label>
+            <select id="shell-gasto-caja" v-model="turnoIdGasto" class="modal-input-select">
+              <option value="" disabled>Selecciona una caja</option>
+              <option v-for="opcion in turnosParaGasto" :key="opcion.id" :value="opcion.id">
+                {{ opcion.etiqueta }}
+              </option>
+            </select>
+          </div>
         </template>
 
-        <div class="modal-botones">
+        <div class="modal-botones modal-gasto-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalGasto = false">Cancelar</ion-button>
           <ion-button class="btn-primario" :disabled="!motivoGasto.trim() || montoGasto <= 0 || (registrarGastoAntiguo && !turnoIdGasto)" @click="guardarGasto">Guardar gasto</ion-button>
         </div>
@@ -426,59 +448,54 @@
               <p class="cierres-vacio-texto">No hay cierres registrados</p>
             </div>
 
-            <div v-else class="cierres-box cierres-box-historial">
-              <div v-for="cierre in cierresFiltrados" :key="cierre.id" class="cierre-item">
-                <div class="cierre-header">
-                  <div class="cierre-info">
-                    <span class="cierre-numero">#{{ cierre.numeroCaja }}</span>
-                    <span class="cierre-fecha">{{ new Date(cierre.cerradoAt).toLocaleDateString('es-ES') }}</span>
-                  </div>
-                  <span class="cierre-monto">${{ cierre.totales.recaudado.toFixed(2) }}</span>
-                </div>
-                <div class="cierre-detalles">
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Operador:</span>
-                    <span>{{ cierre.usuario }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Efectivo Dejado en caja:</span>
-                    <span>${{ cierre.saldoCierre.toFixed(2) }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Cobrado:</span>
-                    <span class="cierre-estado estado-verificado">${{ cierre.totales.cobrado.toFixed(2) }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Depósitos:</span>
-                    <span class="cierre-estado estado-pendiente">${{ cierre.totales.depositos.toFixed(2) }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Cancelaciones:</span>
-                    <span class="cierre-estado estado-pendiente">${{ cierre.totales.cancelaciones.toFixed(2) }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Gastos:</span>
-                    <span class="cierre-estado estado-gstos">${{ cierre.totales.gastos.toFixed(2) }}</span>
-                  </div>
-                  <div class="cierre-detalle">
-                    <span class="detalle-label">Total recaudado:</span>
-                    <span class="cierre-estado estado-verificado">${{ cierre.totales.recaudado.toFixed(2) }}</span>
-                  </div>
-                </div>
-                <div class="cierre-acciones">
-                  <button class="cierre-ver-ordenes" @click="verOrdenesCierre(cierre)">
-                    <ion-icon :icon="listOutline" />
-                    Ver órdenes
-                  </button>
-                  <button type="button" class="cierre-descargar" title="Descargar reporte PDF" @click="descargarReporteCierre(cierre)">
-                    <ion-icon :icon="documentTextOutline" />
-                    PDF
-                  </button>
-                  <button type="button" class="cierre-eliminar" title="Eliminar cierre sin borrar órdenes" aria-label="Eliminar cierre sin borrar órdenes" @click="eliminarCierreDesdeHistorial(cierre)">
-                    <ion-icon :icon="trashOutline" />
-                  </button>
-                </div>
-              </div>
+            <div v-else class="cierres-tabla-scroll">
+              <table class="cierres-tabla">
+                <thead>
+                  <tr>
+                    <th>Fecha de cierre</th>
+                    <th>Caja</th>
+                    <th>Operador</th>
+                    <th>Efectivo dejado</th>
+                    <th>Cobrado</th>
+                    <th>Gastos</th>
+                    <th class="cierres-tabla-total">Total recaudado</th>
+                    <th aria-label="Acciones"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="cierre in cierresFiltrados"
+                    :key="cierre.id"
+                    class="cierre-tabla-fila"
+                    tabindex="0"
+                    :aria-label="`Ver detalles del cierre de caja ${cierre.numeroCaja}`"
+                    @click="verOrdenesCierre(cierre)"
+                    @keydown.enter.prevent="verOrdenesCierre(cierre)"
+                    @keydown.space.prevent="verOrdenesCierre(cierre)"
+                  >
+                    <td>
+                      <strong>{{ new Date(cierre.cerradoAt).toLocaleDateString('es-ES') }}</strong>
+                      <small>{{ new Date(cierre.cerradoAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }}</small>
+                    </td>
+                    <td><span class="cierre-tabla-caja">#{{ cierre.numeroCaja }}</span></td>
+                    <td>{{ cierre.usuario }}</td>
+                    <td>${{ cierre.saldoCierre.toFixed(2) }}</td>
+                    <td>${{ cierre.totales.cobrado.toFixed(2) }}</td>
+                    <td class="cierre-tabla-gasto">${{ cierre.totales.gastos.toFixed(2) }}</td>
+                    <td class="cierres-tabla-total">${{ cierre.totales.recaudado.toFixed(2) }}</td>
+                    <td>
+                      <div class="cierre-tabla-acciones">
+                        <button type="button" class="cierre-tabla-accion" title="Descargar reporte PDF" aria-label="Descargar reporte PDF" @click.stop="descargarReporteCierre(cierre)" @keydown.stop>
+                          <ion-icon :icon="documentTextOutline" />
+                        </button>
+                        <button type="button" class="cierre-tabla-accion cierre-tabla-eliminar" title="Eliminar cierre" :aria-label="`Eliminar cierre de caja ${cierre.numeroCaja}`" @click.stop="eliminarCierreDesdeHistorial(cierre)" @keydown.stop>
+                          <ion-icon :icon="trashOutline" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -526,7 +543,10 @@
             </div>
             <div>
               <p class="modal-titulo">Órdenes del cierre #{{ cierreSeleccionado?.numeroCaja }}</p>
-              <p class="modal-subtitulo">{{ ordenesCobradasCierre.length }} órdenes con cobro en turno</p>
+              <p v-if="cierreSeleccionado" class="modal-subtitulo">
+                {{ new Date(cierreSeleccionado.cerradoAt).toLocaleDateString('es-ES') }} · {{ cierreSeleccionado.usuario }}
+              </p>
+              <p class="modal-subtitulo">{{ ordenesDelCierre.length }} órdenes asociadas a este cierre</p>
               <p v-if="cierreSeleccionado" class="modal-subtitulo modal-subtitulo-movimientos">
                 <ion-icon :icon="listOutline" /> Reporte de movimientos: {{ cierreSeleccionado.movimientos?.length || 0 }} registros
               </p>
@@ -552,7 +572,7 @@
             </div>
             <div class="cierre-resumen-card card-blue">
               <span>Órdenes</span>
-              <strong>{{ ordenesCobradasCierre.length }}</strong>
+              <strong>{{ ordenesDelCierre.length }}</strong>
             </div>
             <button type="button" class="cierre-resumen-card card-amber cierre-resumen-boton" @click="abrirGastosCierre">
               <span>Gastos</span>
@@ -565,54 +585,98 @@
             </div>
           </div>
 
+          <div v-if="cierreSeleccionado" class="cierre-detalle-resumen">
+            <div>
+              <span>Apertura</span>
+              <strong>${{ cierreSeleccionado.apertura.toFixed(2) }}</strong>
+            </div>
+            <div>
+              <span>Efectivo dejado</span>
+              <strong>${{ cierreSeleccionado.saldoCierre.toFixed(2) }}</strong>
+            </div>
+            <div>
+              <span>Saldo esperado</span>
+              <strong>${{ cierreSeleccionado.totales.saldoEsperado.toFixed(2) }}</strong>
+            </div>
+            <div>
+              <span>Diferencia</span>
+              <strong>${{ cierreSeleccionado.totales.diferencia.toFixed(2) }}</strong>
+            </div>
+            <div>
+              <span>Depósitos</span>
+              <strong>${{ cierreSeleccionado.totales.depositos.toFixed(2) }}</strong>
+            </div>
+            <div>
+              <span>Cancelaciones</span>
+              <strong>${{ cierreSeleccionado.totales.cancelaciones.toFixed(2) }}</strong>
+            </div>
+          </div>
+
           <div class="cierres-lista">
-            <div v-if="!cierreSeleccionado || cierreSeleccionado.ordenes.length === 0" class="cierres-vacio">
+            <div v-if="ordenesDelCierre.length === 0" class="cierres-vacio">
               <ion-icon :icon="listOutline" class="cierres-vacio-icon" />
               <p class="cierres-vacio-texto">No hay órdenes asociadas a este cierre</p>
             </div>
 
-            <div v-else class="cierres-box">
-              <div
-                v-for="orden in ordenesCobradasCierre"
-                :key="orden.id"
-                class="cierre-orden-item orden-item-clickable"
-                role="button"
-                tabindex="0"
-                @click="abrirModalDetalleOrden(orden)"
-                @keydown.enter.prevent="abrirModalDetalleOrden(orden)"
-                @keydown.space.prevent="abrirModalDetalleOrden(orden)"
-              >
-                <div class="cierre-orden-header">
-                  <div class="cierre-orden-titulo">
-                    <span class="cierre-orden-numero">{{ orden.numero }}</span>
-                    <span v-if="orden.esReferencia" class="cierre-orden-referencia">Solo referencia</span>
-                  </div>
-                  <span class="cierre-orden-monto">${{ orden.cobradoEnTurno.toFixed(2) }}</span>
-                </div>
-
-                <div class="cierre-orden-info">
-                  <div class="cierre-orden-cliente-wrap">
-                    <span class="detalle-label">Cliente</span>
-                    <strong class="cierre-orden-cliente">{{ orden.nombreCliente }}</strong>
-                  </div>
-                  <div class="cierre-orden-estado-wrap">
-                    <span class="detalle-label">Estado</span>
-                    <span class="cierre-orden-estado" :class="`estado-${orden.estado}`">{{ orden.estado }}</span>
-                  </div>
-                  <div class="cierre-orden-pago-wrap">
-                    <span class="detalle-label">Pago</span>
-                    <span class="cierre-orden-pago" :class="`pago-${orden.estadoPago}`">{{ orden.estadoPago }}</span>
-                  </div>
-                </div>
-
-                <div class="cierre-orden-footer">
-                  <span>Recibido: ${{ orden.montoRecibido.toFixed(2) }}</span>
-                  <span>{{ new Date(orden.createdAt).toLocaleDateString('es-ES') }}</span>
-                  <button type="button" class="mini-btn" @click.stop="abrirModalDetalleOrden(orden)">
-                    Ver detalle
-                  </button>
-                </div>
-              </div>
+            <div v-else class="cierres-tabla-scroll cierre-ordenes-tabla-scroll">
+              <table class="cierres-tabla cierre-ordenes-tabla">
+                <thead>
+                  <tr>
+                    <th>Orden</th>
+                    <th>Cliente</th>
+                    <th>Estado</th>
+                    <th>Pago</th>
+                    <th>Cobrado en turno</th>
+                    <th>Recibido acumulado</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="orden in ordenesDelCierre" :key="orden.id">
+                    <tr
+                      class="cierre-tabla-fila cierre-orden-tabla-fila"
+                      tabindex="0"
+                      :aria-label="`Ver detalles de la orden ${orden.numero}`"
+                      @click="abrirModalDetalleOrden(orden)"
+                      @keydown.enter.prevent="abrirModalDetalleOrden(orden)"
+                      @keydown.space.prevent="abrirModalDetalleOrden(orden)"
+                    >
+                      <td>
+                        <strong>{{ orden.numero }}</strong>
+                        <button
+                          v-if="orden.esReferencia"
+                          type="button"
+                          class="cierre-orden-referencia"
+                          :aria-expanded="referenciaOrdenAbiertaId === String(orden.id)"
+                          :aria-controls="`referencia-ayuda-${orden.id}`"
+                          aria-label="Información sobre solo referencia"
+                          @click.stop="toggleAyudaReferencia(orden.id)"
+                        >
+                          Solo referencia
+                        </button>
+                      </td>
+                      <td>{{ orden.nombreCliente }}</td>
+                      <td>
+                        <span class="cierre-orden-estado" :class="`estado-${orden.estado}`">{{ orden.estado }}</span>
+                      </td>
+                      <td>
+                        <span class="cierre-orden-pago" :class="`pago-${orden.estadoPago}`">{{ orden.estadoPago }}</span>
+                      </td>
+                      <td class="cierres-tabla-total">${{ Number(orden.cobradoEnTurno || 0).toFixed(2) }}</td>
+                      <td>${{ Number(orden.montoRecibido || 0).toFixed(2) }}</td>
+                      <td>{{ new Date(orden.createdAt).toLocaleDateString('es-ES') }}</td>
+                    </tr>
+                    <tr
+                      v-if="orden.esReferencia && referenciaOrdenAbiertaId === String(orden.id)"
+                      class="cierre-orden-referencia-fila"
+                    >
+                      <td colspan="7" :id="`referencia-ayuda-${orden.id}`">
+                        Esta orden aparece como referencia porque tuvo un cobro en esta caja, pero no fue entregada durante este cierre.
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
           </div>
           </template>
@@ -1626,6 +1690,7 @@ import {
   trashOutline,
   personCircleOutline,
   notificationsOutline,
+  bookOutline,
   megaphoneOutline,
   logoWhatsapp,
   logoFacebook,
@@ -2373,6 +2438,11 @@ const alturaContenidoSuperiorCss = computed(() =>
     ? ALTURA_BARRA_COMPACTA + UMBRAL_COLAPSAR + 12
     : alturaBannerPx.value + 24}px`
 )
+const alturaLimiteVistaCss = computed(() =>
+  `${squeeze.value >= 0.98
+    ? ALTURA_BARRA_COMPACTA + UMBRAL_COLAPSAR - 12
+    : alturaBannerPx.value}px`
+)
 let bannerColapsado = false
 let frameProgramado = false
 
@@ -2450,6 +2520,8 @@ const errorCierres = ref('')
 const cargandoDetalleCierre = ref(false)
 const errorDetalleCierre = ref('')
 const cierreSeleccionado = ref<any>(null)
+const referenciaOrdenAbiertaId = ref<string | null>(null)
+let solicitudDetalleCierre = 0
 const ordenSeleccionadaCierre = ref<any>(null)
 const cierrePendienteEliminar = ref<any>(null)
 const mostrarConfirmacionEliminarCierre = ref(false)
@@ -2817,6 +2889,8 @@ watch(mostrarModalGasto, (abierto) => {
 })
 
 const verOrdenesCierre = async (cierre: any) => {
+  const solicitudActual = ++solicitudDetalleCierre
+  referenciaOrdenAbiertaId.value = null
   cierreSeleccionado.value = null
   ordenSeleccionadaCierre.value = null
   cargandoDetalleCierre.value = true
@@ -2828,11 +2902,13 @@ const verOrdenesCierre = async (cierre: any) => {
     })
     const datos = await respuesta.json().catch(() => null)
     if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo cargar el detalle del cierre.')
+    if (solicitudActual !== solicitudDetalleCierre) return
     cierreSeleccionado.value = datos
   } catch (error) {
+    if (solicitudActual !== solicitudDetalleCierre) return
     errorDetalleCierre.value = error instanceof Error ? error.message : 'No se pudo cargar el detalle del cierre.'
   } finally {
-    cargandoDetalleCierre.value = false
+    if (solicitudActual === solicitudDetalleCierre) cargandoDetalleCierre.value = false
   }
 }
 
@@ -2903,12 +2979,16 @@ const obtenerMontoPendientes = (cierre: any) => {
     .reduce((acc: number, o: any) => acc + o.total, 0)
 }
 
-const ordenesCobradasCierre = computed(() => {
-  if (!cierreSeleccionado.value) return []
-  return cierreSeleccionado.value.ordenes.filter((o: any) => 
-    o.estadoPago === 'pagado' || o.estadoPago === 'anticipo'
-  )
-})
+const ordenesDelCierre = computed(() =>
+  Array.isArray(cierreSeleccionado.value?.ordenes)
+    ? cierreSeleccionado.value.ordenes
+    : []
+)
+
+const toggleAyudaReferencia = (ordenId: string | number) => {
+  const id = String(ordenId)
+  referenciaOrdenAbiertaId.value = referenciaOrdenAbiertaId.value === id ? null : id
+}
 
 const etiquetaMovimiento = (tipo: string) => {
   const mapa: Record<string, string> = {
@@ -3403,7 +3483,33 @@ const getIconoLavanderia = (id: string) => {
   }
 
   :global(html.app-panel-lateral-activo ion-app ion-modal::part(content)) {
-    max-width: calc(100% - 24px) !important;
+    box-sizing: border-box !important;
+    width: min(var(--width, 100%), 100%) !important;
+    max-width: 100% !important;
+    max-height: 100dvh !important;
+  }
+
+  :global(html.sali-lateral-activo ion-app ion-modal) {
+    position: fixed !important;
+    z-index: 30010 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: var(--sali-panel-ancho) !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  :global(html.sali-lateral-activo.sali-lateral-izquierdo ion-app ion-modal) {
+    left: var(--sali-panel-ancho) !important;
+    right: 0 !important;
+  }
+
+  :global(html.sali-lateral-activo ion-app ion-modal::part(content)) {
+    box-sizing: border-box !important;
+    width: min(var(--width, 100%), 100%) !important;
+    max-width: 100% !important;
+    max-height: 100dvh !important;
   }
 }
 
@@ -3549,6 +3655,25 @@ ion-content.shell-container {
   transform: translateY(calc(-1 * v-bind(bannerOffsetCss))); /* AGREGAR */
   transition: transform 0.22s ease;                           /* AGREGAR */
   will-change: transform;                                     /* AGREGAR */
+}
+
+.shell-view-boundary-alert {
+  position: absolute;
+  top: v-bind(alturaLimiteVistaCss);
+  left: 50%;
+  z-index: 25;
+  width: min(100%, 600px);
+  padding: 0 20px;
+  box-sizing: border-box;
+  transform: translate(-50%, calc(-50% - v-bind(bannerOffsetCss)));
+  transition: transform 0.22s ease;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.shell-view-boundary-alert > :deep(*) {
+  pointer-events: auto;
 }
 
 /* Cuando ya llegó a barra completa, la zona central no recibe clics. */
@@ -4061,6 +4186,11 @@ ion-content.shell-container {
   --border-radius: 20px;
 }
 
+.modal-gasto-shell {
+  --width: min(460px, calc(100vw - 28px));
+  --border-radius: 24px;
+}
+
 .modal-contenido {
   background: #ffffff;
   padding: 22px;
@@ -4074,6 +4204,221 @@ ion-content.shell-container {
   --ion-text-color: #0a1f38;
   color-scheme: light;
   color: #0a1f38;
+  gap: 17px;
+  padding: 24px;
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  border-radius: 24px;
+  background: linear-gradient(160deg, #ffffff 0%, #fbfdff 68%, #edf3f9 100%);
+  box-shadow: 0 20px 54px rgba(41, 46, 58, 0.2);
+}
+
+.modal-gasto-header {
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(18, 58, 102, 0.09);
+}
+
+.modal-gasto-header .modal-header-left {
+  gap: 13px;
+}
+
+.modal-gasto-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(18, 58, 102, 0.16);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #edf4fb, #d7e4f1);
+  color: #123a66;
+  box-shadow: inset 0 1px 0 #ffffff, 0 5px 13px rgba(18, 58, 102, 0.12);
+}
+
+.modal-gasto-contenido .modal-titulo {
+  color: #122d49;
+  font-size: 1.18rem;
+  letter-spacing: -0.02em;
+}
+
+.modal-gasto-contenido .modal-subtitulo {
+  margin-top: 3px;
+  color: #718197;
+  font-size: 0.82rem;
+}
+
+.modal-gasto-contenido .modal-cerrar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f3f6f9;
+  color: #62758a;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.modal-gasto-contenido .modal-cerrar:hover {
+  background: #e9eef3;
+  color: #173b5f;
+}
+
+.modal-gasto-campo {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-gasto-contenido .modal-label {
+  color: #425b73;
+  font-size: 0.72rem;
+  letter-spacing: 0.065em;
+}
+
+.modal-gasto-monto {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  min-height: 66px;
+  padding: 11px 14px;
+  border: 1px solid #bdcddd;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #f2f6fb, #ffffff 72%);
+  box-shadow: inset 0 2px 5px rgba(18, 58, 102, 0.05);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modal-gasto-monto:focus-within {
+  border-color: #123a66;
+  box-shadow: 0 0 0 4px rgba(18, 58, 102, 0.12);
+}
+
+.modal-gasto-monto > span:first-child {
+  color: #123a66;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.modal-gasto-contenido .modal-gasto-monto input {
+  min-width: 0;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: #182f47;
+  font-size: 1.55rem;
+  font-weight: 800;
+}
+
+.modal-gasto-contenido .modal-gasto-monto input:focus {
+  outline: none;
+}
+
+.modal-gasto-moneda {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #e8eff7;
+  color: #123a66;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.modal-gasto-contenido .modal-input-select {
+  min-height: 45px;
+  border: 1px solid #dce4eb;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #182f47;
+  font-weight: 700;
+}
+
+.modal-gasto-contenido .modal-input-select:focus {
+  border-color: #123a66;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(18, 58, 102, 0.1);
+}
+
+.modal-gasto-contenido .modal-textarea {
+  min-height: 96px;
+  padding: 12px 13px;
+  border: 1px solid #dce4eb;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #182f47;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modal-gasto-contenido .modal-textarea:focus {
+  border-color: #123a66;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(18, 58, 102, 0.1);
+}
+
+.modal-gasto-ayuda {
+  color: #8391a1;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.modal-gasto-contenido .gasto-tipo-preview {
+  margin: -1px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #d5e0eb;
+  border-radius: 10px;
+  background: #f2f6fb;
+  color: #365572;
+  font-size: 0.75rem;
+}
+
+.modal-gasto-antiguo {
+  padding: 11px 12px;
+  border: 1px solid #e2e8ef;
+  border-radius: 12px;
+  background: #f7f9fb;
+  color: #52677c;
+  font-size: 0.82rem;
+}
+
+.modal-gasto-antiguo input {
+  accent-color: #123a66;
+}
+
+.modal-gasto-botones {
+  gap: 11px;
+  margin-top: 1px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(18, 58, 102, 0.08);
+}
+
+.modal-gasto-botones ion-button {
+  min-height: 45px;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.modal-gasto-botones .btn-primario {
+  --background: linear-gradient(135deg, #1b4a78, #123a66);
+  --background-hover: #0d2b4e;
+  --box-shadow: 0 5px 13px rgba(18, 58, 102, 0.2);
+}
+
+.modal-gasto-botones .btn-fantasma {
+  --background: #ffffff;
+  --color: #50667c;
+  --border-color: #d7e0e8;
+}
+
+@media (max-width: 520px) {
+  .modal-gasto-contenido {
+    padding: 20px;
+  }
+
+  .modal-gasto-botones ion-button {
+    font-size: 0.8rem;
+  }
 }
 
 .modal-gasto-contenido input,
@@ -4213,6 +4558,10 @@ ion-content.shell-container {
     display: none;
   }
 
+  .shell-view-boundary-alert {
+    display: none;
+  }
+
   .content-area {
     padding: calc(22px + env(safe-area-inset-top)) 18px calc(96px + env(safe-area-inset-bottom));
   }
@@ -4308,11 +4657,11 @@ ion-content.shell-container {
 
 .modal-cierres-contenido {
   background:
-    radial-gradient(ellipse at 8% 0%, rgba(119, 185, 190, 0.2), transparent 42%),
-    radial-gradient(ellipse at 100% 10%, rgba(121, 153, 194, 0.16), transparent 38%),
-    linear-gradient(150deg, #f5f9fa 0%, #e5eef1 100%);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px) saturate(115%);
+    radial-gradient(ellipse at 8% 0%, rgba(18, 58, 102, 0.08), transparent 42%),
+    radial-gradient(ellipse at 100% 10%, rgba(102, 194, 184, 0.07), transparent 38%),
+    linear-gradient(150deg, #ffffff 0%, #f2f6fa 100%);
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  backdrop-filter: blur(18px) saturate(105%);
   max-height: calc(100dvh - 28px); /* antes tenía además "height: calc(100dvh - 28px);" -> quítala */
   width: min(1080px, calc(100vw - 24px));
   margin: 14px auto;
@@ -4341,6 +4690,10 @@ ion-content.shell-container {
   grid-template-columns: repeat(2, minmax(180px, 220px)) auto;
   align-items: end;
   gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .filtro-fecha-campo {
@@ -4351,23 +4704,29 @@ ion-content.shell-container {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #4a627e;
+  color: #123a66;
 }
 
 .filtro-fecha-campo input {
-  border: 1.5px solid rgba(83, 127, 146, 0.24);
+  border: 1px solid #d4dfeb;
   border-radius: 10px;
   padding: 9px 10px;
   color: #0a1f38;
-  background: rgba(235, 243, 246, 0.92);
+  background: #f8fafc;
   font-weight: 600;
+}
+
+.filtro-fecha-campo input:focus {
+  border-color: #55789d;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(18, 58, 102, 0.1);
 }
 
 .filtro-limpiar {
   height: 38px;
-  border: 1.5px solid rgba(18, 58, 102, 0.28);
+  border: 1px solid rgba(18, 58, 102, 0.2);
   border-radius: 10px;
-  background: transparent;
+  background: #ffffff;
   color: #123a66;
   font-size: 0.82rem;
   font-weight: 700;
@@ -4376,16 +4735,16 @@ ion-content.shell-container {
 }
 
 .filtro-limpiar:hover {
-  border-color: #4fb3e0;
-  color: #0d2b4e;
+  border-color: #123a66;
+  background: #edf3f9;
 }
 
 .filtro-chip {
   padding: 8px 16px;
-  border: 1.5px solid #a9d8ee;
+  border: 1px solid #d2deea;
   border-radius: 20px;
   background: #ffffff;
-  color: #4a627e;
+  color: #365572;
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
@@ -4393,20 +4752,20 @@ ion-content.shell-container {
 }
 
 .filtro-chip:hover {
-  background: #f0f8ff;
-  border-color: #4fb3e0;
+  background: #f2f6fa;
+  border-color: #9eb2c7;
 }
 
 .filtro-chip.active {
-  background: #4fb3e0;
+  background: #123a66;
   color: #ffffff;
-  border-color: #4fb3e0;
+  border-color: #123a66;
 }
 
 .cierres-lista {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto; /* antes era overflow: hidden */
+  overflow: hidden;
 }
 
 .cierres-vacio {
@@ -4421,7 +4780,7 @@ ion-content.shell-container {
 
 .cierres-vacio-icon {
   font-size: 48px;
-  color: #a9d8ee;
+  color: #8da8c3;
 }
 
 .cierres-vacio-texto {
@@ -4439,33 +4798,200 @@ ion-content.shell-container {
 }
 
 .cierres-box-historial {
+  display: block;
+}
+
+.cierres-tabla-scroll {
+  width: 100%;
+  max-height: min(58vh, 560px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #dce5ee;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(10, 31, 56, 0.06);
+}
+
+.cierres-tabla {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #29445f;
+  font-size: 0.84rem;
+  text-align: left;
+}
+
+.cierre-ordenes-tabla-scroll {
+  max-height: min(40vh, 380px);
+}
+
+.cierres-tabla th:nth-child(1) { width: 13%; }
+.cierres-tabla th:nth-child(2) { width: 9%; }
+.cierres-tabla th:nth-child(3) { width: 14%; }
+.cierres-tabla th:nth-child(4) { width: 12%; }
+.cierres-tabla th:nth-child(5) { width: 11%; }
+.cierres-tabla th:nth-child(6) { width: 10%; }
+.cierres-tabla th:nth-child(7) { width: 16%; }
+.cierres-tabla th:nth-child(8) { width: 15%; }
+
+.cierre-ordenes-tabla th:nth-child(1) { width: 13%; }
+.cierre-ordenes-tabla th:nth-child(2) { width: 21%; }
+.cierre-ordenes-tabla th:nth-child(3) { width: 12%; }
+.cierre-ordenes-tabla th:nth-child(4) { width: 11%; }
+.cierre-ordenes-tabla th:nth-child(5) { width: 16%; }
+.cierre-ordenes-tabla th:nth-child(6) { width: 15%; }
+.cierre-ordenes-tabla th:nth-child(7) { width: 12%; }
+
+.cierres-tabla th,
+.cierres-tabla td {
+  overflow-wrap: anywhere;
+}
+
+.cierres-tabla th:last-child,
+.cierres-tabla td:last-child {
+  text-align: center;
+}
+
+.cierres-tabla th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 13px 14px;
+  border-bottom: 1px solid #dce5ee;
+  background: #f0f4f8;
+  color: #536b84;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.cierres-tabla td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e8edf2;
+  white-space: normal;
+}
+
+.cierres-tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cierre-tabla-fila {
+  cursor: pointer;
+  outline: none;
+  transition: background 0.15s ease;
+}
+
+.cierre-tabla-fila:hover,
+.cierre-tabla-fila:focus-visible {
+  background: #f2f6fb;
+}
+
+.cierre-tabla-fila:focus-visible {
+  box-shadow: inset 0 0 0 2px #55789d;
+}
+
+.cierre-tabla-fila td:first-child {
+  color: #123a66;
+  font-weight: 800;
+}
+
+.cierre-tabla-fila td:first-child strong,
+.cierre-tabla-fila td:first-child small {
+  display: block;
+}
+
+.cierre-tabla-fila td:first-child small {
+  margin-top: 3px;
+  color: #8191a3;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.cierre-tabla-caja {
+  display: inline-flex;
+  min-width: 46px;
+  justify-content: center;
+  padding: 5px 9px;
+  border: 1px solid #d3dfeb;
+  border-radius: 9px;
+  background: #eaf0f7;
+  color: #123a66;
+  font-weight: 850;
+}
+
+.cierres-tabla-total {
+  color: #123a66 !important;
+  font-weight: 900 !important;
+}
+
+.cierre-tabla-gasto {
+  color: #596e83;
+}
+
+.cierre-tabla-acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cierre-tabla-accion {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  align-content: start;
-  gap: 14px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #dbe4ed;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #345674;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.cierre-tabla-accion:hover,
+.cierre-tabla-accion:focus-visible {
+  border-color: #9db2c8;
+  background: #eaf0f7;
+  color: #123a66;
+  outline: none;
+}
+
+.cierre-tabla-accion.cierre-tabla-eliminar {
+  color: #a63b3b;
+}
+
+.cierre-tabla-accion.cierre-tabla-eliminar:hover,
+.cierre-tabla-accion.cierre-tabla-eliminar:focus-visible {
+  border-color: #e2bcbc;
+  background: #fff3f3;
+  color: #922d2d;
 }
 
 .cierre-item {
   position: relative;
-  border: 1px solid rgba(74, 119, 140, 0.2);
-  border-left: 4px solid #59a9a5;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-left: 4px solid #123a66;
   border-radius: 16px;
-  background: linear-gradient(145deg, rgba(248, 251, 252, 0.94), rgba(218, 233, 238, 0.9));
+  background: linear-gradient(145deg, #ffffff 0%, #f5f8fc 100%);
   color: #0a1f38;
   font-weight: 600;
   min-width: 0;
-  padding: 14px;
+  padding: 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 8px 20px rgba(28, 58, 75, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  gap: 11px;
+  box-shadow: 0 7px 18px rgba(10, 31, 56, 0.07), inset 0 1px 0 #ffffff;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .cierre-item:hover {
-  border-color: rgba(54, 137, 145, 0.44);
-  border-left-color: #327d85;
-  box-shadow: 0 12px 26px rgba(28, 58, 75, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  border-color: rgba(18, 58, 102, 0.28);
+  border-left-color: #0d2b4e;
+  box-shadow: 0 12px 25px rgba(10, 31, 56, 0.13), inset 0 1px 0 #ffffff;
   transform: translateY(-2px);
 }
 
@@ -4489,22 +5015,22 @@ ion-content.shell-container {
   min-width: 42px;
   min-height: 32px;
   padding: 0 10px;
-  border: 1px solid rgba(47, 126, 134, 0.16);
+  border: 1px solid rgba(18, 58, 102, 0.14);
   border-radius: 10px;
   font-weight: 800;
-  color: #24666d;
+  color: #123a66;
   font-size: 0.95rem;
-  background: rgba(116, 190, 187, 0.2);
+  background: #e8eff7;
 }
 
 .cierre-fecha {
-  color: #6d829c;
+  color: #637b94;
   font-size: 0.85rem;
 }
 
 .cierre-monto {
   font-weight: 800;
-  color: #16a34a;
+  color: #123a66;
   font-size: 1.1rem;
 }
 
@@ -4520,9 +5046,9 @@ ion-content.shell-container {
   gap: 2px;
   min-width: 0;
   padding: 7px 8px;
-  border: 1px solid rgba(76, 112, 128, 0.11);
+  border: 1px solid rgba(18, 58, 102, 0.08);
   border-radius: 11px;
-  background: rgba(237, 245, 247, 0.68);
+  background: #f3f6fa;
 }
 
 .cierre-detalle > span:last-child {
@@ -4531,7 +5057,7 @@ ion-content.shell-container {
 
 .detalle-label {
   font-size: 0.75rem;
-  color: #6d829c;
+  color: #6a7f95;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -4560,10 +5086,10 @@ ion-content.shell-container {
   justify-content: center;
   gap: 6px;
   padding: 8px 12px;
-  border: 1.5px solid #a9d8ee;
-  border-radius: 8px;
-  background: #f0f8ff;
-  color: #4a627e;
+  border: 1px solid rgba(18, 58, 102, 0.2);
+  border-radius: 9px;
+  background: #edf3f9;
+  color: #123a66;
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
@@ -4589,10 +5115,10 @@ ion-content.shell-container {
   gap: 6px;
   min-height: 36px;
   padding: 8px 10px;
-  border: 1.5px solid rgba(22, 163, 74, 0.28);
-  border-radius: 8px;
-  background: #f0fdf4;
-  color: #15803d;
+  border: 1px solid rgba(18, 58, 102, 0.18);
+  border-radius: 9px;
+  background: #ffffff;
+  color: #123a66;
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
@@ -4600,7 +5126,7 @@ ion-content.shell-container {
 
 .cierre-descargar:hover,
 .cierre-descargar:focus-visible {
-  background: #dcfce7;
+  background: #e8eff7;
   outline: 0;
 }
 
@@ -4626,9 +5152,9 @@ ion-content.shell-container {
 }
 
 .cierre-ver-ordenes:hover {
-  background: #4fb3e0;
+  background: #123a66;
   color: #ffffff;
-  border-color: #4fb3e0;
+  border-color: #123a66;
 }
 
 .cierre-ver-ordenes ion-icon {
@@ -4683,6 +5209,37 @@ ion-content.shell-container {
   grid-template-columns: repeat(4, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.cierre-detalle-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  margin: -6px 0 18px;
+}
+
+.cierre-detalle-resumen > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(18, 58, 102, 0.09);
+  border-radius: 11px;
+  background: #f4f7fa;
+}
+
+.cierre-detalle-resumen span {
+  color: #718399;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.cierre-detalle-resumen strong {
+  color: #123a66;
+  font-size: 0.9rem;
 }
 
 .cierre-resumen-card {
@@ -4802,80 +5359,40 @@ ion-content.shell-container {
   cursor: wait;
 }
 
-.cierre-orden-item {
-  border: 1.5px solid #dfeaf5;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: all 0.2s ease;
+.cierre-orden-referencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 2px 5px;
+  border: 1px solid rgba(79, 179, 224, 0.24);
+  border-radius: 999px;
+  background: rgba(79, 179, 224, 0.12);
+  color: #1d6d99;
+  font-size: 0.61rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: normal;
   text-align: left;
   cursor: pointer;
 }
 
-.cierre-orden-item:hover {
-  border-color: #4fb3e0;
-  box-shadow: 0 10px 24px rgba(79, 179, 224, 0.12);
-  transform: translateY(-1px);
+.cierre-orden-referencia:hover,
+.cierre-orden-referencia:focus-visible,
+.cierre-orden-referencia[aria-expanded="true"] {
+  border-color: rgba(29, 109, 153, 0.48);
+  background: #e5f5fc;
+  outline: none;
 }
 
-.cierre-orden-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.cierre-orden-titulo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.cierre-orden-numero {
-  font-weight: 800;
-  color: #0a1f38;
-  font-size: 1rem;
-}
-
-.cierre-orden-cliente {
-  color: #123a66;
-  font-size: 0.96rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.cierre-orden-referencia {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(79, 179, 224, 0.12);
-  color: #1d6d99;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.cierre-orden-monto {
-  font-weight: 800;
-  color: #0f9f5c;
-  font-size: 1.12rem;
-}
-
-.cierre-orden-info {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.cierre-orden-cliente-wrap,
-.cierre-orden-estado-wrap,
-.cierre-orden-pago-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.cierre-orden-referencia-fila td {
+  padding: 9px 14px;
+  background: #f4f9fd;
+  color: #526b83;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  white-space: normal;
 }
 
 .cierre-orden-estado,
@@ -4883,33 +5400,6 @@ ion-content.shell-container {
   font-size: 0.85rem;
   font-weight: 700;
   text-transform: capitalize;
-}
-
-.cierre-orden-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 0.8rem;
-  color: #6d829c;
-  border-top: 1px solid #edf3f8;
-  padding-top: 10px;
-}
-
-.mini-btn {
-  border: 1px solid #a9d8ee;
-  background: #edf9ff;
-  color: #123a66;
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.mini-btn:hover {
-  background: #ddecf9;
 }
 
 .movimientos-cierre-panel {
@@ -5178,14 +5668,8 @@ ion-content.shell-container {
   }
 
   .cierre-resumen-grid,
-  .cierre-orden-info,
   .detalle-orden-cierre-grid {
     grid-template-columns: 1fr;
-  }
-
-  .cierre-orden-footer {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 @media (max-width: 760px) {
@@ -5199,6 +5683,52 @@ ion-content.shell-container {
 
   .cierres-filtro-fechas {
     grid-template-columns: 1fr;
+  }
+
+  .cierres-tabla {
+    font-size: 0.68rem;
+  }
+
+  .cierres-tabla th,
+  .cierres-tabla td {
+    padding: 8px 5px;
+  }
+
+  .cierres-tabla th {
+    font-size: 0.56rem;
+    letter-spacing: 0.025em;
+  }
+
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(1) { width: 15%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(2) { width: 8%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(3) { width: 13%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(4) { width: 12%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(5) { width: 10%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(6) { width: 10%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(7) { width: 17%; }
+  .cierres-tabla:not(.cierre-ordenes-tabla) th:nth-child(8) { width: 15%; }
+
+  .cierre-ordenes-tabla th:nth-child(1) { width: 13%; }
+  .cierre-ordenes-tabla th:nth-child(2) { width: 22%; }
+  .cierre-ordenes-tabla th:nth-child(3) { width: 12%; }
+  .cierre-ordenes-tabla th:nth-child(4) { width: 11%; }
+  .cierre-ordenes-tabla th:nth-child(5) { width: 17%; }
+  .cierre-ordenes-tabla th:nth-child(6) { width: 15%; }
+  .cierre-ordenes-tabla th:nth-child(7) { width: 10%; }
+
+  .cierre-tabla-acciones {
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cierre-tabla-accion {
+    width: 23px;
+    height: 25px;
+  }
+
+  .cierre-tabla-caja {
+    min-width: 0;
+    padding: 3px 4px;
   }
 }
 

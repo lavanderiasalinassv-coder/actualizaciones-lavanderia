@@ -6,33 +6,7 @@
         <button class="volver-btn" type="button" title="Volver a configuración" @click="volver">
           <ion-icon :icon="arrowBackOutline" />
         </button>
-        <div>
-          <p class="eyebrow">Personalización</p>
-          <h2>Apariencia</h2>
-          <p>Ajusta la identidad visual de cada pantalla.</p>
-        </div>
       </header>
-
-      <!-- ───────────── Encabezado con el usuario real de la sesión ───────────── -->
-      <div class="config-card">
-        <div class="config-card-header">
-          <div>
-            <span class="config-card-label">Personalización del sistema</span>
-            <p class="config-card-hint">Ajusta la identidad visual de cada pantalla.</p>
-          </div>
-          <span class="badge-rol" :class="{ admin: esAdministrador }">
-            <ion-icon :icon="esAdministrador ? settingsOutline : personOutline" />
-            {{ esAdministrador ? 'Administrador' : 'Personal' }}
-          </span>
-        </div>
-        <div v-if="usuarioActual" class="usuario-actual">
-          <span class="empleado-avatar">{{ inicial(usuarioActual.nombre) }}</span>
-          <div>
-            <p class="usuario-nombre">{{ usuarioActual.nombre }}</p>
-            <small>Sesión iniciada</small>
-          </div>
-        </div>
-      </div>
 
       <div v-if="esAdministrador" class="config-card apariencia-card">
         <div class="card-header-row">

@@ -61,8 +61,8 @@
             </span>
           </div>
           <div>
-            <p class="sali-titulo">Hola soy Burbujita</p>
-            <p class="sali-subtitulo">Tu guia dentro de la app</p>
+            <p class="sali-titulo">¿Qué necesitas hoy?</p>
+            <p class="sali-subtitulo">Estoy aquí para ayudarte</p>
           </div>
         </div>
         <div class="sali-acciones-header">
@@ -104,7 +104,7 @@
       <div class="sali-aviso">Burbujita solo responde consultas; no realiza cambios en tus datos.</div>
       <div ref="contenedorMensajes" class="sali-mensajes" aria-live="polite">
         <div v-if="mensajes.length === 0" class="sali-bienvenida">
-          ¡Hola! Soy Burbujita, tu asistente en Lavandería Salinas. ¿En qué te ayudo?
+          {{ nombreSaludo }} ¿En qué te puedo ayudar?
         </div>
         <div
           v-for="(mensaje, indice) in mensajes"
@@ -189,7 +189,6 @@
           ref="entradaTexto"
           v-model="pregunta"
           class="sali-input"
-          :disabled="enviando"
           maxlength="2000"
           placeholder="Pregunta lo que quieras"
           @keydown.enter.exact.prevent="enviar(false)"
@@ -218,7 +217,7 @@
 <script setup lang="ts">
 import { IonIcon } from '@ionic/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { 
   closeOutline, contractOutline, expandOutline, micOffOutline, micOutline, pauseOutline,
   sendOutline
@@ -359,6 +358,7 @@ const asistenteBloqueado = computed(() => !esAdministrador.value && funcionesBlo
 const { vozSeleccionada } = useSaliAiConfig()
 const { ordenes, cargarOrdenes } = useOrdenes()
 const route = useRoute()
+const router = useRouter()
 const abierto = ref(false)
 const lateral = ref(false)
 const ladoLateral = ref<'izquierda' | 'derecha'>('derecha')
@@ -375,6 +375,9 @@ const estiloViewportChat = computed(() => ({
   '--sali-desplazamiento-superior': `${desplazamientoViewportChat.value}px`,
 }))
 const nombreUsuario = computed(() => usuarioActual.value?.nombre || 'Usuario')
+const nombreSaludo = computed(() =>
+  nombreUsuario.value !== 'Usuario' ? `¡Hola, ${nombreUsuario.value}!` : '¡Hola!',
+)
 const nombresVistas: Record<string, string> = {
   '/tabs/home': 'Vender',
   '/tabs/principal': 'Principal',
@@ -391,6 +394,7 @@ const nombresVistas: Record<string, string> = {
   '/tabs/tareas': 'Tareas',
   '/tabs/depositos': 'Depósitos',
   '/tabs/facturas': 'Facturas',
+  '/tabs/guia': 'Guía',
 }
 const vistaActual = computed(() => ({
   ruta: route.path,
@@ -842,6 +846,12 @@ const normalizarLlamado = (texto: string) => texto
   .replace(/\s+/g, ' ')
   .trim()
 
+const solicitaAbrirGuia = (texto: string) => {
+  const normalizado = normalizarLlamado(texto)
+  const accionNavegacion = /\b(abre|abrir|llevame|lleva|ir|ve|vamos|entra|muestra|mostrar|consultar|consulta|buscar|busca|quiero ver|quiero abrir|quiero ir|navega|redirige)\b/
+  return accionNavegacion.test(normalizado) && /\b(guia|ayuda|tutorial(?:es)?)\b/.test(normalizado)
+}
+
 // Frases con las que el usuario da por terminada la conversación. Al detectarlas,
 // Burbujita se despide y cierra el chat (y detiene la conversación por voz si estaba activa).
 const FRASES_DESPEDIDA = new Set([
@@ -906,6 +916,14 @@ const enviar = async (esPorVoz = false) => {
   pregunta.value = ''
   enviando.value = true
   try {
+    if (solicitaAbrirGuia(texto)) {
+      const respuestaGuia = 'Te llevo a la Guía, donde podrás consultar la información y los tutoriales de la aplicación.'
+      mensajes.value.push({ rol: 'assistant', texto: respuestaGuia })
+      if (esPorVoz && conversacionPorVoz.value) void hablarTexto(respuestaGuia, mensajes.value.length - 1)
+      await router.push('/tabs/guia')
+      return
+    }
+
     const solicitudPdf = /\b(pdf|documento|archivo)\b/i.test(texto)
     const solicitudNumeroOrden = texto.match(/\borden(?:\s*(?:n(?:u|ú)mero)?\.?)?\s*#?\s*(\d{1,8})\b/i)
     const edicionPdf = ultimaOrdenPdf.value ? aplicarEdicionesPdfOrden(ultimaOrdenPdf.value, texto) : null
@@ -945,25 +963,28 @@ const enviar = async (esPorVoz = false) => {
     }
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 segundos timeout
-    
-    const respuesta = await fetch(`${getApiBaseUrl()}/ayuda-ia`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mensaje: texto,
-        historial,
-        usuario: { nombre: nombreUsuario.value, rol: rol.value || 'usuario' },
-        vista: vistaActual.value,
-      }),
-      signal: controller.signal
-    })
-    
-    clearTimeout(timeoutId)
-    const datos = await respuesta.json()
-    if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo consultar la ayuda.')
-    
-    const respuestaTexto = datos.respuesta
+    const timeoutId = setTimeout(() => controller.abort(), 180000)
+    let respuestaTexto: string
+    try {
+      const respuesta = await fetch(`${getApiBaseUrl()}/ayuda-ia`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensaje: texto,
+          historial,
+          usuario: { nombre: nombreUsuario.value, rol: rol.value || 'usuario' },
+          vista: vistaActual.value,
+        }),
+        signal: controller.signal
+      })
+
+      const datos = await respuesta.json()
+      if (!respuesta.ok) throw new Error(datos?.error || 'No se pudo consultar la ayuda.')
+      respuestaTexto = datos.respuesta
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
     const responderConVoz = esPorVoz && conversacionPorVoz.value
     mensajes.value.push({ rol: 'assistant', texto: respuestaTexto })
     // En voz, si la respuesta trae una tabla (por ejemplo un desglose de gastos),

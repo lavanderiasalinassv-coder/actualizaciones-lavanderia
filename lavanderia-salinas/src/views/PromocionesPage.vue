@@ -2,7 +2,6 @@
   <AppShell>
     <div class="page-content">
       <div class="header-row">
-        <h1>Promociones y Ofertas</h1>
         <ion-button class="btn-primario" @click="abrirFormulario" v-if="!mostrarFormulario && vistaPromociones === 'promociones'">
           <ion-icon :icon="addCircleOutline" slot="start" />
           Nueva Promoción

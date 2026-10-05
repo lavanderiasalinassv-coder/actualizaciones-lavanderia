@@ -429,13 +429,14 @@ const ventaDelDiaTurnoActual = computed(() =>
       horaEntrega?: string
     }
   ): Promise<Orden | null> => {
-   const campos: { notaInterna?: string; fotos?: string[]; fechaCreacion?: string; fechaEntrega?: string; horaEntrega?: string; nombreCliente?: string; correo?: string; telefono?: string; cantidadPrendas?: number } = {}
+   const campos: { notaInterna?: string; fotos?: string[]; fechaCreacion?: string; fechaEntrega?: string; horaEntrega?: string; nombreCliente?: string; codigoPais?: string; correo?: string; telefono?: string; cantidadPrendas?: number } = {}
     if (typeof cambios.notaInterna === 'string') campos.notaInterna = cambios.notaInterna
     if (Array.isArray(cambios.fotos)) campos.fotos = cambios.fotos
     if (typeof cambios.fechaCreacion === 'string') campos.fechaCreacion = cambios.fechaCreacion
     if (typeof cambios.fechaEntrega === 'string') campos.fechaEntrega = cambios.fechaEntrega
     if (typeof cambios.horaEntrega === 'string') campos.horaEntrega = cambios.horaEntrega
     if (typeof cambios.nombreCliente === 'string') campos.nombreCliente = cambios.nombreCliente
+    if (typeof cambios.codigoPais === 'string') campos.codigoPais = cambios.codigoPais
     if (typeof cambios.correo === 'string') campos.correo = cambios.correo
     if (typeof cambios.telefono === 'string') campos.telefono = cambios.telefono
     if (typeof cambios.cantidadPrendas === 'number' && Number.isFinite(cambios.cantidadPrendas)) campos.cantidadPrendas = cambios.cantidadPrendas

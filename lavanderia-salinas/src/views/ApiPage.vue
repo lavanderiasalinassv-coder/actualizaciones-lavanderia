@@ -5,11 +5,6 @@
         <button class="volver-btn" type="button" title="Volver a configuración" @click="volver">
           <ion-icon :icon="arrowBackOutline" />
         </button>
-        <div>
-          <p class="api-eyebrow">Conexión</p>
-          <h2>API del sistema</h2>
-          <p>Elige el servidor que utilizarán los módulos de la aplicación.</p>
-        </div>
         <span class="estado" :class="{ online: servidorConfigurado && destinoActual === 'servidor' }">
           <span class="estado-punto"></span>
           {{ destinoActual === 'local' ? 'API local' : 'API en línea' }}

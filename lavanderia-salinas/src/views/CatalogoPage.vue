@@ -1,10 +1,6 @@
 <template>
   <AppShell>
     <div class="catalogo-page force-light">
-      <div class="catalogo-header">
-        <h1>Catálogo</h1>
-      </div>
-
       <div class="tabs-row">
         <button class="tab-chip" :class="{ active: !categoriaActivaId && tabActivo === 'todo' }" @click="mostrarCategorias">
           Todo

@@ -2,9 +2,6 @@
   <AppShell>
     <div class="page-content">
       <div class="header-row">
-        <div>
-          <h1>Clientes</h1>
-        </div>
         <ion-button class="btn-primario" @click="abrirFormulario()">
           <ion-icon :icon="personAddOutline" slot="start" />
           Agregar cliente
@@ -237,6 +234,7 @@ const clientesFiltrados = computed(() => {
     base = [...base]
       .filter((cliente) => cliente.totalOrdenes > 50)
       .sort((a, b) => b.totalOrdenes - a.totalOrdenes)
+      .slice(0, 6)
   }
 
   if (!q) return base
@@ -333,7 +331,7 @@ const cerrarFormulario = () => {
 }
 
 const totalClientesTop = computed(() =>
-  clientes.value.filter((cliente) => cliente.totalOrdenes >= 50).length
+  clientes.value.filter((cliente) => cliente.totalOrdenes > 50).length
 )
 
 const mostrarToast = async (mensaje: string, color: 'success' | 'danger' = 'success') => {
@@ -440,68 +438,99 @@ h3 {
 .stats-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 11px;
 }
 
 .stat-card {
+  --stat-accent: #315f8d;
+  --stat-tint: #e4eef8;
   position: relative;
   overflow: hidden;
-  border-radius: 18px;
-  padding: 16px 18px;
-  border: 1px solid transparent;
+  min-height: 108px;
+  border-radius: 14px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--stat-accent) 25%, #ffffff);
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
-  box-shadow: 0 10px 20px rgba(10, 31, 56, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: #ffffff;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--stat-accent) 12%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  color: #123a66;
   cursor: pointer;
   text-align: left;
   font: inherit;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .stat-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.22);
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--stat-accent) 22%, #ffffff);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--stat-tint) 78%, #ffffff);
+  color: var(--stat-accent);
   display: grid;
   place-items: center;
-  font-size: 16px;
-  margin-bottom: 4px;
-}
-
-.stat-total {
-  background: linear-gradient(135deg, #123a66 0%, #4fb3e0 100%);
-}
-
-.stat-recurrentes {
-  background: linear-gradient(135deg, #16a34a 0%, #4ade80 100%);
-}
-
-.stat-top {
-  background: linear-gradient(135deg, #b8860b 0%, #f5cb5c 100%);
+  font-size: 18px;
 }
 
 .stat-label {
-  font-size: 0.78rem;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  color: #687f96;
+  font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.055em;
 }
 
 .stat-card strong {
-  font-size: 1.7rem;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  color: var(--stat-accent);
+  font-size: 1.75rem;
+  line-height: 1;
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-total {
+  --stat-accent: #1d5ca8;
+  --stat-tint: #cfe4ff;
+  background: linear-gradient(145deg, #e4f1ff 0%, #bfdcff 100%);
+}
+
+.stat-recurrentes {
+  --stat-accent: #168052;
+  --stat-tint: #c8f0d9;
+  background: linear-gradient(145deg, #e2f9eb 0%, #c0ebd1 100%);
+}
+
+.stat-top {
+  --stat-accent: #a76508;
+  --stat-tint: #ffe4a8;
+  background: linear-gradient(145deg, #fff5d9 0%, #ffe3a2 100%);
 }
 
 .stat-card.active {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(10, 31, 56, 0.14);
-  border-color: rgba(255, 255, 255, 0.38);
+  transform: translateY(-2px);
+  border-color: var(--stat-accent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--stat-tint) 82%, #ffffff) 0%, var(--stat-tint) 100%);
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--stat-accent) 20%, transparent), inset 0 1px 0 #ffffff;
+}
+
+.stat-card:focus-visible {
+  outline: 3px solid rgba(79, 179, 224, 0.35);
+  outline-offset: 2px;
 }
 
 .search-bar {
@@ -589,10 +618,12 @@ h3 {
 }
 
 .cliente-card {
+  --card-accent: #4fb3e0;
+  --card-tint: #f1faff;
   position: relative;
-  background: #ffffff;
+  background: linear-gradient(145deg, #ffffff 0%, var(--card-tint) 100%);
   border: 1px solid rgba(10, 31, 56, 0.08);
-  border-left: 5px solid #4fb3e0;
+  border-left: 5px solid var(--card-accent);
   border-radius: 18px;
   padding: 18px 16px;
   display: flex;
@@ -607,10 +638,10 @@ h3 {
   transform: translateY(-2px);
 }
 
-.acento-0 { border-left-color: #4fb3e0; }
-.acento-1 { border-left-color: #16a34a; }
-.acento-2 { border-left-color: #d97706; }
-.acento-3 { border-left-color: #7c3aed; }
+.acento-0 { --card-accent: #2583bd; --card-tint: #eaf6ff; }
+.acento-1 { --card-accent: #168052; --card-tint: #eaf8ef; }
+.acento-2 { --card-accent: #c57612; --card-tint: #fff5e5; }
+.acento-3 { --card-accent: #7652b8; --card-tint: #f3efff; }
 
 .medalla-badge {
   position: absolute;
@@ -885,18 +916,24 @@ select:focus {
   }
 
   .stat-card {
-    padding: 12px 12px 13px;
-    border-radius: 14px;
+    min-height: 82px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 7px;
+    row-gap: 5px;
+    padding: 9px 7px;
+    border-radius: 12px;
   }
 
   .stat-icon {
-    width: 26px;
-    height: 26px;
-    font-size: 14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      font-size: 14px;
   }
 
   .stat-label {
-    font-size: 0.6rem;
+    font-size: 0.56rem;
+    letter-spacing: 0.035em;
   }
 
   .stat-card strong {

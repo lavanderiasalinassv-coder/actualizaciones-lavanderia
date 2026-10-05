@@ -7,10 +7,6 @@
       </div>
 
       <div class="header-row">
-        <div>
-          <h1>Inventario de insumos</h1>
-        </div>
-
         <div class="header-actions">
           <ion-button class="btn-primario" @click="abrirFormulario()">
             <ion-icon :icon="addOutline" slot="start" />

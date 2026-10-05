@@ -37,6 +37,10 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@/views/ReportesPage.vue')
       },
       {
+        path: 'guia',
+        component: () => import('@/views/GuiaPage.vue')
+      },
+      {
         path: 'configuracion',
         component: () => import('@/views/ConfiguracionPage.vue')
       },
@@ -151,7 +155,8 @@ const rutasPermitidasRecepcionista = new Set([
   '/verificacion-2fa',
   '/tabs/calendario',
   '/tabs/configuracion',
-  '/tabs/ajustes-burbujita'
+  '/tabs/ajustes-burbujita',
+  '/tabs/guia'
 ])
 
 const rutasPermitidasOperador = new Set([
@@ -163,7 +168,8 @@ const rutasPermitidasOperador = new Set([
   '/verificacion-2fa',
   '/tabs/calendario',
   '/tabs/configuracion',
-  '/tabs/ajustes-burbujita'
+  '/tabs/ajustes-burbujita',
+  '/tabs/guia'
 ])
 
 const obtenerRolActual = () =>

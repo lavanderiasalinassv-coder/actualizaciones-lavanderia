@@ -28,6 +28,10 @@
                   {{ totalNotificacionesNoLeidas }}
                 </div>
               </button>
+              <button class="notificacion-menu-item" @click="mostrarMenuNotificaciones = false; irA('/tabs/guia')">
+                <ion-icon :icon="bookOutline" />
+                <span>Guía</span>
+              </button>
               <button v-if="!esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalReportarProblema = true; mostrarMenuNotificaciones = false">
                 <ion-icon :icon="documentTextOutline" />
                 <span>Reportar problema</span>
@@ -95,21 +99,16 @@
       </button>
     </div>
 
-    <div class="home-body">
-      <!-- ───────────── Alerta de turno antiguo abierto ───────────── -->
-      <div v-if="alertaTurnoAntiguo" class="alerta-turno-antiguo">
-        <div class="alerta-turno-icono">
-          <ion-icon :icon="warningOutline" />
-        </div>
-        <div class="alerta-turno-contenido">
-          <p class="alerta-turno-titulo">⚠️ Caja sin cerrar</p>
-          <p class="alerta-turno-mensaje">{{ alertaTurnoAntiguo }}</p>
-        </div>
-        <button class="alerta-turno-cerrar" @click="alertaTurnoAntiguo = ''">
-          <ion-icon :icon="closeOutline" />
-        </button>
+    <div v-if="alertaTurnoAntiguo" class="alerta-turno-antiguo alerta-turno-antiguo-movil">
+      <div class="alerta-turno-contenido">
+        <p class="alerta-turno-mensaje">{{ alertaTurnoAntiguo }}</p>
       </div>
+      <button class="alerta-turno-cerrar" aria-label="Cerrar advertencia" @click="alertaTurnoAntiguo = ''">
+        <ion-icon :icon="closeOutline" />
+      </button>
+    </div>
 
+    <div class="home-body">
       <!-- ───────────── Sucursal ───────────── -->
       <div class="config-card sucursal-card">
         <div class="config-card-header">
@@ -256,33 +255,39 @@
       </label>
     </div>
 
-    <ion-modal :is-open="mostrarModalGasto" class="modal-home" @didDismiss="mostrarModalGasto = false">
-      <div class="modal-contenido">
-        <div class="modal-header">
+    <ion-modal :is-open="mostrarModalGasto" class="modal-home modal-gasto-shell" @didDismiss="mostrarModalGasto = false">
+      <div class="modal-contenido modal-gasto-contenido force-light">
+        <div class="modal-header modal-gasto-header">
           <div class="modal-header-left">
-            <div class="modal-header-icon">
+            <div class="modal-header-icon modal-gasto-icon">
               <ion-icon :icon="cutOutline" />
             </div>
             <div>
               <p class="modal-titulo">Registrar gasto</p>
-              <p class="modal-subtitulo">Salida de efectivo de la caja</p>
+              <p class="modal-subtitulo">Registra una salida de efectivo de la caja</p>
             </div>
           </div>
-          <button class="modal-cerrar" @click="mostrarModalGasto = false">
+          <button class="modal-cerrar" type="button" aria-label="Cerrar registro de gasto" @click="mostrarModalGasto = false">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
 
-        <label class="modal-label">Monto</label>
-        <div class="modal-input-monto">
-          <span>$</span>
-          <input v-model.number="montoGasto" type="number" min="0" step="0.01" />
+        <div class="modal-gasto-campo modal-gasto-monto-campo">
+          <label class="modal-label" for="home-gasto-monto">Monto del gasto</label>
+          <div class="modal-input-monto modal-gasto-monto">
+            <span aria-hidden="true">$</span>
+            <input id="home-gasto-monto" v-model.number="montoGasto" type="number" min="0" step="0.01" placeholder="0.00" />
+            <span class="modal-gasto-moneda">USD</span>
+          </div>
         </div>
 
-        <label class="modal-label">Motivo</label>
-        <textarea v-model="motivoGasto" class="modal-textarea" placeholder="Ej: compra de detergente"></textarea>
+        <div class="modal-gasto-campo">
+          <label class="modal-label" for="home-gasto-motivo">Motivo</label>
+          <textarea id="home-gasto-motivo" v-model="motivoGasto" class="modal-textarea" placeholder="Ej.: compra de detergente"></textarea>
+          <span class="modal-gasto-ayuda">Describe brevemente en qué se utilizó el dinero.</span>
+        </div>
 
-        <div class="modal-botones">
+        <div class="modal-botones modal-gasto-botones">
           <ion-button class="btn-fantasma" @click="mostrarModalGasto = false">Cancelar</ion-button>
           <ion-button class="btn-primario" @click="mostrarModalGasto = false">Guardar gasto</ion-button>
         </div>
@@ -345,17 +350,18 @@
       </div>
     </ion-modal>
 
-    <ion-modal :is-open="mostrarModalPerfil" class="modal-home" @didDismiss="cerrarModalPerfil">
+    <ion-modal :is-open="mostrarModalPerfil" class="modal-home modal-perfil-shell" @didDismiss="cerrarModalPerfil">
       <div class="modal-contenido modal-perfil-contenido">
-        <div class="modal-header">
+        <div class="modal-header perfil-modal-header">
           <div class="modal-header-left">
+            <div class="perfil-modal-icon"><ion-icon :icon="personCircleOutline" /></div>
             <div>
               <p class="modal-titulo">Mi perfil</p>
-              <p class="modal-subtitulo">Puedes actualizar tu información personal.</p>
+              <p class="modal-subtitulo">Administra tu información personal y acceso.</p>
               <p class="modal-fecha-miembro">Miembro desde {{ fechaMiembro }}</p>
             </div>
           </div>
-          <button class="modal-cerrar" type="button" aria-label="Cerrar perfil" @click="cerrarModalPerfil">
+          <button class="modal-cerrar perfil-modal-cerrar" type="button" aria-label="Cerrar perfil" @click="cerrarModalPerfil">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
@@ -367,6 +373,8 @@
             <ion-icon v-else :icon="personOutline" />
           </div>
           <div v-if="!esDesarrollador" class="perfil-imagen-acciones">
+            <strong class="perfil-seccion-titulo">Foto de perfil</strong>
+            <span class="perfil-ayuda">Personaliza cómo te identifica el equipo.</span>
             <div class="perfil-imagen-botones">
               <label class="btn-foto-perfil" :class="{ deshabilitado: cambiosImagenPerfil >= 2 || subiendoImagen }">
                 <ion-icon :icon="cameraOutline" />
@@ -392,29 +400,64 @@
             <small>{{ cambiosImagenPerfil >= 2 ? 'Límite de 2 cambios alcanzado.' : `Puedes cambiarla ${2 - cambiosImagenPerfil} vez${2 - cambiosImagenPerfil === 1 ? '' : 'es'} más.` }}</small>
           </div>
           <div v-else class="perfil-imagen-acciones">
+            <strong class="perfil-seccion-titulo">Foto de perfil</strong>
             <small>La foto de perfil del desarrollador no se puede cambiar.</small>
           </div>
         </div>
 
-        <label class="modal-label" for="perfil-nombre">Nombre</label>
-        <input id="perfil-nombre" v-model="perfilForm.nombre" class="modal-input-texto" type="text" maxlength="80" :disabled="esDesarrollador" />
+        <section class="perfil-form-section">
+          <div class="perfil-seccion-heading">
+            <span class="perfil-seccion-icono"><ion-icon :icon="personOutline" /></span>
+            <div>
+              <strong class="perfil-seccion-titulo">Información personal</strong>
+              <span class="perfil-ayuda">Tu nombre se muestra en la aplicación.</span>
+            </div>
+          </div>
+          <label class="modal-label" for="perfil-nombre">Nombre</label>
+          <input
+            id="perfil-nombre"
+            v-model="perfilForm.nombre"
+            class="modal-input-texto perfil-input"
+            type="text"
+            maxlength="80"
+            :readonly="!esAdministrador || esDesarrollador"
+            :aria-readonly="!esAdministrador || esDesarrollador"
+          />
+          <p v-if="!esAdministrador && !esDesarrollador" class="perfil-campo-nota">
+            Solo un administrador puede cambiar el nombre de usuario. Puedes actualizar tu PIN y foto desde aquí.
+          </p>
+          <p v-else-if="esDesarrollador" class="perfil-campo-nota">
+            El nombre del desarrollador no se puede cambiar desde la aplicación.
+          </p>
+        </section>
 
         <div v-if="!esDesarrollador">
-          <label class="modal-label" for="perfil-pin">Nuevo PIN de acceso</label>
-          <input id="perfil-pin" v-model="perfilForm.codigo" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="6 dígitos" />
+          <section class="perfil-form-section">
+            <div class="perfil-seccion-heading">
+              <span class="perfil-seccion-icono perfil-seccion-icono-seguridad"><ion-icon :icon="shieldCheckmarkOutline" /></span>
+              <div>
+                <strong class="perfil-seccion-titulo">Seguridad</strong>
+                <span class="perfil-ayuda">Deja estos campos vacíos si no necesitas cambiar tu PIN.</span>
+              </div>
+            </div>
+            <label class="modal-label" for="perfil-pin">Nuevo PIN de acceso</label>
+            <input id="perfil-pin" v-model="perfilForm.codigo" class="modal-input-texto perfil-input" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="6 dígitos" />
 
-          <label class="modal-label" for="perfil-pin-confirmacion">Confirmar nuevo PIN</label>
-          <input id="perfil-pin-confirmacion" v-model="perfilForm.confirmacion" class="modal-input-texto" type="password" inputmode="numeric" maxlength="6" placeholder="Repite el PIN" />
+            <label class="modal-label" for="perfil-pin-confirmacion">Confirmar nuevo PIN</label>
+            <input id="perfil-pin-confirmacion" v-model="perfilForm.confirmacion" class="modal-input-texto perfil-input" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="Repite el PIN" />
+            <p class="perfil-campo-nota">Usa un PIN de 6 dígitos. No lo compartas con otras personas.</p>
+          </section>
         </div>
-        <div v-else class="perfil-desarrollador-info">
+        <div v-else class="perfil-desarrollador-info perfil-form-section">
+          <ion-icon :icon="shieldCheckmarkOutline" />
           <small>El PIN del desarrollador no se puede cambiar desde la aplicación.</small>
         </div>
 
-        <p v-if="perfilError" class="perfil-error">{{ perfilError }}</p>
+        <p v-if="perfilError" class="perfil-error" role="alert">{{ perfilError }}</p>
 
-        <div class="modal-botones">
+        <div class="modal-botones perfil-modal-botones">
           <ion-button class="btn-fantasma" @click="cerrarModalPerfil">Cancelar</ion-button>
-          <ion-button class="btn-primario" :disabled="guardandoPerfil" @click="guardarPerfil">
+          <ion-button class="btn-primario perfil-guardar-btn" :disabled="guardandoPerfil || subiendoImagen" @click="guardarPerfil">
             {{ guardandoPerfil ? 'Guardando...' : 'Guardar cambios' }}
           </ion-button>
         </div>
@@ -856,6 +899,16 @@
     </Teleport>
 
   </div>
+  <template #view-boundary-alert>
+    <div v-if="alertaTurnoAntiguo" class="alerta-turno-antiguo">
+      <div class="alerta-turno-contenido">
+        <p class="alerta-turno-mensaje">{{ alertaTurnoAntiguo }}</p>
+      </div>
+      <button class="alerta-turno-cerrar" aria-label="Cerrar advertencia" @click="alertaTurnoAntiguo = ''">
+        <ion-icon :icon="closeOutline" />
+      </button>
+    </div>
+  </template>
   </AppShell>
 </template>
 
@@ -909,6 +962,7 @@ import {
   calendarOutline,
   refreshOutline,
   notificationsOutline,
+  bookOutline,
   bodyOutline,
   warningOutline,
   imageOutline,
@@ -1012,7 +1066,8 @@ const irA = async (r: string) => {
 
   const rutasSinRestriccionDeTurno = new Set([
     '/tabs/calendario',
-    '/tabs/horarios'
+    '/tabs/horarios',
+    '/tabs/guia'
   ])
 
   if (
@@ -1069,7 +1124,10 @@ onMounted(() => {
   // Verificar si hay turnos antiguos abiertos
   verificarTurnosAntiguosAbiertos().then(resultado => {
     if (resultado.tieneTurnoAntiguoAbierto) {
-      alertaTurnoAntiguo.value = resultado.mensaje
+      alertaTurnoAntiguo.value = resultado.mensaje.replace(
+        /^⚠️\s*El turno del día\s*/i,
+        '⚠️ La caja del día '
+      )
     }
   })
 })
@@ -1493,8 +1551,14 @@ const validarPerfil = () => {
     perfilError.value = 'El nombre es obligatorio.'
     return false
   }
+  if (cambioNombre && !esAdministrador.value) {
+    perfilError.value = 'Solo un administrador puede cambiar el nombre de usuario.'
+    return false
+  }
   if (!cambioNombre && !quiereCambiarCodigo) {
-    perfilError.value = 'Modifica el nombre o escribe un PIN nuevo.'
+    perfilError.value = esAdministrador.value
+      ? 'Modifica el nombre o escribe un PIN nuevo.'
+      : 'Escribe un PIN nuevo para guardar cambios.'
     return false
   }
   if (quiereCambiarCodigo) {
@@ -1528,13 +1592,13 @@ const guardarPerfil = async () => {
     const nombre = perfilForm.value.nombre.trim()
     const codigo = perfilForm.value.codigo.trim()
     const cambios: Record<string, string> = {}
-    if (nombre !== (usuarioActual.value.nombre ?? '').trim()) cambios.nombre = nombre
+    if (esAdministrador.value && nombre !== (usuarioActual.value.nombre ?? '').trim()) cambios.nombre = nombre
     if (codigo) cambios.codigo = codigo
 
     const actualizado = await editarUsuarioEquipo(usuarioActual.value.id, cambios)
     localStorage.setItem('usuario', JSON.stringify({
       ...usuarioActual.value,
-      nombre: actualizado.nombre,
+      nombre: actualizado.nombre ?? usuarioActual.value.nombre,
       codigo: actualizado.codigo,
       imagenPerfil: actualizado.imagenPerfil ?? usuarioActual.value.imagenPerfil,
       cambiosImagenPerfil: actualizado.cambiosImagenPerfil ?? usuarioActual.value.cambiosImagenPerfil
@@ -1829,31 +1893,23 @@ const aplicarColor = () => {
 }
 
 .alerta-turno-antiguo {
+  position: relative;
+  width: min(560px, 100%);
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, #fff7ed, #ffedd5);
-  border: 1.5px solid #fdba74;
+  overflow: hidden;
+  background: linear-gradient(145deg, #123a66, #0a1f38);
+  border: 2px solid rgba(79, 179, 224, 0.78);
   border-radius: 12px;
-  color: #9a4d00;
+  color: #eaf4fa;
+  box-shadow: 0 12px 32px rgba(10, 31, 56, 0.3), 0 0 12px rgba(79, 179, 224, 0.16);
 }
 
-.alerta-turno-icono {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: #fdba74;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.alerta-turno-icono ion-icon {
-  font-size: 1.2rem;
-  color: #9a4d00;
+.alerta-turno-antiguo-movil {
+  display: none;
 }
 
 .alerta-turno-contenido {
@@ -1861,22 +1917,19 @@ const aplicarColor = () => {
   min-width: 0;
 }
 
-.alerta-turno-titulo {
-  margin: 0 0 4px;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #9a4d00;
-}
-
 .alerta-turno-mensaje {
   margin: 0;
-  font-size: 0.85rem;
-  color: #c2410c;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #eaf4fa;
   line-height: 1.4;
 }
 
 .alerta-turno-cerrar {
   display: flex;
+  margin-left: auto;
+  position: relative;
+  z-index: 1;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -1884,18 +1937,28 @@ const aplicarColor = () => {
   background: transparent;
   border: none;
   border-radius: 50%;
-  color: #9a4d00;
+  color: #d7eaf7;
   cursor: pointer;
   transition: background 0.2s ease;
   flex-shrink: 0;
 }
 
 .alerta-turno-cerrar:hover {
-  background: rgba(251, 186, 116, 0.3);
+  background: rgba(169, 216, 238, 0.16);
 }
 
 .alerta-turno-cerrar ion-icon {
   font-size: 1rem;
+}
+
+@media (min-width: 901px) {
+  .alerta-turno-contenido {
+    position: absolute;
+    right: 52px;
+    left: 52px;
+    text-align: center;
+    pointer-events: none;
+  }
 }
 .home-banner-mobile {
   display: none;
@@ -2002,6 +2065,280 @@ const aplicarColor = () => {
   color: #6d829c;
   font-size: 0.75rem;
 }
+
+.modal-perfil-shell {
+  --width: min(500px, calc(100vw - 28px));
+  --height: auto;
+  --border-radius: 24px;
+}
+
+.modal-perfil-contenido {
+  width: 100%;
+  max-height: min(88dvh, 760px);
+  overflow-y: auto;
+  gap: 15px;
+  padding: 24px;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-radius: 24px;
+  background: linear-gradient(155deg, #ffffff 0%, #fbfdff 72%, #f0f6fb 100%) !important;
+  box-shadow: 0 24px 70px rgba(10, 31, 56, 0.24);
+}
+
+.perfil-modal-header {
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e7eef4;
+}
+
+.perfil-modal-header .modal-header-left {
+  align-items: center;
+  gap: 13px;
+}
+
+.perfil-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 1px solid #d3e3f0;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #eaf5fb, #d8e8f5);
+  color: #123a66;
+  box-shadow: 0 6px 16px rgba(18, 58, 102, 0.12);
+  font-size: 27px;
+}
+
+.perfil-modal-header .modal-titulo {
+  color: #12304e !important;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.perfil-modal-header .modal-subtitulo {
+  margin-top: 3px;
+  color: #63788e !important;
+  font-size: 0.82rem;
+}
+
+.perfil-modal-header .modal-fecha-miembro {
+  margin-top: 7px;
+  color: #4d6d88;
+  font-size: 0.74rem;
+}
+
+.perfil-modal-cerrar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border: 1px solid #e1e9ef;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #60758a;
+  box-shadow: 0 3px 9px rgba(10, 31, 56, 0.07);
+}
+
+.perfil-modal-cerrar:hover {
+  background: #f2f7fb;
+  color: #123a66;
+}
+
+.modal-perfil-contenido .perfil-imagen-editor {
+  gap: 16px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #e2ebf2;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f7fbfe, #ffffff);
+  box-shadow: 0 6px 18px rgba(18, 58, 102, 0.06);
+}
+
+.modal-perfil-contenido .perfil-imagen-preview {
+  width: 78px;
+  height: 78px;
+  border: 3px solid #ffffff;
+  outline: 1px solid #d5e3ed;
+  background: linear-gradient(145deg, #e3eff8, #f4f8fb);
+  box-shadow: 0 7px 18px rgba(18, 58, 102, 0.14);
+  font-size: 2.3rem;
+}
+
+.modal-perfil-contenido .perfil-imagen-acciones {
+  flex: 1;
+  gap: 7px;
+}
+
+.perfil-seccion-titulo {
+  color: #173d60;
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.perfil-ayuda {
+  display: block;
+  color: #718397;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.modal-perfil-contenido .perfil-imagen-acciones small {
+  color: #73879a;
+  line-height: 1.45;
+}
+
+.modal-perfil-contenido .btn-foto-perfil {
+  padding: 9px 12px;
+  border: 1px solid #d5e3ed;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 3px 8px rgba(18, 58, 102, 0.06);
+}
+
+.modal-perfil-contenido .perfil-form-section {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid #e3ebf1;
+  border-radius: 17px;
+  background: #ffffff;
+  box-shadow: 0 5px 16px rgba(18, 58, 102, 0.055);
+}
+
+.perfil-seccion-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.perfil-seccion-icono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 12px;
+  background: #edf5fb;
+  color: #315f88;
+  font-size: 19px;
+}
+
+.perfil-seccion-icono-seguridad {
+  background: #eaf6f1;
+  color: #267454;
+}
+
+.modal-perfil-contenido .modal-label {
+  margin-top: 3px;
+  color: #526a80;
+  font-size: 0.72rem;
+}
+
+.modal-perfil-contenido .perfil-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d7e2eb;
+  border-radius: 11px;
+  outline: none;
+  background: #fbfdff;
+  color: #17324d;
+  font: inherit;
+  font-size: 0.91rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.modal-perfil-contenido .perfil-input:focus {
+  border-color: #5f91bb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(76, 133, 179, 0.14);
+}
+
+.modal-perfil-contenido .perfil-input[readonly] {
+  border-color: #e0e8ee;
+  background: #f3f6f8;
+  color: #536b80;
+  cursor: default;
+}
+
+.perfil-campo-nota {
+  margin: 0;
+  color: #718397;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.modal-perfil-contenido .perfil-desarrollador-info {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  color: #5a7085;
+}
+
+.perfil-desarrollador-info ion-icon {
+  color: #4b7398;
+  font-size: 20px;
+}
+
+.perfil-desarrollador-info small {
+  line-height: 1.55;
+}
+
+.modal-perfil-contenido .perfil-error {
+  padding: 11px 13px;
+  border-color: #f0d1cd;
+  border-radius: 12px;
+  background: #fff5f3;
+  line-height: 1.5;
+}
+
+.modal-perfil-contenido .perfil-modal-botones {
+  gap: 11px;
+  margin-top: 1px;
+}
+
+.perfil-modal-botones ion-button {
+  min-height: 43px;
+  margin: 0;
+  font-weight: 750;
+}
+
+.perfil-modal-botones .perfil-guardar-btn {
+  --background: linear-gradient(135deg, #1b527d, #123a66);
+  --background-hover: #0d2b4e;
+  --box-shadow: 0 7px 16px rgba(18, 58, 102, 0.2);
+}
+
+.perfil-modal-botones .btn-fantasma {
+  --background: #ffffff;
+  --color: #526a80;
+  --border-color: #d8e2ea;
+}
+
+@media (max-width: 520px) {
+  .modal-perfil-contenido {
+    max-height: 90dvh;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .modal-perfil-contenido .perfil-imagen-editor,
+  .modal-perfil-contenido .perfil-form-section {
+    padding: 13px;
+  }
+
+  .modal-perfil-contenido .perfil-imagen-preview {
+    width: 66px;
+    height: 66px;
+  }
+
+  .perfil-modal-botones ion-button {
+    font-size: 0.78rem;
+  }
+}
+
 .modal-input-select{
   background-color: white;
   color: black;
@@ -2660,6 +2997,11 @@ const aplicarColor = () => {
   --border-radius: 20px;
 }
 
+.modal-gasto-shell {
+  --width: min(460px, calc(100vw - 28px));
+  --border-radius: 24px;
+}
+
 .modal-contenido {
   background: #ffffff !important;
   color: #000000 !important;
@@ -2669,6 +3011,184 @@ const aplicarColor = () => {
   gap: 12px;
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(10, 31, 56, 0.15);
+}
+
+.modal-gasto-contenido {
+  gap: 17px;
+  padding: 24px;
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  background: linear-gradient(160deg, #ffffff 0%, #fbfdff 68%, #edf3f9 100%) !important;
+  box-shadow: 0 20px 54px rgba(41, 46, 58, 0.2);
+}
+
+.modal-gasto-header {
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(18, 58, 102, 0.09);
+}
+
+.modal-gasto-header .modal-header-left {
+  gap: 13px;
+}
+
+.modal-gasto-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(18, 58, 102, 0.16);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #edf4fb, #d7e4f1);
+  color: #123a66;
+  box-shadow: inset 0 1px 0 #ffffff, 0 5px 13px rgba(18, 58, 102, 0.12);
+}
+
+.modal-gasto-contenido .modal-titulo {
+  color: #122d49 !important;
+  font-size: 1.18rem;
+  letter-spacing: -0.02em;
+}
+
+.modal-gasto-contenido .modal-subtitulo {
+  margin-top: 3px;
+  color: #718197 !important;
+  font-size: 0.82rem;
+}
+
+.modal-gasto-contenido .modal-cerrar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f3f6f9;
+  color: #62758a;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.modal-gasto-contenido .modal-cerrar:hover {
+  background: #e9eef3;
+  color: #173b5f;
+}
+
+.modal-gasto-campo {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-gasto-contenido .modal-label {
+  color: #425b73;
+  font-size: 0.72rem;
+  letter-spacing: 0.065em;
+}
+
+.modal-gasto-monto {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  min-height: 66px;
+  padding: 11px 14px;
+  border: 1px solid #bdcddd;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #f2f6fb, #ffffff 72%);
+  box-shadow: inset 0 2px 5px rgba(18, 58, 102, 0.05);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modal-gasto-monto:focus-within {
+  border-color: #123a66;
+  box-shadow: 0 0 0 4px rgba(18, 58, 102, 0.12);
+}
+
+.modal-gasto-monto > span:first-child {
+  color: #123a66;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.modal-gasto-contenido .modal-gasto-monto input {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  background: transparent !important;
+  color: #182f47 !important;
+  font-size: 1.55rem;
+  font-weight: 800;
+}
+
+.modal-gasto-contenido .modal-gasto-monto input:focus {
+  outline: none;
+}
+
+.modal-gasto-moneda {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #e8eff7;
+  color: #123a66;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.modal-gasto-contenido .modal-textarea {
+  min-height: 96px;
+  padding: 12px 13px;
+  border: 1px solid #dce4eb;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #182f47 !important;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modal-gasto-contenido .modal-textarea:focus {
+  border-color: #123a66;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(18, 58, 102, 0.1);
+}
+
+.modal-gasto-ayuda {
+  color: #8391a1;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.modal-gasto-botones {
+  gap: 11px;
+  margin-top: 1px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(18, 58, 102, 0.08);
+}
+
+.modal-gasto-botones ion-button {
+  min-height: 45px;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.modal-gasto-botones .btn-primario {
+  --background: linear-gradient(135deg, #1b4a78, #123a66);
+  --background-hover: #0d2b4e;
+  --box-shadow: 0 5px 13px rgba(18, 58, 102, 0.2);
+}
+
+.modal-gasto-botones .btn-fantasma {
+  --background: #ffffff;
+  --color: #50667c;
+  --border-color: #d7e0e8;
+}
+
+@media (max-width: 520px) {
+  .modal-gasto-contenido {
+    padding: 20px;
+  }
+
+  .modal-gasto-botones ion-button {
+    font-size: 0.8rem;
+  }
 }
 
 .modal-header {
@@ -2867,6 +3387,13 @@ const aplicarColor = () => {
 
 /* ── Responsive: SOLO se toca este bloque para el nuevo diseño móvil ── */
 @media (max-width: 900px) {
+  .alerta-turno-antiguo-movil {
+    display: flex;
+    width: 100%;
+    margin: 12px 0 0;
+    box-sizing: border-box;
+  }
+
   .home-banner-mobile {
     position: relative; /* necesario para posicionar el botón absoluto */
   }

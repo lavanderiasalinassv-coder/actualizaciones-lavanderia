@@ -2,11 +2,6 @@
   <AppShell>
     <div class="configuracion-page">
       <header class="configuracion-header">
-        <div>
-          <p class="configuracion-eyebrow">✨ Preferencias</p>
-          <h2>Configuración</h2>
-          <p>Selecciona una sección para administrar el sistema.</p>
-        </div>
         <button
           v-if="esDesarrollador && puedePublicar"
           class="actualizacion-trigger"
@@ -26,6 +21,17 @@
           <span class="configuracion-opcion-texto">
             <strong>🎨 Apariencia</strong>
             <small>Colores, imágenes y orbes de la aplicación</small>
+          </span>
+        </button>
+
+        <button class="configuracion-opcion tema-guia" @click="irA('/tabs/guia')">
+          <ion-icon :icon="chevronForwardOutline" class="configuracion-opcion-flecha" />
+          <span class="configuracion-opcion-icono">
+            <ion-icon :icon="bookOutline" />
+          </span>
+          <span class="configuracion-opcion-texto">
+            <strong>📘 Guía de la aplicación</strong>
+            <small>Consulta instrucciones y aprende a usar las funciones</small>
           </span>
         </button>
 
@@ -187,6 +193,7 @@ import {
   constructOutline,
   lockClosedOutline,
   micOutline,
+  bookOutline,
   serverOutline,
   sparklesOutline
 } from 'ionicons/icons'
@@ -580,6 +587,20 @@ onBeforeUnmount(() => {
 .tema-sali:hover:not(:disabled) { border-color: rgba(37, 99, 235, 0.45); background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); }
 .tema-sali:hover:not(:disabled) .configuracion-opcion-icono { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; }
 
+.tema-guia { border-color: rgba(8, 126, 139, 0.2); }
+.tema-guia .configuracion-opcion-icono {
+  background: linear-gradient(135deg, rgba(8, 126, 139, 0.18), rgba(79, 179, 224, 0.08));
+  color: #087e8b;
+}
+.tema-guia:hover:not(:disabled) {
+  border-color: rgba(8, 126, 139, 0.45);
+  background: linear-gradient(180deg, #ffffff 0%, #ecfeff 100%);
+}
+.tema-guia:hover:not(:disabled) .configuracion-opcion-icono {
+  background: linear-gradient(135deg, #0f9b9d, #087e8b);
+  color: #ffffff;
+}
+
 /* ---------- Estilos del Modal de Seguridad ---------- */
 ion-modal {
   --width: 90%;
@@ -666,6 +687,12 @@ ion-modal {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
+  .configuracion-page {
+    padding: 14px;
+    border-radius: 22px;
+    background: linear-gradient(155deg, #f8fcff 0%, #eef5fb 58%, #e9f2f8 100%);
+  }
+
   .solo-desktop {
     display: none !important;
   }
@@ -685,6 +712,37 @@ ion-modal {
     border-radius: 18px;
     gap: 10px;
     min-height: 165px;
+    background: linear-gradient(145deg, #ffffff 0%, #f1f7fc 100%);
+    box-shadow: 0 8px 20px rgba(18, 58, 102, 0.1);
+  }
+
+  .configuracion-opcion.tema-apariencia {
+    background: linear-gradient(145deg, #ffffff 0%, #fff1f7 100%);
+  }
+
+  .configuracion-opcion.tema-api,
+  .configuracion-opcion.tema-voz {
+    background: linear-gradient(145deg, #ffffff 0%, #eafaff 100%);
+  }
+
+  .configuracion-opcion.tema-basedatos {
+    background: linear-gradient(145deg, #ffffff 0%, #f4efff 100%);
+  }
+
+  .configuracion-opcion.tema-respaldo {
+    background: linear-gradient(145deg, #ffffff 0%, #effbf3 100%);
+  }
+
+  .configuracion-opcion.tema-mantenimiento {
+    background: linear-gradient(145deg, #ffffff 0%, #fff8e9 100%);
+  }
+
+  .configuracion-opcion.tema-sali {
+    background: linear-gradient(145deg, #ffffff 0%, #eef4ff 100%);
+  }
+
+  .configuracion-opcion.tema-guia {
+    background: linear-gradient(145deg, #ffffff 0%, #e9fbfa 54%, #edf5ff 100%);
   }
 
   .configuracion-opcion-icono {

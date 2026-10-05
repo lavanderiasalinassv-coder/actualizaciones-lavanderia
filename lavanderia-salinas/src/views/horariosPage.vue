@@ -3,10 +3,6 @@
     <div class="horarios-page">
       <div v-if="esAdministrador" class="config-card calendario-admin-card">
         <div class="card-header-row calendario-admin-header">
-          <span class="card-title">
-            <ion-icon :icon="calendarClearOutline" />
-            Calendario de horarios
-          </span>
           <div class="calendario-admin-acciones">
             <div class="calendario-controles">
               <button :class="{ active: vistaCalendario === 'semana' }" @click="vistaCalendario = 'semana'">Semana</button>
@@ -29,6 +25,14 @@
           </div>
         </div>
 
+        <div v-if="vistaCalendario === 'semana'" class="calendario-mes-navegacion calendario-semana-navegacion">
+          <button class="calendario-flecha semana-anterior" type="button" aria-label="Semana anterior" @click="semanaAdminOffset--">Anterior</button>
+          <div class="calendario-semana-centro">
+            <strong>{{ rangoSemanaAdmin }}</strong>
+            <button class="calendario-flecha" type="button" :disabled="semanaAdminOffset === 0" @click="semanaAdminOffset = 0">Hoy</button>
+          </div>
+          <button class="calendario-flecha semana-siguiente" type="button" aria-label="Semana siguiente" @click="semanaAdminOffset++">Siguiente</button>
+        </div>
         <div v-if="vistaCalendario === 'semana'" class="calendario-admin-grid">
           <article
             v-for="dia in calendarioAdminSemana"
@@ -41,7 +45,7 @@
                 <p class="calendario-admin-nombre">{{ formatearDiaSemana(dia.fecha) }}</p>
                 <p class="calendario-admin-fecha">{{ formatearFecha(dia.fecha) }}</p>
               </div>
-              <button class="btn-agregar-dia" type="button" title="Agregar horario individual" :aria-label="`Agregar horario para ${formatearDiaSemana(dia.fecha)}`" :disabled="dia.fecha < fechaDeHoy" @click="abrirModalHorarioIndividual(dia.fecha)">
+              <button v-if="dia.fecha >= fechaDeHoy" class="btn-agregar-dia" type="button" title="Agregar horario individual" :aria-label="`Agregar horario para ${formatearDiaSemana(dia.fecha)}`" @click="abrirModalHorarioIndividual(dia.fecha)">
                 <ion-icon :icon="addOutline" />
               </button>
             </div>
@@ -89,7 +93,7 @@
             >
               <div v-if="!dia.esRelleno" class="calendario-mes-dia-cabecera">
                 <strong>{{ dia.numero }}</strong>
-                <button class="btn-agregar-dia mini" type="button" title="Agregar horario individual" :aria-label="`Agregar horario para ${dia.fecha}`" :disabled="dia.fecha < fechaDeHoy" @click="abrirModalHorarioIndividual(dia.fecha)">
+                <button v-if="dia.fecha >= fechaDeHoy" class="btn-agregar-dia mini" type="button" title="Agregar horario individual" :aria-label="`Agregar horario para ${dia.fecha}`" @click="abrirModalHorarioIndividual(dia.fecha)">
                   <ion-icon :icon="addOutline" />
                 </button>
               </div>
@@ -687,42 +691,84 @@
             <div class="reporte-panel-header">
               <div>
                 <p class="subtitulo-lista">Tiempo de Conexión</p>
+                <label class="eventos-filtro-nombre">
+                  <ion-icon :icon="searchOutline" aria-hidden="true" />
+                  <input
+                    v-model="busquedaConexion"
+                    type="search"
+                    placeholder="Filtrar por nombre"
+                    aria-label="Filtrar conexiones por nombre del empleado"
+                  />
+                  <button
+                    v-if="busquedaConexion || estadoConexionActivo"
+                    type="button"
+                    aria-label="Limpiar filtro de conexión"
+                    @click="limpiarFiltrosConexion"
+                  >×</button>
+                </label>
+                <div class="eventos-filtros-tipo" role="group" aria-label="Filtrar conexiones por puntualidad">
+                  <button
+                    v-for="filtro in filtrosEstadoConexion"
+                    :key="filtro.etiqueta"
+                    type="button"
+                    :class="[`filtro-evento-${filtro.clase}`, { activo: estadoConexionActivo === filtro.estado }]"
+                    :aria-pressed="estadoConexionActivo === filtro.estado"
+                    @click="estadoConexionActivo = estadoConexionActivo === filtro.estado ? null : filtro.estado"
+                  >
+                    {{ filtro.etiqueta }}
+                  </button>
+                </div>
               </div>
             </div>
             <div v-if="reportesEntradaHoy.length === 0" class="estado-vacio-mini">
               No hay registros de entrada hoy.
             </div>
-            <ul v-else class="reporte-lista">
-              <li v-for="item in reportesEntradaHoy" :key="item.registro.id" class="reporte-item">
-                <div class="reporte-item-block">
-                  <div class="reporte-item-main">
-                    <span class="empleado-avatar chico">{{ inicial(item.empleado?.nombre ?? '') }}</span>
-                    <div class="reporte-item-texto">
-                      <p class="reporte-item-nombre">{{ item.empleado?.nombre }}</p>
-                      <small>
-                        Total trabajado: {{ formatearHoras(item.totalHoras) }} ·
-                        Salario estimado: {{ formatearMonto(item.totalMonto) }} ·
-                        Entrada: {{ formatearHora(item.registro.horaEntrada) }} ·
-                        Salida: {{ formatearHora(item.registro.horaSalida) }}
-                      </small>
-                    </div>
-                  </div>
-                  <span
-                    class="badge-minutos"
-                    :class="{ warning: !!item.puntualidad?.tarde, calm: !item.puntualidad?.tarde }"
-                  >
-                    {{ item.puntualidad?.tarde ? `Tarde ${item.puntualidad.minutos} min` : 'A tiempo' }}
-                  </span>
-                </div>
-                <div class="reporte-tramos">
-                  <div v-for="segmento in item.segmentos" :key="segmento.index" class="tramo-chip" :class="{ activo: segmento.activo }">
-                    <strong>Tramo {{ segmento.index + 1 }}</strong>
-                    <small>{{ formatearHora(segmento.inicio) }} - {{ formatearHora(segmento.fin) }}</small>
-                    <span v-if="segmento.activo">Activo</span>
-                  </div>
-                </div>
-              </li>
-              </ul>
+            <div v-else-if="reportesEntradaFiltrados.length === 0" class="estado-vacio-mini">
+              No hay conexiones para esos filtros.
+            </div>
+            <div v-else class="reporte-tabla-contenedor">
+              <table class="reporte-tabla">
+                <thead>
+                  <tr>
+                    <th scope="col">Empleado</th>
+                    <th scope="col">Reporte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in reportesEntradaFiltrados" :key="item.registro.id">
+                    <th scope="row">
+                      <span class="reporte-empleado">
+                        <span class="empleado-avatar chico">{{ inicial(item.empleado?.nombre ?? '') }}</span>
+                        <span>{{ item.empleado?.nombre }}</span>
+                      </span>
+                    </th>
+                    <td>
+                      <div class="reporte-tabla-detalle">
+                        <span class="reporte-tabla-metricas">
+                          {{ formatearHoras(item.totalHoras) }} trabajado
+                          <span aria-hidden="true">·</span>
+                          {{ formatearMonto(item.totalMonto) }} estimado
+                        </span>
+                        <span class="reporte-tabla-horas">
+                          {{ formatearHora(item.registro.horaEntrada) }} – {{ formatearHora(item.registro.horaSalida) }}
+                        </span>
+                        <span
+                          class="badge-minutos"
+                          :class="{ warning: !!item.puntualidad?.tarde, calm: !item.puntualidad?.tarde }"
+                        >
+                          {{ item.puntualidad?.tarde ? `Tarde ${formatearMinutosComoHoras(item.puntualidad.minutos)}` : 'A tiempo' }}
+                        </span>
+                        <span v-if="item.segmentos.length" class="reporte-tabla-tramos">
+                          <span v-for="segmento in item.segmentos" :key="segmento.index">
+                            {{ formatearHora(segmento.inicio) }}–{{ formatearHora(segmento.fin) }}<template v-if="segmento.activo"> · Activo</template>
+                          </span>
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section class="reporte-panel">
@@ -730,39 +776,77 @@
               <div>
                 <p class="subtitulo-lista">Eventos de jornada</p>
                 <strong>Pausas, reanudaciones y tardanzas</strong>
+                <label class="eventos-filtro-nombre">
+                  <ion-icon :icon="searchOutline" aria-hidden="true" />
+                  <input
+                    v-model="busquedaEventos"
+                    type="search"
+                    placeholder="Filtrar por nombre"
+                    aria-label="Filtrar eventos por nombre del empleado"
+                  />
+                  <button
+                    v-if="busquedaEventos || tipoEventoActivo"
+                    type="button"
+                    aria-label="Limpiar filtro"
+                    @click="limpiarFiltrosEventos"
+                  >×</button>
+                </label>
+                <div class="eventos-filtros-tipo" role="group" aria-label="Filtrar eventos por categoría">
+                  <button
+                    v-for="filtro in filtrosTipoEvento"
+                    :key="filtro.tipo"
+                    type="button"
+                    :class="[`filtro-evento-${filtro.clase}`, { activo: tipoEventoActivo === filtro.tipo }]"
+                    :aria-pressed="tipoEventoActivo === filtro.tipo"
+                    @click="tipoEventoActivo = tipoEventoActivo === filtro.tipo ? null : filtro.tipo"
+                  >
+                    {{ filtro.etiqueta }}
+                  </button>
+                </div>
               </div>
             </div>
             <div v-if="eventosJornadaHoy.length === 0" class="estado-vacio-mini">
               No hay eventos reportados hoy.
             </div>
-            <ul v-else class="reporte-lista reporte-lista-notas">
-              <li v-for="n in eventosJornadaHoy" :key="n.id" class="reporte-item nota">
-                <div class="reporte-item-texto">
-                  <p class="reporte-item-nombre">{{ n.empleadoNombre }}</p>
-                  <small>{{ n.mensaje }}</small>
-                  <small>{{ formatearFecha(n.fecha) }} · {{ formatearHora(n.hora) }}</small>
-                </div>
-                <span
-                  class="badge-minutos"
-                  :class="{
-                    warning: n.tipo === 'entrada_tarde',
-                    calm: n.tipo === 'reanudacion',
-                  }"
-                >
-                  {{
-                    n.tipo === 'entrada_tarde'
-                      ? n.minutos
-                        ? `${n.minutos} min`
-                        : 'Tarde'
-                      : n.tipo === 'reanudacion'
-                        ? 'Reanudación'
-                        : n.tipo === 'pausa'
-                          ? 'Pausa'
-                          : 'Salida'
-                  }}
-                </span>
-              </li>
-            </ul>
+            <div v-else-if="eventosJornadaFiltrados.length === 0" class="estado-vacio-mini">
+              No hay eventos para ese nombre.
+            </div>
+            <div v-else class="reporte-tabla-contenedor">
+              <table class="reporte-tabla">
+                <thead>
+                  <tr>
+                    <th scope="col">Empleado</th>
+                    <th scope="col">Reporte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="n in eventosJornadaFiltrados" :key="n.id">
+                    <th scope="row">
+                      <span class="reporte-empleado">{{ n.empleadoNombre }}</span>
+                    </th>
+                    <td>
+                      <div class="reporte-tabla-detalle">
+                        <span class="reporte-evento-tipo" :class="claseTipoEvento(n.tipo)">
+                          {{
+                            n.tipo === 'entrada_tarde'
+                              ? n.minutos
+                                ? `Tarde ${formatearMinutosComoHoras(n.minutos)}`
+                                : 'Tarde'
+                              : n.tipo === 'reanudacion'
+                                ? 'Reanudación'
+                                : n.tipo === 'pausa'
+                                  ? 'Pausa'
+                                  : 'Salida'
+                          }}
+                        </span>
+                        <span class="reporte-tabla-mensaje">{{ textoEventoJornada(n) }}</span>
+                        <span class="reporte-tabla-horas">{{ formatearFecha(n.fecha) }} · {{ formatearHora(n.hora) }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </section>
         </div>
       </div>
@@ -837,6 +921,7 @@ import {
   downloadOutline,
   peopleOutline,
   refreshOutline,
+  searchOutline,
   timeOutline,
   trashOutline,
 } from 'ionicons/icons'
@@ -937,6 +1022,7 @@ const formatearFechaLocal = (fecha: Date) => {
 const fechaDeHoy = fechaHoyCentroamerica()
 const fechaCalendarioAdmin = ref(fechaDeHoy)
 const vistaCalendario = ref<'semana' | 'mes'>('semana')
+const semanaAdminOffset = ref(0)
 const mesCalendarioOffset = ref(0)
 const nombresDiasSemana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
@@ -965,6 +1051,20 @@ interface DiaHorarioModal {
 const mostrarModalHorario = ref(false)
 const mostrarModalHorarioIndividual = ref(false)
 const mostrarModalReportes = ref(false)
+const busquedaConexion = ref('')
+const estadoConexionActivo = ref<boolean | null>(null)
+const busquedaEventos = ref('')
+const tipoEventoActivo = ref<'entrada_tarde' | 'reanudacion' | 'salida' | 'pausa' | null>(null)
+const filtrosEstadoConexion = [
+  { estado: true, etiqueta: 'Tarde', clase: 'tarde' },
+  { estado: false, etiqueta: 'A tiempo', clase: 'reanudacion' },
+] as const
+const filtrosTipoEvento = [
+  { tipo: 'entrada_tarde', etiqueta: 'Tarde', clase: 'tarde' },
+  { tipo: 'reanudacion', etiqueta: 'Reanudación', clase: 'reanudacion' },
+  { tipo: 'salida', etiqueta: 'Salida', clase: 'salida' },
+  { tipo: 'pausa', etiqueta: 'Pausa', clase: 'pausa' },
+] as const
 const empleadoHorarioId = ref('')
 const semanaInicioHorario = ref(fechaDeHoy)
 const pagosPorHoraEditando = reactive<Record<string, string>>({})
@@ -1540,20 +1640,59 @@ const reportesEntradaHoy = computed(() =>
     .filter((item) => !!item.empleado)
     .sort((a, b) => (a.registro.horaEntrada ?? '').localeCompare(b.registro.horaEntrada ?? ''))
 )
+const normalizarNombreEvento = (nombre: string) =>
+  nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase()
+const reportesEntradaFiltrados = computed(() => {
+  const busqueda = normalizarNombreEvento(busquedaConexion.value.trim())
+  return reportesEntradaHoy.value.filter((item) =>
+    (!busqueda || normalizarNombreEvento(item.empleado?.nombre ?? '').includes(busqueda)) &&
+    (estadoConexionActivo.value === null || !!item.puntualidad?.tarde === estadoConexionActivo.value)
+  )
+})
+const limpiarFiltrosConexion = () => {
+  busquedaConexion.value = ''
+  estadoConexionActivo.value = null
+}
 
 const eventosJornadaHoy = computed(() =>
   notificacionesAdmin.value
     .filter((n) => ['entrada_tarde', 'salida', 'pausa', 'reanudacion'].includes(n.tipo))
     .sort((a, b) => a.creadaAt.localeCompare(b.creadaAt))
 )
+const limpiarFiltrosEventos = () => {
+  busquedaEventos.value = ''
+  tipoEventoActivo.value = null
+}
+const eventosJornadaFiltrados = computed(() => {
+  const busqueda = normalizarNombreEvento(busquedaEventos.value.trim())
+  return eventosJornadaHoy.value.filter((evento) =>
+    (!busqueda || normalizarNombreEvento(evento.empleadoNombre).includes(busqueda)) &&
+    (!tipoEventoActivo.value || evento.tipo === tipoEventoActivo.value)
+  )
+})
+const claseTipoEvento = (tipo: string) => {
+  if (tipo === 'entrada_tarde') return 'tardanza'
+  if (tipo === 'pausa') return 'pausa'
+  if (tipo === 'reanudacion') return 'reanudacion'
+  return ''
+}
+const formatearMinutosComoHoras = (minutos: number) => {
+  const total = Math.max(0, Math.floor(minutos))
+  const horas = Math.floor(total / 60)
+  const minutosRestantes = total % 60
+  if (horas === 0) return `${minutosRestantes} min`
+  if (minutosRestantes === 0) return `${horas} h`
+  return `${horas} h ${minutosRestantes} min`
+}
+const textoEventoJornada = (evento: (typeof eventosJornadaHoy.value)[number]) =>
+  evento.mensaje.replace(/(\d+)\s*min\b/gi, (_coincidencia, minutos: string) =>
+    formatearMinutosComoHoras(Number(minutos))
+  )
 
 const calendarioAdminSemana = computed(() => {
-  const hoy = new Date()
-  const diaSemana = hoy.getDay()
-  const offsetALunes = diaSemana === 0 ? -6 : 1 - diaSemana
-  const lunes = new Date(hoy)
-  lunes.setHours(0, 0, 0, 0)
-  lunes.setDate(hoy.getDate() + offsetALunes)
+  const lunes = new Date(`${fechaDeHoy}T00:00:00`)
+  const diaSemana = lunes.getDay()
+  lunes.setDate(lunes.getDate() + (diaSemana === 0 ? -6 : 1 - diaSemana) + semanaAdminOffset.value * 7)
 
   const dias: Array<{
     fecha: string
@@ -1588,6 +1727,11 @@ const calendarioAdminSemana = computed(() => {
   }
 
   return dias
+})
+const rangoSemanaAdmin = computed(() => {
+  const fechas = calendarioAdminSemana.value
+  if (fechas.length === 0) return ''
+  return `${formatearFecha(fechas[0].fecha)} - ${formatearFecha(fechas[fechas.length - 1].fecha)}`
 })
 
 type DiaCalendarioAdmin = {
@@ -3145,105 +3289,256 @@ const montoHoyEnVivo = computed(() => {
   color: #0a1f38;
 }
 
-.reporte-lista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.eventos-filtro-nombre {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 7px;
+  width: min(100%, 250px);
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 0 9px;
+  border: 1px solid #d9e3ec;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #71859a;
 }
 
-.reporte-item {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 12px;
-  background: #f5f9fc;
+.eventos-filtro-nombre ion-icon {
+  flex: 0 0 auto;
+  font-size: 0.9rem;
 }
 
-.reporte-item.nota {
-  background: linear-gradient(180deg, #f7fbff 0%, #eef5fb 100%);
-}
-
-.reporte-item-block {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.reporte-item-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+.eventos-filtro-nombre input {
+  width: 100%;
   min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #173b5f;
+  font: inherit;
+  font-size: 0.72rem;
 }
 
-.reporte-item-texto {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.eventos-filtro-nombre button {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #edf3f9;
+  color: #315f8d;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.reporte-item-nombre {
-  margin: 0;
-  color: #0a1f38;
-  font-weight: 800;
-  font-size: 0.88rem;
-}
-
-.reporte-item-texto small {
-  color: #6d829c;
-  font-size: 0.75rem;
-  line-height: 1.25;
-}
-
-.reporte-lista-notas .reporte-item {
-  flex-direction: row;
-}
-
-.reporte-tramos {
+.eventos-filtros-tipo {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.tramo-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
+.eventos-filtros-tipo button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.67rem;
+  font-weight: 800;
+  cursor: pointer;
+  opacity: 0.78;
+  transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.eventos-filtros-tipo button:hover {
+  opacity: 1;
+}
+
+.eventos-filtros-tipo button.activo {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px currentColor;
+}
+
+.filtro-evento-tarde {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.filtro-evento-reanudacion {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.filtro-evento-salida {
+  background: #edf3f9;
+  color: #315f8d;
+}
+
+.filtro-evento-pausa {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.reporte-tabla-contenedor {
+  max-height: min(44vh, 420px);
+  overflow: auto;
+  border: 1px solid rgba(10, 31, 56, 0.08);
   border-radius: 12px;
   background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.08);
-  min-width: 150px;
 }
 
-.tramo-chip strong {
-  color: #0a1f38;
-  font-size: 0.78rem;
+.reporte-tabla {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: left;
 }
 
-.tramo-chip small {
-  color: #123a66;
-  font-size: 0.74rem;
+.reporte-tabla th,
+.reporte-tabla td {
+  padding: 9px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid #e8eef4;
 }
 
-.tramo-chip span {
-  color: #16a34a;
-  font-size: 0.68rem;
+.reporte-tabla thead th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: #f3f7fb;
+  color: #60768d;
+  font-size: 0.66rem;
   font-weight: 800;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.tramo-chip.activo {
-  border-color: rgba(22, 163, 74, 0.22);
-  background: rgba(22, 163, 74, 0.08);
+.reporte-tabla th:first-child {
+  width: 36%;
+}
+
+.reporte-tabla tbody th {
+  color: #173b5f;
+  font-size: 0.76rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.reporte-tabla tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.reporte-tabla tbody tr:nth-child(even) {
+  background: #fbfcfe;
+}
+
+.reporte-empleado {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.reporte-empleado .empleado-avatar {
+  flex: 0 0 auto;
+}
+
+.reporte-tabla-detalle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  color: #526b83;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reporte-tabla-metricas {
+  color: #173b5f;
+  font-weight: 750;
+}
+
+.reporte-tabla .badge-minutos {
+  padding: 3px 7px;
+  font-size: 0.65rem;
+}
+
+.reporte-tabla .badge-minutos.calm {
+  background: rgba(18, 58, 102, 0.08);
+}
+
+.reporte-tabla-horas {
+  color: #60768d;
+  white-space: nowrap;
+}
+
+.reporte-tabla-tramos {
+  flex: 0 0 100%;
+  color: #78899b;
+  font-size: 0.67rem;
+}
+
+.reporte-tabla-tramos > span + span::before {
+  content: ' · ';
+  color: #a4b1be;
+}
+
+.reporte-evento-tipo {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf3f9;
+  color: #315f8d;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.reporte-evento-tipo.tardanza {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.reporte-evento-tipo.pausa {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.reporte-evento-tipo.reanudacion {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.reporte-tabla-mensaje {
+  flex: 1 1 100%;
+  color: #173b5f;
+}
+
+@media (max-width: 520px) {
+  .reporte-panel {
+    padding: 10px;
+  }
+
+  .reporte-tabla th,
+  .reporte-tabla td {
+    padding: 8px 7px;
+  }
+
+  .reporte-tabla th:first-child {
+    width: 34%;
+  }
+
+  .reporte-tabla tbody th {
+    font-size: 0.72rem;
+  }
+
+  .reporte-tabla-detalle {
+    font-size: 0.68rem;
+  }
 }
 
 /* ── Calendario admin (encabezado con botón en esquina) ── */
@@ -3355,6 +3650,27 @@ const montoHoyEnVivo = computed(() => {
   gap: 12px;
   color: #0a1f38;
   text-transform: capitalize;
+}
+
+.calendario-semana-navegacion {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.calendario-semana-centro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.semana-anterior {
+  justify-self: start;
+}
+
+.semana-siguiente {
+  justify-self: end;
 }
 
 .calendario-mes-navegacion strong {

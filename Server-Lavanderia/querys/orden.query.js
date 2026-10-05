@@ -208,6 +208,8 @@ const construirTextoCambioCliente = ({
   nombreClienteNuevo = "",
   correoAnterior = "",
   correoNuevo = "",
+  codigoPaisAnterior = "",
+  codigoPaisNuevo = "",
   telefonoAnterior = "",
   telefonoNuevo = "",
 }) => {
@@ -230,11 +232,25 @@ const construirTextoCambioCliente = ({
       `correo "${correoAnteriorLimpio || "(vacío)"}" → "${correoNuevoLimpio}"`,
     );
   }
-  const telefonoAnteriorLimpio = String(telefonoAnterior ?? "").replace(/\D/g);
+  const codigoPaisAnteriorLimpio = String(codigoPaisAnterior ?? "").replace(/\D/g, "");
+  const codigoPaisNuevoLimpio = String(codigoPaisNuevo ?? "").replace(/\D/g, "");
+  const telefonoAnteriorLimpio = String(telefonoAnterior ?? "").replace(/\D/g, "");
   const telefonoNuevoLimpio = String(telefonoNuevo ?? "").replace(/\D/g, "");
-  if (telefonoNuevoLimpio && telefonoNuevoLimpio !== telefonoAnteriorLimpio) {
+  const numeroAnteriorCompleto = [
+    codigoPaisAnteriorLimpio ? `+${codigoPaisAnteriorLimpio}` : "",
+    telefonoAnteriorLimpio,
+  ].filter(Boolean).join(" ");
+  const numeroNuevoCompleto = [
+    codigoPaisNuevoLimpio ? `+${codigoPaisNuevoLimpio}` : "",
+    telefonoNuevoLimpio,
+  ].filter(Boolean).join(" ");
+  if (
+    telefonoNuevoLimpio &&
+    (codigoPaisNuevoLimpio !== codigoPaisAnteriorLimpio ||
+      telefonoNuevoLimpio !== telefonoAnteriorLimpio)
+  ) {
     cambios.push(
-      `número "${telefonoAnteriorLimpio || "(vacío)"}" → "${telefonoNuevoLimpio}"`,
+      `número "${numeroAnteriorCompleto || "(vacío)"}" → "${numeroNuevoCompleto}"`,
     );
   }
 
@@ -390,43 +406,63 @@ const obtenerOrdenCompleta = async (id, ejecutor = pool) => {
   ]);
   if (!row) return null;
 
-  const [itemsRows] = await ejecutor.query(
-    "SELECT * FROM orden_items WHERE orden_id = ?",
-    [id],
-  );
+  const [
+    [itemsRows],
+    [fotosRows],
+    [cargosRows],
+    [anticiposRows],
+    [movimientosRows],
+    [turnoAbiertoRows],
+  ] = await Promise.all([
+    ejecutor.query("SELECT * FROM orden_items WHERE orden_id = ?", [id]),
+    ejecutor.query(
+      "SELECT * FROM orden_fotos WHERE orden_id = ? ORDER BY posicion ASC",
+      [id],
+    ),
+    ejecutor.query(
+      "SELECT * FROM orden_cargos_extra WHERE orden_id = ? ORDER BY fecha ASC",
+      [id],
+    ),
+    ejecutor.query(
+      "SELECT * FROM orden_anticipos WHERE orden_id = ? ORDER BY fecha ASC",
+      [id],
+    ),
+    ejecutor.query(
+      "SELECT * FROM orden_movimientos WHERE orden_id = ? ORDER BY fecha DESC",
+      [id],
+    ),
+    ejecutor.query(
+      "SELECT turno_id FROM turno_caja_actual WHERE id = 1 AND abierto = 1 AND turno_id <> ''",
+    ),
+  ]);
 
   const itemIds = itemsRows.map((r) => r.id);
-  let insumosRows = [];
+  const placeholdersTurnos = [...new Set(
+    [row.turno_id, ...anticiposRows.map((anticipo) => anticipo.turno_id)]
+      .filter(Boolean),
+  )];
+  const consultasSecundarias = [];
   if (itemIds.length) {
-    const placeholders = itemIds.map(() => "?").join(",");
-    [insumosRows] = await ejecutor.query(
-      `SELECT * FROM orden_item_insumos WHERE orden_item_id IN (${placeholders})`,
-      itemIds,
+    consultasSecundarias.push(
+      ejecutor.query(
+        `SELECT * FROM orden_item_insumos WHERE orden_item_id IN (${itemIds.map(() => "?").join(",")})`,
+        itemIds,
+      ),
     );
+  } else {
+    consultasSecundarias.push(Promise.resolve([[]]));
   }
-
-  const [fotosRows] = await ejecutor.query(
-    "SELECT * FROM orden_fotos WHERE orden_id = ? ORDER BY posicion ASC",
-    [id],
-  );
-  const [cargosRows] = await ejecutor.query(
-    "SELECT * FROM orden_cargos_extra WHERE orden_id = ? ORDER BY fecha ASC",
-    [id],
-  );
-  const [anticiposRows] = await ejecutor.query(
-    "SELECT * FROM orden_anticipos WHERE orden_id = ? ORDER BY fecha ASC",
-    [id],
-  );
-  const [movimientosRows] = await ejecutor.query(
-    "SELECT * FROM orden_movimientos WHERE orden_id = ? ORDER BY fecha DESC",
-    [id],
-  );
-  const [cierresRows] = await ejecutor.query(
-    "SELECT turno_id, resumen FROM cierres_caja",
-  );
-  const [turnoAbiertoRows] = await ejecutor.query(
-    "SELECT turno_id FROM turno_caja_actual WHERE id = 1 AND abierto = 1 AND turno_id <> ''",
-  );
+  if (placeholdersTurnos.length) {
+    consultasSecundarias.push(
+      ejecutor.query(
+        `SELECT turno_id, resumen FROM cierres_caja WHERE turno_id IN (${placeholdersTurnos.map(() => "?").join(",")})`,
+        placeholdersTurnos,
+      ),
+    );
+  } else {
+    consultasSecundarias.push(Promise.resolve([[]]));
+  }
+  const [[insumosRows], [cierresRows]] = await Promise.all(consultasSecundarias);
 
   // Una caja es válida si conserva su cierre o si sigue abierta. De ese modo,
   // solo se señalan referencias a cajas eliminadas, no al turno en curso.
@@ -504,6 +540,7 @@ const registrarMovimientoConn = async (
   ordenId,
   texto,
   usuario = "Sistema",
+  forzarRegistro = false,
 ) => {
   const usuarioNormalizado = normalizarUsuario(usuario);
   const textoLimpio = typeof texto === "string" ? texto.trim() : "";
@@ -512,8 +549,9 @@ const registrarMovimientoConn = async (
   // El acceso de desarrollador es un acceso especial de prueba; no debe dejar
   // auditoría de movimientos en las órdenes.
   if (
-    usuarioNormalizado.id === "dev-mode" ||
-    usuarioNormalizado.nombre === "Desarrollador"
+    !forzarRegistro &&
+    (usuarioNormalizado.id === "dev-mode" ||
+      usuarioNormalizado.nombre === "Desarrollador")
   ) {
     const fechaLocalMySQL = obtenerFechaHoraNegocioMySQL();
     await conn.execute("UPDATE ordenes SET updated_at = ? WHERE id = ?", [
@@ -973,6 +1011,48 @@ const obtenerOrdenPorId = async (id) => {
   const orden = await obtenerOrdenCompleta(id);
   if (!orden) throw new AppError("Orden no encontrada.", 404);
   return orden;
+};
+
+const obtenerOrdenesPorTerminos = async ({
+  numeros = [],
+  nombre = "",
+  buscarTelefono = false,
+} = {}) => {
+  const numerosTexto = numeros
+    .map((numero) => String(numero).trim())
+    .filter((numero) => /^\d{1,15}$/.test(numero));
+  const secuencias = numerosTexto
+    .map((numero) => Number(String(numero).replace(/^0+(?=\d)/, "")))
+    .filter((numero) => Number.isSafeInteger(numero) && numero > 0);
+  const nombreLimpio = numerosTexto.length
+    ? ""
+    : String(nombre).trim().slice(0, 80);
+  const condiciones = [];
+  const parametros = [];
+
+  if (secuencias.length) {
+    condiciones.push(`secuencia IN (${secuencias.map(() => "?").join(",")})`);
+    parametros.push(...secuencias);
+  }
+  if (numerosTexto.length && buscarTelefono) {
+    condiciones.push(`telefono LIKE ?`);
+    parametros.push(`%${numerosTexto[0]}%`);
+  }
+  if (nombreLimpio.length >= 3) {
+    condiciones.push("nombre_cliente LIKE ?");
+    parametros.push(`%${nombreLimpio}%`);
+  }
+  if (!condiciones.length) return [];
+
+  const [filas] = await pool.query(
+    `SELECT id FROM ordenes WHERE ${condiciones.join(" OR ")}
+     ORDER BY CASE WHEN secuencia IN (${secuencias.length ? secuencias.map(() => "?").join(",") : "NULL"}) THEN 0 ELSE 1 END,
+              secuencia DESC
+     LIMIT 5`,
+    [...parametros, ...secuencias],
+  );
+
+  return Promise.all(filas.map((fila) => obtenerOrdenCompleta(fila.id)));
 };
 
 const validarCanjeCuponQr = async (conn, datos) => {
@@ -2286,6 +2366,7 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
     const nombreClienteAnterior = orden.nombre_cliente || "";
     const correoAnterior = orden.correo || "";
     const telefonoAnterior = orden.telefono || "";
+    const codigoPaisAnterior = orden.codigo_pais || "";
     const cantidadPrendasAnterior = toNumber(orden.cantidad_prendas);
     const sets = [];
     const values = [];
@@ -2332,6 +2413,10 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
       sets.push("nombre_cliente = ?");
       values.push(cambios.nombreCliente.trim());
     }
+    if (typeof cambios.codigoPais === "string") {
+      sets.push("codigo_pais = ?");
+      values.push(`+${cambios.codigoPais.replace(/\D/g, "")}`);
+    }
     if (typeof cambios.correo === "string") {
       sets.push("correo = ?");
       values.push(cambios.correo.trim().toLowerCase());
@@ -2342,7 +2427,7 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
     }
 
     let cantidadPrendasNueva = null;
-    if (Object.prototype.hasOwnProperty.call(cambios, "cantidadPrendas")) {
+    if (cambios.cantidadPrendas !== undefined) {
       cantidadPrendasNueva = Math.max(0, Number(cambios.cantidadPrendas || 0));
       sets.push("cantidad_prendas = ?");
       values.push(cantidadPrendasNueva);
@@ -2427,12 +2512,17 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
       typeof cambios.telefono === "string"
         ? cambios.telefono.replace(/\D/g, "")
         : null;
+    const codigoPaisNuevo =
+      typeof cambios.codigoPais === "string"
+        ? `+${cambios.codigoPais.replace(/\D/g, "")}`
+        : null;
 
     if (
       (nombreClienteNuevo !== null &&
         nombreClienteNuevo !== nombreClienteAnterior) ||
       (correoNuevo !== null && correoNuevo !== correoAnterior) ||
-      (telefonoNuevo !== null && telefonoNuevo !== telefonoAnterior)
+      (telefonoNuevo !== null && telefonoNuevo !== telefonoAnterior) ||
+      (codigoPaisNuevo !== null && codigoPaisNuevo !== codigoPaisAnterior)
     ) {
       await registrarMovimientoConn(
         conn,
@@ -2442,6 +2532,8 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
           nombreClienteNuevo: nombreClienteNuevo ?? "",
           correoAnterior,
           correoNuevo: correoNuevo ?? "",
+          codigoPaisAnterior,
+          codigoPaisNuevo: codigoPaisNuevo ?? codigoPaisAnterior,
           telefonoAnterior,
           telefonoNuevo: telefonoNuevo ?? "",
         }),
@@ -2801,6 +2893,7 @@ const aplicarDescuentoOrden = async (id, tipo, valor, usuario = "Sistema") => {
       id,
       `Descuento aplicado: ${textoTipo} (-$${descuentoAplicado.toFixed(2)})`,
       usuario,
+      true,
     );
 
     await conn.commit();
@@ -2816,6 +2909,7 @@ const aplicarDescuentoOrden = async (id, tipo, valor, usuario = "Sistema") => {
 module.exports = {
   formatearNumero,
   obtenerOrdenes,
+  obtenerOrdenesPorTerminos,
   obtenerOrdenPorId,
   crearOrden,
   actualizarEstado,

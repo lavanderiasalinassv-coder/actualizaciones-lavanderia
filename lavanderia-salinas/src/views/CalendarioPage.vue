@@ -1,10 +1,6 @@
-<template>
+﻿<template>
   <AppShell>
     <div class="calendario-page force-light">
-      <div class="header-row">
-        <h1>Calendario de entregas</h1>
-      </div>
-
       <section class="controles-superiores">
         <div class="nav-periodo">
           <button class="nav-btn" @click="irAnterior">
@@ -36,14 +32,26 @@
       </section>
 
       <section class="chip-row leyenda">
-        <div class="search-bar calendario-search">
-          <ion-icon :icon="searchOutline" />
+        <label class="calendario-search">
+          <span class="calendario-search-icon" aria-hidden="true">
+            <ion-icon :icon="searchOutline" />
+          </span>
           <input
             v-model="busquedaCalendario"
             type="text"
-            placeholder="Buscar"
+            aria-label="Buscar órdenes en el calendario"
+            placeholder="Buscar cliente u orden..."
           />
-        </div>
+          <button
+            v-if="busquedaCalendario"
+            type="button"
+            class="calendario-search-clear"
+            aria-label="Limpiar búsqueda"
+            @click="busquedaCalendario = ''"
+          >
+            <ion-icon :icon="closeOutline" />
+          </button>
+        </label>
 
         <button
           v-for="filtro in filtrosEstadoVisibles"
@@ -235,415 +243,6 @@
         :mostrar-restaurar-cerrada="true"
         @cerrado="cerrarDetalle"
       />
-
-      <ion-modal :is-open="false" class="modal-ordenes" @didDismiss="cerrarDetalle">
-        <div class="modal-detalle force-light">
-          <div
-            class="modal-header orden-header-estado"
-            :style="ordenSeleccionada ? {
-              background: estadoColores[ordenSeleccionada.estado].bg,
-              borderColor: estadoColores[ordenSeleccionada.estado].dot
-            } : {}"
-          >
-            <div class="modal-header-left">
-              <div
-                class="modal-icon"
-                :style="ordenSeleccionada ? {
-                  background: estadoColores[ordenSeleccionada.estado].dot,
-                  color: '#ffffff'
-                } : {}"
-              >
-                <ion-icon :icon="receiptOutline" />
-              </div>
-              <div>
-                <p
-                  class="detalle-numero"
-                  :style="ordenSeleccionada ? { color: estadoColores[ordenSeleccionada.estado].textStrong } : {}"
-                >Orden {{ ordenSeleccionada?.numero ?? '' }}</p>
-                <h2>Detalle de orden</h2>
-                <p v-if="ordenSeleccionada?.estado === 'cerrada'" class="orden-cerrada-header">
-                  {{ textoCierreOrden(ordenSeleccionada) }}
-                </p>
-              </div>
-            </div>
-
-            <div v-if="ordenSeleccionada && requiereIntervencion(ordenSeleccionada)" class="motivo-intervencion-header">
-              <ion-icon :icon="warningOutline" />
-              <span>{{ motivoIntervencion(ordenSeleccionada) }}</span>
-            </div>
-
-            <div class="modal-header-acciones">
-              <button v-if="!esOperador" class="btn-icono" title="Enviar por WhatsApp" :disabled="peticionOrdenEnCurso" @click="enviarWhatsApp">
-                <ion-icon :icon="logoWhatsapp" />
-              </button>
-              <button
-                v-if="!esOperador && ordenSeleccionada?.correo"
-                class="btn-icono"
-                :disabled="enviandoCorreo || peticionOrdenEnCurso"
-                :title="enviandoCorreo ? 'Enviando factura...' : 'Enviar factura automáticamente por correo'"
-                @click="enviarEmail"
-              >
-                <ion-spinner v-if="enviandoCorreo" name="crescent" />
-                <ion-icon v-else :icon="mailOutline" />
-              </button>
-              <button
-                v-if="esAdministrador && !esOperador"
-                class="btn-icono peligro"
-                :disabled="peticionOrdenEnCurso"
-                title="Eliminar orden"
-                @click="confirmarEliminarOrden"
-              >
-                <ion-icon :icon="trashOutline" />
-              </button>
-              <button class="cerrar-detalle" @click="cerrarDetalle">
-                <ion-icon :icon="closeOutline" />
-              </button>
-            </div>
-          </div>
-
-          <div v-if="ordenSeleccionada" class="modal-body">
-            <div class="modal-columna acciones-columna">
-              <p class="columna-titulo">Opciones de modificacion</p>
-
-              <section v-if="ordenSeleccionada.estado !== 'cerrada'" class="estado-deslizador">
-                <div class="detalle-bloque-head">
-                  <div>
-                    <p class="label">Estado</p>
-                    <strong>Selecciona el estado de la orden</strong>
-                  </div>
-                </div>
-
-                <div class="estado-cuadritos">
-                  <button
-                    v-for="estado in estadosCambioVisibles"
-                    :key="estado.value"
-                    type="button"
-                    class="estado-cuadrito"
-                    :class="{ actual: ordenSeleccionada.estado === estado.value }"
-                    :disabled="peticionOrdenEnCurso || ordenSeleccionada.estado === estado.value || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || turnoCerrado"
-                    :title="ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
-                    @click="solicitarCambioEstado(ordenSeleccionada.id, estado.value)"
-                  >
-                    <span class="estado-cuadrito-emoji" aria-hidden="true">{{ estado.emoji }}</span>
-                    <span>{{ estado.label }}</span>
-                  </button>
-                </div>
-
-                <button
-                  v-if="esAdministrador && ordenSeleccionada.estado !== 'cancelada'"
-                  type="button"
-                  class="cancelar-orden-boton"
-                  @click="abrirModalCancelarOrden"
-                >
-                  <ion-icon :icon="banOutline" />
-                  Cancelar orden
-                </button>
-              </section>
-
-              <button
-                v-if="mostrarRestaurarCerrada && ordenSeleccionada.estado === 'cerrada'"
-                type="button"
-                class="restaurar-orden-boton"
-                :disabled="restaurandoOrdenCerrada"
-                @click="restaurarOrdenCerrada"
-              >
-                <ion-icon :icon="refreshOutline" />
-                <span>{{ restaurandoOrdenCerrada ? 'Restaurando...' : 'Restaurar orden cerrada' }}</span>
-              </button>
-
-              <p v-if="ordenSeleccionada.turnoHuerfano" class="anticipo-error-badge turno-huerfano-badge">
-                ⚠️ La entrega no aparece en el cierre asignado (ID: {{ ordenSeleccionada.turnoId }}).
-              </p>
-
-              <section class="detalle-bloque">
-                <div class="seccion-titulo">
-                  <strong>Servicios</strong>
-                  <div class="seccion-titulo-acciones">
-                    <span class="mini-badge">{{ ordenSeleccionada.items.length }} items</span>
-                    <button v-if="ordenSeleccionada.estado !== 'cancelada'" class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalAgregarProducto">
-                      + Agregar servicio
-                    </button>
-                  </div>
-                </div>
-
-                <div class="servicios-lista">
-                  <article v-for="item in ordenSeleccionada.items" :key="item.id" class="servicio-linea">
-                    <div>
-                      <strong>{{ item.nombre }}</strong>
-                      <span>{{ item.cantidad }}<template v-if="puedeVerMontos"> x ${{ item.precio.toFixed(2) }}</template></span>
-                    </div>
-                    <div class="linea-derecha">
-                      <strong v-if="puedeVerMontos">${{ (item.precio * item.cantidad).toFixed(2) }}</strong>
-                      <button v-if="esAdministrador" type="button" class="btn-quitar-mini" title="Quitar producto" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalQuitarItem(item)">
-                        <ion-icon :icon="banOutline" />
-                      </button>
-                    </div>
-                  </article>
-                  <p v-if="ordenSeleccionada.items.length === 0" class="hint-texto-vacio">
-                    Sin productos en esta orden.
-                  </p>
-                </div>
-              </section>
-
-              <section class="detalle-bloque">
-                <div class="seccion-titulo">
-                  <strong>Cargos extra</strong>
-                  <button v-if="ordenSeleccionada.estado !== 'cancelada'" class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalCargoExtra">
-                    + Agregar cargo extra
-                  </button>
-                </div>
-
-                <div v-if="ordenSeleccionada.cargosExtra.length" class="servicios-lista">
-                  <article v-for="cargo in ordenSeleccionada.cargosExtra" :key="cargo.id" class="servicio-linea">
-                    <div>
-                      <strong>{{ cargo.descripcion }}</strong>
-                      <span>{{ formatearFechaHora(cargo.fecha) }}</span>
-                    </div>
-                    <div class="linea-derecha">
-                      <strong v-if="puedeVerMontos">${{ cargo.monto.toFixed(2) }}</strong>
-                      <button type="button" class="btn-quitar-mini" title="Eliminar cargo" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="eliminarCargoExtraSeleccionado(cargo.id)">
-                        <ion-icon :icon="trashOutline" />
-                      </button>
-                    </div>
-                  </article>
-                </div>
-                <p v-else class="hint-texto-vacio">Sin cargos extra registrados.</p>
-              </section>
-
-              <section class="detalle-bloque">
-                <div class="seccion-titulo">
-                  <strong>Fotos</strong>
-                  <label v-if="ordenSeleccionada.estado !== 'cancelada'" class="link btn-subir-foto-link">
-                    + Agregar
-                    <input type="file" accept="image/*" multiple hidden :disabled="peticionOrdenEnCurso || turnoCerrado" @change="manejarFotosOrden" />
-                  </label>
-                </div>
-                <div class="fotos-grid">
-                  <div v-for="(foto, index) in ordenSeleccionada.fotos" :key="foto" class="foto-item">
-                    <img :src="foto" alt="Foto de la orden" />
-                    <button type="button" class="btn-quitar-foto" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="eliminarFotoSeleccionada(index)">×</button>
-                  </div>
-                  <div v-if="ordenSeleccionada.fotos.length === 0" class="foto-vacia">
-                    Foto
-                  </div>
-                </div>
-              </section>
-
-              <section class="detalle-bloque notas">
-                <div class="seccion-titulo">
-                  <strong>Notas internas</strong>
-                  <button class="link extra" :disabled="guardandoNota || peticionOrdenEnCurso || turnoCerrado" @click="guardarNota">
-                    <ion-icon :icon="saveOutline" />
-                    {{ guardandoNota ? 'Guardando...' : 'Guardar nota' }}
-                  </button>
-                </div>
-                <textarea
-                  v-model="notaBorrador"
-                  class="nota-input"
-                  :aria-busy="guardandoNota"
-                  aria-label="Nota interna de la orden"
-                  placeholder="Ej: Se embolso, falta planchar, cliente pide entrega temprano..."
-                />
-                <p v-if="notaGuardada" class="nota-estado nota-estado-exito" aria-live="polite">
-                  Nota guardada correctamente.
-                </p>
-                <p v-if="errorNota" class="nota-estado nota-estado-error" role="alert">
-                  {{ errorNota }}
-                </p>
-              </section>
-            </div>
-
-            <div class="modal-columna info-columna">
-              <p class="columna-titulo">{{ esOperador ? 'Informacion de la orden' : 'Informacion de la orden y dinero' }}</p>
-
-              <section class="detalle-bloque cliente-box">
-                <div class="detalle-bloque-head">
-                  <div>
-                    <p class="label">Informacion del cliente</p>
-                    <strong v-if="!editandoCliente">{{ ordenSeleccionada.nombreCliente }}</strong>
-                  </div>
-                  <span
-                    class="pill estado-pill"
-                    :style="{ background: estadoColores[ordenSeleccionada.estado].bg, color: estadoColores[ordenSeleccionada.estado].text }"
-                  >
-                    {{ textoEstado(ordenSeleccionada.estado) }}
-                  </span>
-                </div>
-
-                <template v-if="editandoCliente">
-                  <label class="modal-label cliente-edicion-label">Nombre</label>
-                  <input v-model="clienteBorrador.nombre" class="modal-input-texto" type="text" />
-                  <label class="modal-label cliente-edicion-label">Celular</label>
-                  <div class="cliente-telefono-edicion">
-                    <span>{{ ordenSeleccionada.codigoPais }}</span>
-                    <input v-model="clienteBorrador.telefono" class="modal-input-texto" type="tel" inputmode="numeric" />
-                  </div>
-                  <label class="modal-label cliente-edicion-label">Correo electronico</label>
-                  <input v-model="clienteBorrador.correo" class="modal-input-texto" type="email" />
-                  <p v-if="errorEdicionCliente" class="nota-estado nota-estado-error">{{ errorEdicionCliente }}</p>
-                  <div class="cliente-edicion-acciones">
-                    <button type="button" class="btn-outline" :disabled="guardandoCliente" @click="cancelarEdicionCliente">Cancelar</button>
-                    <button type="button" class="btn-principal" :disabled="guardandoCliente" @click="guardarEdicionCliente">
-                      {{ guardandoCliente ? 'Guardando...' : 'Guardar cambios' }}
-                    </button>
-                  </div>
-                </template>
-                <template v-else>
-                  <span>{{ ordenSeleccionada.codigoPais }} {{ ordenSeleccionada.telefono }}</span>
-                  <span v-if="ordenSeleccionada.correo">{{ ordenSeleccionada.correo }}</span>
-                  <button v-if="esAdministrador" type="button" class="link cliente-editar-btn" @click="iniciarEdicionCliente">
-                    Editar datos del cliente
-                  </button>
-                </template>
-                <span v-if="ordenSeleccionada.envioDomicilio && ordenSeleccionada.direccionEntrega">
-                  Dirección de entrega: {{ ordenSeleccionada.direccionEntrega }}
-                </span>
-              </section>
-
-              <section class="detalle-grid">
-                <div v-if="puedeVerMontos" class="mini-card">
-                  <p class="label">Estado de pago</p>
-                  <strong>{{ textoEstadoPago(ordenSeleccionada.estadoPago) }}</strong>
-                  <button
-                    v-if="ordenSeleccionada.estado !== 'cancelada' && (ordenSeleccionada.estadoPago === 'porCobrar' || (esAdministrador && ordenSeleccionada.estadoPago === 'pagado'))"
-                    class="link"
-                    :disabled="peticionOrdenEnCurso || turnoCerrado"
-                    @click="cambiarEstadoPago(ordenSeleccionada.id)"
-                  >
-                    {{ ordenSeleccionada.estadoPago === 'pagado' ? 'Regresar a por cobrar' : 'Marcar Pagado' }}
-                  </button>
-                </div>
-
-                <div class="mini-card">
-                  <p class="label">Fecha de entrega</p>
-                  <input v-model="fechaEntregaBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador" />
-                  <span v-if="ordenSeleccionada.horaEntrega">Hora: {{ ordenSeleccionada.horaEntrega }}</span>
-                </div>
-
-                <div class="mini-card">
-                  <p class="label">Fecha de creacion</p>
-                  <input v-model="fechaCreacionBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador" />
-                  <span>Hora: {{ formatearHora(ordenSeleccionada.createdAt) }}</span>
-                </div>
-              </section>
-
-              <button
-                v-if="esAdministrador"
-                type="button"
-                class="guardar-fechas-orden"
-                :disabled="guardandoFechas || peticionOrdenEnCurso || !fechaCreacionBorrador || !fechaEntregaBorrador"
-                @click="guardarFechasOrden"
-              >
-                {{ guardandoFechas ? 'Cambiando fecha...' : 'Cambiar fecha' }}
-              </button>
-
-              <section v-if="puedeVerMontos" class="total-box">
-                <span>Total a pagar</span>
-                <strong>${{ totalFinalOrden(ordenSeleccionada).toFixed(2) }} USD</strong>
-              </section>
-
-              <section v-if="puedeVerMontos" class="detalle-bloque pago-box">
-                <div class="seccion-titulo">
-                  <strong>Pago y anticipos</strong>
-                  <button v-if="ordenSeleccionada.estado !== 'cancelada'" class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalAnticipo">
-                    + Registrar anticipo
-                  </button>
-                </div>
-
-                <div class="pago-resumen">
-                  <div>
-                    <p class="label">Recibido</p>
-                    <strong>${{ ordenSeleccionada.montoRecibido.toFixed(2) }}</strong>
-                  </div>
-                  <div>
-                    <p class="label">Estado</p>
-                    <strong>{{ textoEstadoPago(ordenSeleccionada.estadoPago) }}</strong>
-                  </div>
-                </div>
-
-                <div v-if="ordenSeleccionada.metodoPago === 'tarjeta' && (ordenSeleccionada.tarjetaMonto || ordenSeleccionada.tarjetaReferencia)" class="metodo-pago-detalle">
-                  <div class="metodo-pago-header">
-                    <ion-icon :icon="cardOutline" />
-                    <strong>Pago con tarjeta</strong>
-                  </div>
-                  <div v-if="ordenSeleccionada.tarjetaMonto" class="pago-detalle-linea">
-                    <span>Monto:</span>
-                    <strong>${{ ordenSeleccionada.tarjetaMonto.toFixed(2) }}</strong>
-                  </div>
-                  <div v-if="ordenSeleccionada.tarjetaReferencia" class="pago-detalle-linea">
-                    <span>Referencia:</span>
-                    <strong>{{ ordenSeleccionada.tarjetaReferencia }}</strong>
-                  </div>
-                </div>
-
-                <div v-if="ordenSeleccionada.metodoPago === 'transferencia' && (ordenSeleccionada.transferenciaMonto || ordenSeleccionada.transferenciaComprobante)" class="metodo-pago-detalle">
-                  <div class="metodo-pago-header">
-                    <ion-icon :icon="swapHorizontalOutline" />
-                    <strong>Transferencia</strong>
-                  </div>
-                  <div v-if="ordenSeleccionada.transferenciaMonto" class="pago-detalle-linea">
-                    <span>Monto:</span>
-                    <strong>${{ ordenSeleccionada.transferenciaMonto.toFixed(2) }}</strong>
-                  </div>
-                  <div v-if="ordenSeleccionada.transferenciaComprobante" class="pago-detalle-linea">
-                    <span>Comprobante:</span>
-                    <button type="button" class="comprobante-link" @click="abrirModalComprobante(ordenSeleccionada.transferenciaComprobante)">
-                      <ion-icon :icon="imageOutline" />
-                      Ver comprobante
-                    </button>
-                  </div>
-                </div>
-
-                <div v-if="ordenSeleccionada.anticipos.length" class="servicios-lista">
-                  <article v-for="anticipo in ordenSeleccionada.anticipos" :key="anticipo.id" class="servicio-linea">
-                    <div>
-                      <strong>Anticipo</strong>
-                      <span>{{ formatearFechaHora(anticipo.fecha) }}</span>
-                    </div>
-                    <div class="linea-derecha">
-                      <strong>${{ anticipo.monto.toFixed(2) }}</strong>
-                      <button v-if="esAdministrador" type="button" class="btn-quitar-mini" title="Eliminar anticipo" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="eliminarAnticipoSeleccionado(anticipo.id)">
-                        <ion-icon :icon="trashOutline" />
-                      </button>
-                    </div>
-                  </article>
-                </div>
-                <p v-else class="hint-texto-vacio">Sin anticipos registrados.</p>
-
-                <button
-                  v-if="ordenSeleccionada.estado !== 'cancelada' && (ordenSeleccionada.estadoPago === 'porCobrar' || (esAdministrador && ordenSeleccionada.estadoPago === 'pagado'))"
-                  class="link"
-                  :disabled="peticionOrdenEnCurso || turnoCerrado"
-                  @click="cambiarEstadoPago(ordenSeleccionada.id)"
-                >
-                  {{ ordenSeleccionada.estadoPago === 'pagado' ? 'Regresar a por cobrar' : 'Marcar facturada' }}
-                </button>
-              </section>
-
-              <section v-if="esAdministrador" class="detalle-bloque movimientos">
-                <div class="seccion-titulo">
-                  <strong>Movimientos</strong>
-                </div>
-                <div class="movimientos-lista">
-                  <article
-                    v-for="mov in ordenSeleccionada.movimientos"
-                    :key="mov.id"
-                    class="movimiento"
-                    :class="claseMovimiento(mov.texto)"
-                  >
-                    <div class="movimiento-bullet" :class="claseMovimientoBullet(mov.texto)">+</div>
-                    <div>
-                      <strong :class="claseTextoMovimiento(mov.texto)">{{ textoMovimientoVisible(mov.texto) }}</strong>
-                      <span>Usuario a cargo: {{ mov.usuarioNombre || 'Sistema' }}</span> <br>
-                      <span>Fecha: {{ formatearFechaHora(mov.fecha) }}</span>
-                    </div>
-                  </article>
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-      </ion-modal>
 
       <ion-modal :is-open="mostrarModalRestaurar" class="modal-confirmacion" @didDismiss="cerrarModalRestaurar">
         <div class="modal-restaurar-contenido force-light">
@@ -2821,6 +2420,10 @@ const cambiarEstadoPago = async (id: string) => {
 }
 
 .semana-evento-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   text-align: left;
   border: 1px solid rgba(10, 31, 56, 0.08);
   border-left: 4px solid var(--card-accent, #66c2b8);
@@ -2855,6 +2458,11 @@ const cambiarEstadoPago = async (id: string) => {
 }
 
 .semana-evento-cliente {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 0;
   font-size: 0.8rem;
   color: #0a1f38;
@@ -4327,6 +3935,435 @@ const cambiarEstadoPago = async (id: string) => {
     --width: 100vw;
     --height: 100vh;
     --border-radius: 0;
+  }
+}
+
+.calendario-page {
+  --calendario-azul: #123a66;
+  --calendario-azul-profundo: #0a1f38;
+  --calendario-borde: #dce5ee;
+  --calendario-fondo-suave: #f4f7fb;
+  gap: 20px;
+}
+
+.calendario-page > .header-row {
+  padding: 4px 2px;
+}
+
+.calendario-page > .header-row h1 {
+  letter-spacing: -0.035em;
+}
+
+.controles-superiores {
+  padding: 12px;
+  border: 1px solid var(--calendario-borde);
+  border-radius: 17px;
+  background: linear-gradient(135deg, #ffffff, #f7f9fc);
+  box-shadow: 0 5px 16px rgba(10, 31, 56, 0.045);
+}
+
+.nav-periodo {
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #e5ebf1;
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.nav-btn {
+  width: 38px;
+  height: 38px;
+  border-color: transparent;
+  border-radius: 11px;
+  background: #f3f6fa;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.nav-btn:hover {
+  background: #e8eff7;
+  transform: translateY(-1px);
+}
+
+.titulo-periodo {
+  min-width: 205px;
+  color: var(--calendario-azul-profundo);
+  font-size: 1.12rem;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+}
+
+.hoy-btn {
+  min-height: 38px;
+  border-color: rgba(18, 58, 102, 0.15);
+  background: #edf3f9;
+  color: var(--calendario-azul);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.hoy-btn:hover {
+  background: #dfeaf5;
+  transform: translateY(-1px);
+}
+
+.vista-switch {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e2e9f0;
+  background: #edf1f6;
+}
+
+.vista-chip {
+  min-width: 88px;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.vista-chip.active {
+  background: var(--calendario-azul);
+  box-shadow: 0 3px 8px rgba(18, 58, 102, 0.2);
+}
+
+.leyenda {
+  align-items: center;
+  gap: 9px;
+  padding: 2px 1px;
+}
+
+.calendario-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  box-sizing: border-box;
+  min-width: 210px;
+  max-width: 280px;
+  padding: 4px 8px 4px 6px;
+  border: 1px solid #d7e2ed;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #ffffff, #f7fafe);
+  box-shadow: 0 3px 10px rgba(10, 31, 56, 0.055), inset 0 1px 0 #ffffff;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.calendario-search:focus-within {
+  border-color: #557da5;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(18, 58, 102, 0.09), 0 5px 14px rgba(10, 31, 56, 0.08);
+}
+
+.calendario-search-icon {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #e0e9f2;
+  border-radius: 10px;
+  background: #edf3f9;
+  color: #315a80;
+  font-size: 17px;
+}
+
+.calendario-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #123a66;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.calendario-search input::placeholder {
+  color: #8295a9;
+  font-weight: 500;
+}
+
+.calendario-search-clear {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #71869b;
+  cursor: pointer;
+}
+
+.calendario-search-clear:hover {
+  background: #eaf0f7;
+  color: #123a66;
+}
+
+.leyenda .filtro-chip {
+  min-height: 36px;
+  border-color: #dfe6ee;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 31, 56, 0.025);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.leyenda .filtro-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(10, 31, 56, 0.08);
+}
+
+.mes-grid-wrapper {
+  border-color: var(--calendario-borde);
+  border-radius: 19px;
+  background: #e7edf4;
+  box-shadow: 0 12px 30px rgba(10, 31, 56, 0.08);
+}
+
+.mes-dias-semana {
+  background: #f2f5f9;
+  border-bottom-color: #dce5ee;
+}
+
+.mes-dias-semana span {
+  padding: 13px 6px;
+  color: #586f88;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.mes-grid {
+  gap: 1px;
+  background: #e3eaf1;
+}
+
+.mes-celda {
+  position: relative;
+  min-height: 118px;
+  padding: 9px;
+  background: #ffffff;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.mes-celda:hover {
+  position: relative;
+  z-index: 1;
+  background: #f7faff;
+  box-shadow: inset 0 0 0 1px #b8c9da;
+}
+
+.mes-celda.hoy {
+  background: #f0f5fb;
+  box-shadow: inset 0 0 0 2px rgba(18, 58, 102, 0.48);
+}
+
+.mes-celda.fuera-de-mes {
+  background: #f7f9fb;
+}
+
+.mes-celda-numero {
+  width: 29px;
+  height: 29px;
+  color: #506780;
+  font-size: 0.82rem;
+}
+
+.mes-celda-numero.hoy {
+  background: var(--calendario-azul);
+  box-shadow: 0 3px 8px rgba(18, 58, 102, 0.24);
+}
+
+.mes-celda-eventos {
+  gap: 5px;
+}
+
+.evento-pill {
+  min-height: 23px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  box-shadow: 0 1px 3px rgba(10, 31, 56, 0.07);
+  font-size: 0.68rem;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.evento-pill:hover {
+  filter: saturate(1.12);
+  transform: translateX(1px);
+}
+
+.evento-mas {
+  padding-top: 2px;
+  color: var(--calendario-azul);
+}
+
+.punto-evento {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px rgba(10, 31, 56, 0.1);
+}
+
+.semana-grid {
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.semana-columna {
+  border-color: var(--calendario-borde);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 5px 16px rgba(10, 31, 56, 0.045);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.semana-columna.hoy {
+  border-color: #8da8c3;
+  box-shadow: 0 8px 22px rgba(18, 58, 102, 0.13);
+}
+
+.semana-columna-header {
+  padding: 13px 8px 11px;
+  background: linear-gradient(180deg, #f4f7fb, #edf2f7);
+}
+
+.semana-columna.hoy .semana-columna-header {
+  background: linear-gradient(180deg, #eaf1f8, #e2ebf5);
+}
+
+.semana-dia-nombre {
+  color: #657a90;
+  font-size: 0.64rem;
+  letter-spacing: 0.07em;
+}
+
+.semana-dia-numero {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+}
+
+.semana-dia-numero.hoy {
+  background: var(--calendario-azul);
+  box-shadow: 0 3px 8px rgba(18, 58, 102, 0.23);
+}
+
+.semana-columna-lista {
+  gap: 9px;
+  padding: 9px;
+}
+
+.semana-evento-card {
+  border-color: color-mix(in srgb, var(--card-accent) 18%, #ffffff);
+  border-left-width: 4px;
+  border-radius: 11px;
+  padding: 9px;
+  box-shadow: 0 2px 7px rgba(10, 31, 56, 0.045);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.semana-evento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 13px rgba(10, 31, 56, 0.1);
+}
+
+.semana-evento-top strong {
+  color: var(--calendario-azul);
+  font-size: 0.76rem;
+}
+
+.semana-evento-cliente {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.semana-vacio {
+  margin: auto 0;
+  padding: 12px 4px;
+  color: #9aaaba;
+  font-size: 0.72rem;
+}
+
+.agenda-dia {
+  border-color: var(--calendario-borde);
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(10, 31, 56, 0.04);
+}
+
+.agenda-dia.hoy {
+  border-color: #8da8c3;
+  box-shadow: 0 7px 17px rgba(18, 58, 102, 0.1);
+}
+
+.agenda-dia-header {
+  padding: 11px 14px;
+  background: linear-gradient(90deg, #f3f6fa, #ffffff);
+}
+
+.agenda-dia.hoy .agenda-dia-header {
+  background: linear-gradient(90deg, #e8f0f8, #f7faff);
+}
+
+.agenda-evento-card {
+  border-color: #e4eaf0;
+  border-left: 3px solid var(--card-accent, #66c2b8);
+  background: #ffffff;
+  box-shadow: 0 2px 7px rgba(10, 31, 56, 0.035);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.agenda-evento-card:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 10px rgba(10, 31, 56, 0.08);
+}
+
+@media (max-width: 760px) {
+  .calendario-page {
+    gap: 14px;
+  }
+
+  .controles-superiores {
+    padding: 10px;
+    border-radius: 15px;
+  }
+
+  .nav-periodo {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .titulo-periodo {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .calendario-search {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .leyenda {
+    gap: 7px;
+  }
+
+  .mes-grid-wrapper {
+    border-radius: 14px;
+  }
+
+  .mes-dias-semana span {
+    padding: 10px 2px;
+    font-size: 0.59rem;
+    letter-spacing: 0.015em;
+  }
+
+  .mes-celda {
+    min-height: 72px;
+    padding: 5px 3px;
+    gap: 4px;
+  }
+
+  .mes-celda-numero {
+    width: 24px;
+    height: 24px;
+    font-size: 0.72rem;
   }
 }
 </style>

@@ -4,7 +4,7 @@ const { pool } = require("../database/MySQLConexion");
 const texto = (valor, limite = 10000) =>
   typeof valor === "string" ? valor.trim().slice(0, limite) : "";
 
-const asegurarTabla = async () => {
+const crearTablaSiHaceFalta = async () => {
   await pool.query(`CREATE TABLE IF NOT EXISTS sali_conocimiento (
     id CHAR(36) NOT NULL,
     titulo VARCHAR(180) NOT NULL,
@@ -59,6 +59,17 @@ const asegurarTabla = async () => {
       // El índice probablemente ya existe, ignoramos el error
     }
   }
+};
+
+let promesaAsegurarTabla;
+const asegurarTabla = () => {
+  if (!promesaAsegurarTabla) {
+    promesaAsegurarTabla = crearTablaSiHaceFalta().catch((error) => {
+      promesaAsegurarTabla = undefined;
+      throw error;
+    });
+  }
+  return promesaAsegurarTabla;
 };
 
 const esDesarrollador = (req) => {

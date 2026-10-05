@@ -422,6 +422,7 @@ const actualizarCampos = async (req, res) => {
       fechaEntrega,
       horaEntrega,
       nombreCliente,
+      codigoPais,
       correo,
       telefono,
       cantidadPrendas,
@@ -434,6 +435,7 @@ const actualizarCampos = async (req, res) => {
       fechaEntrega === undefined &&
       horaEntrega === undefined &&
       nombreCliente === undefined &&
+      codigoPais === undefined &&
       correo === undefined &&
       telefono === undefined &&
       cantidadPrendas === undefined
@@ -446,7 +448,7 @@ const actualizarCampos = async (req, res) => {
       return res.status(400).json({ error: "fotos debe ser un arreglo." });
     }
     const usuario = obtenerUsuarioAuditoria(req);
-    const camposCliente = [nombreCliente, correo, telefono];
+    const camposCliente = [nombreCliente, codigoPais, correo, telefono];
     if (
       camposCliente.some((campo) => campo !== undefined) &&
       !esAdministrador(usuario)
@@ -476,6 +478,14 @@ const actualizarCampos = async (req, res) => {
     ) {
       return res.status(400).json({
         error: "El número de celular debe tener entre 7 y 15 dígitos.",
+      });
+    }
+    if (
+      codigoPais !== undefined &&
+      !/^\+?\d{1,4}$/.test(String(codigoPais).trim())
+    ) {
+      return res.status(400).json({
+        error: "El código de país debe tener entre 1 y 4 dígitos.",
       });
     }
     if (
@@ -532,6 +542,7 @@ const actualizarCampos = async (req, res) => {
         fechaEntrega,
         horaEntrega,
         nombreCliente,
+        codigoPais,
         correo,
         telefono,
         cantidadPrendas,

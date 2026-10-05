@@ -9,7 +9,6 @@
       </div>
       <header class="depositos-header">
         <div>
-          <h1>Depósitos</h1>
         </div>
         <div v-if="!esCajero" class="resumen-total">
           <span>Disponible para depósito</span>

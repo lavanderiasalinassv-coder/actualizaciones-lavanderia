@@ -7,7 +7,7 @@ export type RangoReporte = 7 | 14 | 30
 
 const COLOR_ESTADO: Record<OrdenEstado, string> = {
   pendiente: '#d97706',
-  en_proceso: '#4fb3e0',
+  en_proceso: '#315f8d',
   listo: '#16a34a',
   entregado: '#16a34a',
   cerrada: '#6b7280',
@@ -82,6 +82,8 @@ const esVentaDelTurno = (orden: Orden, turnoId: string) =>
 export function useReportes() {
   const { ordenes } = useOrdenes()
   const { turno } = useTurno()
+  const montoCobradoEnTurno = (orden: Orden) =>
+    turno.abierto && turno.id ? calcularCobradoEnTurno(orden, turno.id) : 0
 
   const rango = ref<RangoReporte>(7)
   const desplazamientoRango = ref(0)
@@ -380,6 +382,7 @@ const ventasDeContadoHoy = computed(() =>
     ventasHoy,
     ordenesHoy,
     cobradoHoy,
+    montoCobradoEnTurno,
     anticiposHoy,
 
     ordenesEnProceso,

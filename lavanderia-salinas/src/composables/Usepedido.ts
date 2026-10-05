@@ -163,6 +163,7 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
       : '#d97706'
   
   const prendasRecibidas = Number(orden.cantidadPrendas || 0)
+  const mostrarPrendasRecibidas = Number.isFinite(prendasRecibidas) && prendasRecibidas > 0
   const cargosExtra = orden.cargosExtra ?? []
   const totalCargosExtra = cargosExtra.reduce((suma, cargo) => suma + Math.max(0, Number(cargo.monto) || 0), 0)
   const cargosExtraHtml = cargosExtra.length
@@ -188,7 +189,9 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
   const celdasInfo = [
     { label: 'Estado de pago', valor: `<strong style="color:${estadoPagoColor};">${textoEstadoPago(orden.estadoPago)}</strong>` },
     { label: 'Monto recibido', valor: `$${montoRecibido.toFixed(2)}` },
-    { label: 'Prendas recibidas', valor: `${prendasRecibidas} prendas` },
+    ...(mostrarPrendasRecibidas
+      ? [{ label: 'Prendas recibidas', valor: `${prendasRecibidas} prendas` }]
+      : []),
     { label: 'Entrega', valor: orden.fechaEntregaActiva ? escaparHtml(orden.fechaEntregaTexto) : 'Sin fecha' },
     ...(fechaEntregaReal ? [{ label: 'Entregada el', valor: `<strong>${escaparHtml(fechaEntregaReal)}</strong>` }] : [])
   ]
@@ -234,7 +237,7 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
               <div><strong style="color:#123a66;">Orden ${escaparHtml(orden.numero)}</strong></div>
               <p style="margin:8px 0 0;">Cliente: ${escaparHtml(orden.nombreCliente)}</p>
               <p style="margin:8px 0 0;">Fecha de creación: ${fecha}</p>
-              <p style="margin:8px 0 0;">Prendas recibidas: <strong>${prendasRecibidas}</strong></p>
+              ${mostrarPrendasRecibidas ? `<p style="margin:8px 0 0;">Prendas recibidas: <strong>${prendasRecibidas}</strong></p>` : ''}
               ${orden.detallesPrendas ? `<p style="margin:8px 0 0;">Detalles: ${escaparHtml(orden.detallesPrendas)}</p>` : ''}
               <p style="margin:8px 0 0;"><strong>Saldo pendiente:</strong> $${saldoPendiente.toFixed(2)}</p>
             </div>
@@ -325,6 +328,7 @@ const pedido = reactive({
 const ultimaOrdenCreada = ref<OrdenCreada | null>(null)
 const creandoOrden = ref(false)
 const errorCrearOrden = ref<string | null>(null)
+const cantidadPrendasManual = ref(false)
 
 export function usePedido() {
   const { turno } = useTurno()
@@ -396,8 +400,20 @@ export function usePedido() {
   }
 
   watchEffect(() => {
-    pedido.cantidadPrendas = cantidadPrendasServicios.value
+    const cantidadServicios = cantidadPrendasServicios.value
+    if (!cantidadPrendasManual.value) {
+      pedido.cantidadPrendas = cantidadServicios
+    }
   })
+
+  const marcarCantidadPrendasManual = () => {
+    cantidadPrendasManual.value = true
+  }
+
+  const dejarCantidadPrendasEnCero = () => {
+    cantidadPrendasManual.value = true
+    pedido.cantidadPrendas = 0
+  }
 
   /** El teléfono se usa para enviar la orden por WhatsApp, así que es obligatorio. */
   const telefonoValido = computed(() => /^\d{7,12}$/.test(pedido.telefono.trim()))
@@ -537,6 +553,7 @@ export function usePedido() {
   /* ───────────────── Ciclo de vida del pedido ───────────────── */
 
   const reiniciarPedido = () => {
+    cantidadPrendasManual.value = false
     pedido.nombreCliente = ''
     pedido.descuento = 0
     pedido.descuentoManual = 0
@@ -691,6 +708,8 @@ export function usePedido() {
     descuentoTotal,
     cantidadTotal,
     cantidadPrendasServicios,
+    marcarCantidadPrendasManual,
+    dejarCantidadPrendasEnCero,
     telefonoValido,
     turnoAbierto,
     ultimaOrdenCreada,

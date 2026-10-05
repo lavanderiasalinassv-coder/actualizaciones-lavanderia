@@ -2,10 +2,6 @@
   <AppShell>
     <div class="page-content">
       <div class="header-row">
-        <div>
-          <p class="eyebrow">Administración</p>
-          <h1>Equipo</h1>
-        </div>
         <ion-button class="btn-primario" @click="abrirFormulario()">
           <ion-icon :icon="personAddOutline" slot="start" />
           Agregar usuario

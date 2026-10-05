@@ -36,7 +36,6 @@
 
       <!-- ───────── Encabezado + rango ───────── -->
       <div v-if="!esCajero || esAdministrador" class="header-row">
-        <h1>Reportes</h1>
         <button
           type="button"
           class="toggle-resumen-reportes"
@@ -109,7 +108,7 @@
             <p class="label">Gastos</p>
             <span class="kpi-card-icon"><ion-icon :icon="receiptOutline" /></span>
           </div>
-          <strong class="kpi-monto rojo">${{ totalGastosTurnoActual.toFixed(2) }}</strong>
+          <strong class="kpi-monto azul">${{ totalGastosTurnoActual.toFixed(2) }}</strong>
           <div class="kpi-card-footer"><span class="kpi-meta">{{ gastosTurnoActual.length }} movimientos de este turno</span><ion-icon class="kpi-card-arrow" :icon="chevronForwardOutline" /></div>
         </button>
       </section>
@@ -341,7 +340,13 @@
                   {{ (orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? '' : textoEstadoPago(orden.estadoPago) }}
                 </span>
                 <div class="detalle-pago-historial">
-                  <template v-if="orden.estadoPago === 'anticipo'">
+                  <template v-if="filtroKpi === 'efectivo' || filtroKpi === 'cobrado'">
+                    <span class="valor-pago-linea pago-pagado">
+                      <small>{{ filtroKpi === 'efectivo' ? 'Recibido en caja' : 'Cobrado en el turno' }}</small>
+                      <strong>${{ montoCobradoEnTurno(orden).toFixed(2) }}</strong>
+                    </span>
+                  </template>
+                  <template v-else-if="orden.estadoPago === 'anticipo'">
                     <span class="valor-pago-linea pago-anticipo"><small>Anticipo</small><strong>${{ montoRecibidoOrden(orden).toFixed(2) }}</strong></span>
                     <span class="valor-pago-linea pago-anticipo"><small>Restante</small><strong>${{ saldoPendienteOrden(orden).toFixed(2) }}</strong></span>
                     <span class="valor-pago-linea pago-anticipo"><small>Total</small><strong>${{ Number(orden.total || 0).toFixed(2) }}</strong></span>
@@ -723,7 +728,7 @@
 import AppShell from '@/components/AppShell.vue'
 import OrdenesPage from '@/views/OrdenesPage.vue'
 import { IonButton, IonIcon, IonModal } from '@ionic/vue'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { searchOutline, cardOutline, cashOutline, checkmarkCircleOutline, receiptOutline, timeOutline, eyeOutline, closeOutline, chevronBackOutline, chevronForwardOutline, chevronUpOutline, chevronDownOutline, trashOutline } from 'ionicons/icons'
 import { useReportes } from '@/composables/useReportes'
 import { useOrdenes } from '@/composables/useOrdenes'
@@ -755,6 +760,7 @@ const {
   ventasHoy,
   ordenesHoy,
   cobradoHoy,
+  montoCobradoEnTurno,
   anticiposHoy,
   ordenesPendientesCobro,
   pendienteCobroTotal,
@@ -824,10 +830,15 @@ const cierreSeleccionadoId = ref('')
 const fechaAperturaTurno = ref(fechaHoyCentroamerica())
 const fechaCierreTurno = ref(fechaHoyCentroamerica())
 
-// Alterna entre ver el historial de órdenes o el historial de cierres de caja.
-// El buscador (busqueda) se comparte entre ambas vistas.
+// Alterna entre ver las órdenes activas o el histórico (reportes por fecha).
+// Cada vista tiene su propio contexto de búsqueda: al cambiar de pestaña se
+// limpia el buscador para que no arrastre texto de la otra vista.
 const vistaHistorial = ref<'ordenes' | 'reportes'>('ordenes')
 const resumenReportesExpandido = ref(true)
+
+watch(vistaHistorial, () => {
+  busqueda.value = ''
+})
 
 const fechaLocalISO = (fecha: Date) => {
   const year = fecha.getFullYear()
@@ -993,12 +1004,26 @@ const ordenesDelFiltroKpi = computed(() => {
   return ordenesHistorialActual.value.filter((orden) => ids.has(orden.id))
 })
 
-const ordenesHistorialFiltradas = computed(() =>
-  (filtroPagoHistorial.value === 'todos'
+const ordenesHistorialFiltradas = computed(() => {
+  const consulta = busqueda.value.trim().toLowerCase()
+  const consultaNumerica = consulta.replace(/\D/g, '')
+
+  const base = filtroPagoHistorial.value === 'todos'
     ? ordenesDelFiltroKpi.value
     : ordenesDelFiltroKpi.value.filter((orden) => orden.estadoPago === filtroPagoHistorial.value)
-  ).sort(compararOrdenesPorEstado)
-)
+
+  const filtradas = !consulta
+    ? base
+    : base.filter((orden) => {
+        const telefono = orden.telefono.replace(/\D/g, '')
+        return [orden.numero, orden.nombreCliente, orden.telefono]
+          .join(' ')
+          .toLowerCase()
+          .includes(consulta) || (consultaNumerica.length > 0 && telefono.includes(consultaNumerica))
+      })
+
+  return filtradas.sort(compararOrdenesPorEstado)
+})
 
 const ordenesReporteFiltradas = computed(() => {
   if (!fechaDesde.value || !fechaHasta.value || fechaDesde.value > fechaHasta.value) return []
@@ -1641,7 +1666,6 @@ const confirmarRestaurarOrden = async () => {
   min-width: 0;
   min-height: 154px;
   border: 1px solid color-mix(in srgb, var(--kpi-accent) 17%, #ffffff);
-  border-bottom: 4px solid var(--kpi-accent);
   border-radius: 12px;
   padding: 15px 15px 13px;
   background: linear-gradient(145deg, var(--kpi-surface) 0%, #ffffff 88%);
@@ -1683,8 +1707,8 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .kpi-gastos {
-  --kpi-accent: #be123c;
-  --kpi-surface: #fbeaf0;
+  --kpi-accent: #315f8d;
+  --kpi-surface: #eaf1f8;
 }
 
 .kpi-card-top,
@@ -1900,17 +1924,17 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .grafica-card-barras {
-  border-color: rgba(15, 118, 110, 0.16);
-  border-bottom: 4px solid #0f766e;
-  background: linear-gradient(145deg, #e5f5ef 0%, #edf4ff 52%, #ffffff 100%);
-  box-shadow: 0 8px 22px rgba(20, 71, 83, 0.08);
+  border-color: rgba(18, 58, 102, 0.16);
+  border-bottom: 4px solid #123a66;
+  background: linear-gradient(145deg, #edf3f9 0%, #f5f8fc 52%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(10, 31, 56, 0.08);
 }
 
 .grafica-card-distribucion {
-  border-color: rgba(57, 103, 133, 0.16);
-  border-bottom: 4px solid #14cf97;
-  background: linear-gradient(135deg, #e8f0ff 0%, #edf8f2 45%, #fff6e8 76%, #fff0ed 100%);
-  box-shadow: 0 8px 22px rgba(37, 73, 132, 0.08);
+  border-color: rgba(18, 58, 102, 0.16);
+  border-bottom: 4px solid #315f8d;
+  background: linear-gradient(145deg, #edf3f9 0%, #f7f9fc 52%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(10, 31, 56, 0.08);
 }
 
 .grafica-header {
@@ -1919,7 +1943,7 @@ const confirmarRestaurarOrden = async () => {
   align-items: center;
   gap: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(38, 95, 113, 0.14);
+  border-bottom: 1px solid rgba(18, 58, 102, 0.14);
 }
 
 .grafica-header strong {
@@ -1949,7 +1973,7 @@ const confirmarRestaurarOrden = async () => {
 
 .rango-flecha:hover:not(:disabled),
 .rango-flecha:focus-visible:not(:disabled) {
-  background: #eef8f6;
+  background: #edf3f9;
   outline: 0;
 }
 
@@ -1961,10 +1985,10 @@ const confirmarRestaurarOrden = async () => {
 .grafica-total {
   margin-left: 14px;
   padding: 7px 12px;
-  border: 1px solid rgba(15, 118, 110, 0.16);
+  border: 1px solid rgba(18, 58, 102, 0.15);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
-  color: #0f766e;
+  color: #123a66;
   font-weight: 800;
   font-size: 0.85rem;
   white-space: nowrap;
@@ -1978,17 +2002,17 @@ const confirmarRestaurarOrden = async () => {
   height: 220px;
   padding: 34px 14px 0;
   overflow: hidden;
-  border: 1px solid rgba(38, 95, 113, 0.14);
+  border: 1px solid rgba(18, 58, 102, 0.14);
   border-radius: 11px;
   background:
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent 39px,
-      rgba(39, 91, 111, 0.09) 40px,
+      rgba(18, 58, 102, 0.09) 40px,
       transparent 41px
     ),
-    linear-gradient(155deg, #dff4ed 0%, #eaf2ff 58%, #f8fbff 100%);
+    linear-gradient(155deg, #e8eff7 0%, #f1f5fa 58%, #fbfdff 100%);
   box-sizing: border-box;
 }
 
@@ -2014,17 +2038,17 @@ const confirmarRestaurarOrden = async () => {
 .barra {
   position: relative;
   width: min(100%, 48px);
-  background: linear-gradient(180deg, #6ee7c5 0%, #22a891 42%, #176b83 100%);
-  border: 1px solid rgba(15, 93, 105, 0.22);
+  background: linear-gradient(180deg, #557da5 0%, #315f8d 42%, #123a66 100%);
+  border: 1px solid rgba(10, 31, 56, 0.22);
   border-radius: 8px 8px 3px 3px;
   min-height: 4px;
-  box-shadow: 0 6px 12px rgba(16, 91, 103, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  box-shadow: 0 6px 12px rgba(10, 31, 56, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.48);
   transition: height 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .barra:hover {
   filter: brightness(1.06) saturate(1.08);
-  box-shadow: 0 8px 16px rgba(16, 91, 103, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: 0 8px 16px rgba(10, 31, 56, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .barra-valor {
@@ -2052,9 +2076,9 @@ const confirmarRestaurarOrden = async () => {
   gap: 20px;
   min-height: 210px;
   padding: 16px;
-  border: 1px solid rgba(57, 103, 133, 0.13);
+  border: 1px solid rgba(18, 58, 102, 0.13);
   border-radius: 11px;
-  background: linear-gradient(135deg, rgba(230, 240, 255, 0.92), rgba(236, 248, 243, 0.94) 52%, rgba(255, 247, 233, 0.94));
+  background: linear-gradient(135deg, rgba(232, 239, 247, 0.96), rgba(242, 246, 251, 0.96) 52%, rgba(255, 255, 255, 0.98));
 }
 
 .donut {
@@ -2177,10 +2201,10 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .movimientos-card {
-  border-color: rgba(194, 65, 45, 0.16);
-  border-bottom: 4px solid #d65a3a;
-  background: linear-gradient(145deg, #fff0e9 0%, #fff7ed 48%, #ffffff 100%);
-  box-shadow: 0 8px 22px rgba(155, 70, 43, 0.07);
+  border-color: rgba(18, 58, 102, 0.16);
+  border-bottom: 4px solid #315f8d;
+  background: linear-gradient(145deg, #edf3f9 0%, #f7f9fc 48%, #ffffff 100%);
+  box-shadow: 0 8px 22px rgba(10, 31, 56, 0.07);
 }
 
 .historial-header {
@@ -2628,7 +2652,7 @@ const confirmarRestaurarOrden = async () => {
   gap: 10px;
   flex-wrap: wrap;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(194, 65, 45, 0.14);
+  border-bottom: 1px solid rgba(18, 58, 102, 0.14);
 }
 
 .movimientos-header strong {
@@ -2637,9 +2661,9 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .movimientos-header .grafica-total {
-  border: 1px solid rgba(214, 90, 58, 0.16);
+  border: 1px solid rgba(18, 58, 102, 0.15);
   background: rgba(255, 255, 255, 0.78);
-  color: #b54735;
+  color: #123a66;
 }
 
 .movimientos-lista,
@@ -2664,7 +2688,7 @@ const confirmarRestaurarOrden = async () => {
   padding: 12px 10px;
   border-radius: 14px;
   border: 1px solid rgba(10, 31, 56, 0.06);
-  color: #f31518;
+  color: #123a66;
   background: #fbfdff;
 }
 
@@ -2703,7 +2727,7 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .tipo-gasto {
-  background: #dc2626;
+  background: #315f8d;
 }
 
 .tipo-deposito {
@@ -2732,6 +2756,11 @@ const confirmarRestaurarOrden = async () => {
 
 .movimiento-info small {
   color: #9aaaba;
+}
+
+.movimiento-acciones > strong {
+  color: #123a66;
+  font-variant-numeric: tabular-nums;
 }
 
 .movimiento-info .movimiento-usuario {
@@ -3253,8 +3282,8 @@ const confirmarRestaurarOrden = async () => {
   display: inline-block;
   padding: 2px 9px;
   border-radius: 999px;
-  background: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
+  background: rgba(49, 95, 141, 0.1);
+  color: #315f8d;
   font-weight: 900;
   font-size: 0.68rem;
   text-transform: uppercase;

@@ -5,11 +5,6 @@
         <button class="volver" type="button" aria-label="Volver a configuración" @click="volver">
           <ion-icon :icon="arrowBackOutline" />
         </button>
-        <div>
-          <p class="eyebrow">Burbujita AI</p>
-          <h2>Ajustes de Burbujita AI</h2>
-          <p>Personaliza el asistente en este dispositivo.</p>
-        </div>
       </header>
 
       <section class="ajustes-grid">
