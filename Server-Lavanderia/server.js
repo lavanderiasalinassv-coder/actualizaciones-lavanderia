@@ -15,6 +15,7 @@ const fs = require("fs");
 const { execFile } = require("child_process");
 const mysql = require("mysql2/promise");
 const { pool } = require("./database/MySQLConexion");
+const { actualizarMorasPendientes } = require("./querys/orden.query");
 const {
   leerConfiguracionPredeterminada,
   leerConfiguracionBaseDatos,
@@ -27,6 +28,8 @@ const {
   getBackupDirectory,
 } = require("./database/backup");
 const equipoRoutes = require("./routes/equipo.routes");
+const registrosPersonalRoutes = require("./routes/registrosPersonal.routes");
+const disenosTicketRoutes = require("./routes/disenosTicket.routes");
 const promocionesRoutes = require("./routes/promociones.routes");
 const catalogo = require("./routes/catalogo.routes");
 const inventario = require("./routes/inventario.routes");
@@ -54,6 +57,159 @@ const FRONTEND_DIST_PATH = EMPAQUETADO
   : path.join(__dirname, "..", "lavanderia-salinas", "dist");
 
 const LOGO_PATH = path.join(FRONTEND_DIST_PATH, "logo.jpg");
+
+function extraerColumnasDefinidas(sentencia) {
+  const inicio = sentencia.indexOf("(");
+  let profundidad = 0;
+  let comilla = null;
+  let fin = -1;
+  for (let indice = inicio; indice < sentencia.length; indice += 1) {
+    const caracter = sentencia[indice];
+    if (comilla) {
+      if (caracter === "\\") { indice += 1; continue; }
+      if (caracter === comilla) {
+        if (sentencia[indice + 1] === comilla) { indice += 1; continue; }
+        comilla = null;
+      }
+      continue;
+    }
+    if (caracter === "'" || caracter === '"' || caracter === "`") comilla = caracter;
+    else if (caracter === "(") profundidad += 1;
+    else if (caracter === ")") {
+      profundidad -= 1;
+      if (profundidad === 0) { fin = indice; break; }
+    }
+  }
+  if (inicio < 0 || fin < 0) return [];
+
+  const definiciones = [];
+  let fragmento = "";
+  profundidad = 0;
+  comilla = null;
+  const contenido = sentencia.slice(inicio + 1, fin);
+  for (let indice = 0; indice < contenido.length; indice += 1) {
+    const caracter = contenido[indice];
+    if (comilla) {
+      fragmento += caracter;
+      if (caracter === "\\" && indice + 1 < contenido.length) fragmento += contenido[++indice];
+      else if (caracter === comilla) {
+        if (contenido[indice + 1] === comilla) fragmento += contenido[++indice];
+        else comilla = null;
+      }
+      continue;
+    }
+    if (caracter === "'" || caracter === '"' || caracter === "`") {
+      comilla = caracter;
+      fragmento += caracter;
+    } else if (caracter === "(") { profundidad += 1; fragmento += caracter; }
+    else if (caracter === ")") { profundidad -= 1; fragmento += caracter; }
+    else if (caracter === "," && profundidad === 0) {
+      definiciones.push(fragmento.trim());
+      fragmento = "";
+    } else fragmento += caracter;
+  }
+  if (fragmento.trim()) definiciones.push(fragmento.trim());
+  return definiciones.flatMap((definicion) => {
+    const columna = /^`([^`]+)`\s+([\s\S]+)$/.exec(definicion);
+    return columna ? [{ nombre: columna[1], definicion: columna[2] }] : [];
+  });
+}
+
+async function verificarColumnasMysql(tablasDefinidas) {
+  let agregadas = 0;
+  for (const tabla of tablasDefinidas) {
+    const [columnasActuales] = await pool.query(`SHOW COLUMNS FROM \`${tabla.nombre}\``);
+    const nombresActuales = new Set(columnasActuales.map((columna) => String(columna.Field).toLowerCase()));
+    for (const columna of tabla.columnas) {
+      if (nombresActuales.has(columna.nombre.toLowerCase())) continue;
+      try {
+        await pool.query(`ALTER TABLE \`${tabla.nombre}\` ADD COLUMN \`${columna.nombre}\` ${columna.definicion}`);
+        nombresActuales.add(columna.nombre.toLowerCase());
+        agregadas += 1;
+        console.log(`MYSQLTABLES: columna "${tabla.nombre}.${columna.nombre}" agregada.`);
+      } catch (error) {
+        console.error(`MYSQLTABLES: no se pudo agregar "${tabla.nombre}.${columna.nombre}":`, error.message);
+      }
+    }
+  }
+  console.log(`MYSQLTABLES: verificación de campos completada; ${agregadas} campos agregados.`);
+}
+
+async function verificarTablasMysql() {
+  const schemaPath = EMPAQUETADO
+    ? path.join(RESOURCES_PATH, "backend", "migrations", "MYSQLTABLES.sql")
+    : path.resolve(__dirname, "../lavanderia-salinas/MYSQLTABLES.sql");
+  const sql = fs.readFileSync(schemaPath, "utf8");
+  const tablasDefinidas = [
+    ...sql.matchAll(
+      /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?([a-z0-9_]+)[`"]?\s*\([\s\S]*?\)\s*ENGINE\s*=\s*[^;]+;/gi,
+    ),
+  ].map(([sentencia, nombre]) => ({
+    nombre: nombre.toLowerCase(),
+    sentencia,
+    columnas: extraerColumnasDefinidas(sentencia),
+    dependencias: [
+      ...sentencia.matchAll(/REFERENCES\s+[`"]?([a-z0-9_]+)/gi),
+    ].map((coincidencia) => coincidencia[1].toLowerCase()),
+  }));
+
+  if (tablasDefinidas.length === 0) {
+    throw new Error(`No se encontraron definiciones CREATE TABLE en ${schemaPath}.`);
+  }
+
+  const [filas] = await pool.query(
+    "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()",
+  );
+  const tablasExistentes = new Set(filas.map((fila) => String(fila.TABLE_NAME).toLowerCase()));
+  const pendientes = new Map(
+    tablasDefinidas
+      .filter(({ nombre }) => !tablasExistentes.has(nombre))
+      .map((tabla) => [tabla.nombre, tabla]),
+  );
+
+  if (pendientes.size === 0) {
+    console.log(
+      `MYSQLTABLES: verificadas ${tablasDefinidas.length} tablas; todas existen.`,
+    );
+    await verificarColumnasMysql(tablasDefinidas);
+    return;
+  }
+
+  console.log(`MYSQLTABLES: se crearán ${pendientes.size} tablas faltantes.`);
+
+  while (pendientes.size > 0) {
+    const listasParaCrear = [...pendientes.values()].filter(({ dependencias }) =>
+      dependencias.every((dependencia) => tablasExistentes.has(dependencia)),
+    );
+
+    if (listasParaCrear.length === 0) {
+      const dependenciasPendientes = [...pendientes.values()]
+        .flatMap(({ nombre, dependencias }) =>
+          dependencias
+            .filter((dependencia) => !tablasExistentes.has(dependencia))
+            .map((dependencia) => `${nombre} requiere ${dependencia}`),
+        )
+        .join(", ");
+      throw new Error(
+        `No se pueden crear las tablas faltantes por dependencias no disponibles: ${dependenciasPendientes}.`,
+      );
+    }
+
+    for (const tabla of listasParaCrear) {
+      const sentenciaIdempotente = tabla.sentencia.replace(
+        /^CREATE TABLE\b/i,
+        "CREATE TABLE IF NOT EXISTS",
+      );
+      await pool.query(sentenciaIdempotente);
+      tablasExistentes.add(tabla.nombre);
+      pendientes.delete(tabla.nombre);
+      console.log(`MYSQLTABLES: tabla "${tabla.nombre}" creada.`);
+    }
+  }
+
+  console.log("MYSQLTABLES: migración de tablas faltantes completada.");
+  await verificarColumnasMysql(tablasDefinidas);
+}
 
 async function migratePaymentColumns() {
   try {
@@ -170,14 +326,24 @@ async function migrateOrdenMovimientosAuditoria() {
       );
     }
 
-    await pool.execute(
-      "ALTER TABLE orden_movimientos CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+    const [columnasTexto] = await pool.execute(
+      "SHOW FULL COLUMNS FROM orden_movimientos LIKE 'texto'",
     );
+    const columnaTexto = columnasTexto[0];
+    if (columnaTexto && columnaTexto.Collation !== "utf8mb4_unicode_ci") {
+      const tipoTexto = String(columnaTexto.Type).toUpperCase();
+      if (!/^(TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT)$/.test(tipoTexto)) {
+        throw new Error(`Tipo inesperado para orden_movimientos.texto: ${columnaTexto.Type}`);
+      }
+      await pool.execute(
+        `ALTER TABLE orden_movimientos MODIFY COLUMN texto ${tipoTexto} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ${columnaTexto.Null === "YES" ? "NULL" : "NOT NULL"}`,
+      );
+      console.log("MYSQLTABLES: orden_movimientos.texto actualizado a utf8mb4.");
+    }
 
-    await pool.execute(
-      "ALTER TABLE ordenes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-    );
-
+    // No convertir estas tablas durante el arranque: orden_movimientos.orden_id
+    // referencia ordenes.id, y MySQL bloquea cambios de charset con la FK activa.
+    // Las tablas nuevas ya declaran utf8mb4 en MYSQLTABLES.sql.
     console.log("✓ Auditoría de movimientos de órdenes verificada.");
   } catch (error) {
     console.error(
@@ -393,6 +559,8 @@ app.get("/factura/logo.jpg", (_req, res) => {
 });
 
 app.use("/api", equipoRoutes);
+app.use("/api", registrosPersonalRoutes);
+app.use("/api", disenosTicketRoutes);
 app.use("/api", promocionesRoutes);
 app.use("/api", catalogo);
 app.use("/api", inventario);
@@ -523,6 +691,10 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
+app.get("/api/ping", (_req, res) => {
+  res.json({ ok: true, timestamp: Date.now() });
+});
+
 // Used by the startup splash screen to verify that the API and database are ready.
 app.get("/api/health", async (_req, res) => {
   try {
@@ -592,6 +764,35 @@ async function migratePerfilImagen() {
   }
 }
 
+async function migrateCuponesQr() {
+  const [columnaQr] = await pool.query("SHOW COLUMNS FROM promociones LIKE 'generar_qr'");
+  if (!columnaQr.length) {
+    await pool.query(
+      "ALTER TABLE promociones ADD COLUMN generar_qr TINYINT(1) NOT NULL DEFAULT 0",
+    );
+  }
+
+  const [columnaLimite] = await pool.query(
+    "SHOW COLUMNS FROM promociones LIKE 'max_usos_por_cliente'",
+  );
+  if (!columnaLimite.length) {
+    await pool.query(
+      "ALTER TABLE promociones ADD COLUMN max_usos_por_cliente INT UNSIGNED NULL DEFAULT NULL",
+    );
+  }
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS promocion_usos_qr (
+    id CHAR(36) NOT NULL,
+    promocion_id CHAR(36) NOT NULL,
+    orden_id CHAR(36) NOT NULL,
+    cliente_telefono VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_promocion_usos_qr_orden (orden_id),
+    KEY idx_promocion_usos_qr_cliente (promocion_id, cliente_telefono)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+}
+
 async function migrateNotificaciones() {
   try {
     await pool.query(`
@@ -655,6 +856,7 @@ app.listen(PORT, async () => {
   }
 
   const migraciones = [
+    ["verificación de tablas MYSQLTABLES", verificarTablasMysql],
     ["columnas de pago", migratePaymentColumns],
     ["dirección de entrega", migrateDireccionEntrega],
     ["clasificación de prendas", migrateCatalogoClasificacionPrendas],
@@ -665,6 +867,7 @@ app.listen(PORT, async () => {
     ["horas ajustadas", migrateHorasAjustadas],
     ["perfil de imagen", migratePerfilImagen],
     ["notificaciones", migrateNotificaciones],
+    ["cupones QR", migrateCuponesQr],
   ];
 
   for (const [nombre, migrar] of migraciones) {
@@ -674,4 +877,8 @@ app.listen(PORT, async () => {
       console.error(`No se pudo completar la migración de ${nombre}:`, error.message);
     }
   }
+
+  const procesarMoras = () => actualizarMorasPendientes().catch((error) => console.error("No se pudieron actualizar las moras:", error.message));
+  procesarMoras();
+  setInterval(procesarMoras, 60 * 1000);
 });

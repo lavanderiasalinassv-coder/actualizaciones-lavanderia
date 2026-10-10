@@ -375,7 +375,7 @@ onUnmounted(() => {
 })
 
 const router = useRouter()
-const { recargarSesion } = useSesion()
+const { recargarSesion, registrarIngreso } = useSesion()
 
 const codigo = ref('')
 const cargando = ref(false)
@@ -589,6 +589,7 @@ watch(codigo, async (nuevo) => {
     localStorage.setItem('rol', usuario.rol)
     localStorage.setItem('codigo', usuario.codigo ?? nuevo)
     recargarSesion()
+    await registrarIngreso(usuario)
 
     const toast = await toastController.create({
       message: `¡Bienvenid@ ${usuario.nombre}!`,

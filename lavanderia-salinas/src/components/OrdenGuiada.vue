@@ -610,7 +610,7 @@
                 <button
                   class="estado-btn"
                   :class="{ active: pedido.estadoPago === 'pagado' }"
-                  @click="pedido.estadoPago = 'pagado'"
+                  @click="seleccionarEstadoPago('pagado')"
                 >
                   Pagado
                 </button>
@@ -646,7 +646,7 @@
                 </button>
               </div>
 
-              <div v-if="pedido.metodoPago === 'efectivo'" class="montos-rapidos">
+              <div v-if="pedido.estadoPago === 'anticipo' && pedido.metodoPago === 'efectivo'" class="montos-rapidos">
                 <button
                   v-for="monto in montosRapidos"
                   :key="monto"
@@ -674,24 +674,28 @@
 
               <!-- Campos adicionales para tarjeta -->
               <div v-if="pedido.metodoPago === 'tarjeta'" class="campos-tarjeta">
-                <label class="campo-label">Monto pagado con tarjeta</label>
-                <div class="monto-input">
-                  <span>$</span>
-                  <input v-model.number="pedido.tarjetaMonto" type="number" min="0" step="0.01" placeholder="0.00" />
-                </div>
+                <template v-if="pedido.estadoPago === 'anticipo'">
+                  <label class="campo-label">Monto pagado con tarjeta</label>
+                  <div class="monto-input">
+                    <span>$</span>
+                    <input v-model.number="pedido.tarjetaMonto" type="number" min="0" step="0.01" placeholder="0.00" />
+                  </div>
+                </template>
                 <label class="campo-label">Número de referencia POS</label>
-                <input v-model="pedido.tarjetaReferencia" type="text" placeholder="Últimos 4 dígitos" maxlength="10" />
+                <input v-model="pedido.tarjetaReferencia" type="text" inputmode="numeric" placeholder="Últimos 4 dígitos" maxlength="4" />
               </div>
 
               <!-- Campos adicionales para transferencia -->
               <div v-if="pedido.metodoPago === 'transferencia'" class="campos-transferencia">
-                <label class="campo-label">Monto transferido</label>
-                <div class="monto-input">
-                  <span>$</span>
-                  <input v-model.number="pedido.transferenciaMonto" type="number" min="0" step="0.01" placeholder="0.00" />
-                </div>
+                <template v-if="pedido.estadoPago === 'anticipo'">
+                  <label class="campo-label">Monto transferido</label>
+                  <div class="monto-input">
+                    <span>$</span>
+                    <input v-model.number="pedido.transferenciaMonto" type="number" min="0" step="0.01" placeholder="0.00" />
+                  </div>
+                </template>
                 <label class="campo-label">Comprobante de transferencia</label>
-                  <input type="file" accept="image/*" :disabled="subiendoComprobante" @change="subirComprobanteTransferencia" />
+                <input type="file" accept="image/*" :disabled="subiendoComprobante" @change="subirComprobanteTransferencia" />
                 <a v-if="pedido.transferenciaComprobante" class="comprobante-link" :href="pedido.transferenciaComprobante" target="_blank" rel="noreferrer">📷 Ver comprobante cargado</a>
               </div>
             </div>
@@ -735,6 +739,10 @@
               <p v-if="esAdministrador && !pedido.correo.trim()" class="hint-texto-vacio">
                 Agrega un correo del cliente para habilitar esta opción.
               </p>
+              <label class="toggle-check orden-mora-toggle">
+                <input v-model="pedido.moraActiva" type="checkbox" />
+                Aplicar mora por entrega tardía: $0.50 por día calendario después de 2 días de gracia desde la fecha prometida.
+              </label>
 
               <div v-if="hayFaltantesStock" class="alerta-stock">
                 Hay insumos insuficientes para esta orden. Revisa los faltantes antes de continuar.
@@ -1636,7 +1644,33 @@ watch(() => pedido.telefono, buscarCliente)
 watch(() => pedido.codigoPais, () => buscarCliente(pedido.telefono))
 
 // Limpiar campos específicos de pago cuando cambia el método
+const seleccionarEstadoPago = (estado: 'porCobrar' | 'anticipo' | 'pagado') => {
+  pedido.estadoPago = estado
+  if (estado === 'pagado') {
+    pedido.montoRecibido = total.value
+    pedido.tarjetaMonto = pedido.metodoPago === 'tarjeta' ? total.value : 0
+    pedido.transferenciaMonto = pedido.metodoPago === 'transferencia' ? total.value : 0
+  }
+}
+
+watch(total, (nuevoTotal) => {
+  if (pedido.estadoPago !== 'pagado') return
+  pedido.montoRecibido = nuevoTotal
+  pedido.tarjetaMonto = pedido.metodoPago === 'tarjeta' ? nuevoTotal : 0
+  pedido.transferenciaMonto = pedido.metodoPago === 'transferencia' ? nuevoTotal : 0
+})
+
 watch(() => pedido.metodoPago, (nuevoMetodo) => {
+  if (pedido.estadoPago === 'pagado') {
+    pedido.montoRecibido = total.value
+    pedido.tarjetaMonto = nuevoMetodo === 'tarjeta' ? total.value : 0
+    pedido.transferenciaMonto = nuevoMetodo === 'transferencia' ? total.value : 0
+    if (nuevoMetodo === 'efectivo') {
+      pedido.tarjetaReferencia = ''
+      pedido.transferenciaComprobante = ''
+    }
+    return
+  }
   if (nuevoMetodo === 'efectivo') {
     pedido.tarjetaMonto = 0
     pedido.tarjetaReferencia = ''
@@ -2272,7 +2306,7 @@ const generarHtmlOrden = (orden: any) => {
         <div style="color: #333; font-size: 0.85rem; line-height: 1.6;">
           <p style="margin: 0 0 12px;"><strong>Para retirar las prendas</strong>, es indispensable presentar este recibo como único comprobante válido.</p>
 
-          <p style="margin: 0 0 12px;">Las prendas deberán ser retiradas en un <strong>máximo de 1 día</strong>; de no hacerlo, se aplicará un cargo adicional de <strong>$0.50</strong> por cada día de retraso.</p>
+          <p style="margin: 0 0 12px;">La mora por retraso en la entrega inicia después de <strong>2 días calendario de gracia</strong> desde la fecha prometida; luego se aplica <strong>$0.50 por día</strong>.</p>
 
           <p style="margin: 0 0 12px;">El plazo para realizar cualquier reclamación sobre el servicio es de <strong>2 días hábiles</strong> después de la entrega.</p>
 

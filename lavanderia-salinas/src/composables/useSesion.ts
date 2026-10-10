@@ -39,7 +39,39 @@ export function useSesion() {
   const esAdministrador = computed(() => rol.value === 'administrador' || rol.value === 'admin')
   const esOperador = computed(() => rol.value === 'operador')
 
-  const cerrarSesion = () => {
+  const cerrarRegistroSesion = (motivo = 'salida') => {
+    const sessionId = localStorage.getItem('personal_session_id')
+    if (!sessionId) return
+    localStorage.removeItem('personal_session_id')
+    void fetch(getApiBaseUrl() + '/registros-personal/sesiones/' + encodeURIComponent(sessionId) + '/desconexion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo }),
+      keepalive: true
+    }).catch(() => {})
+  }
+
+  const registrarIngreso = async (usuario: Pick<UsuarioSesion, 'id' | 'nombre' | 'rol'>) => {
+    if (!usuario.id || usuario.id === 'dev-mode' || usuario.nombre === 'Desarrollador') return
+    const anterior = localStorage.getItem('personal_session_id')
+    if (anterior) cerrarRegistroSesion('reemplazada')
+    try {
+      const respuesta = await fetch(getApiBaseUrl() + '/registros-personal/sesiones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuarioId: usuario.id, nombre: usuario.nombre, rol: usuario.rol }),
+        signal: AbortSignal.timeout(5000)
+      })
+      if (!respuesta.ok) return
+      const datos = await respuesta.json()
+      if (typeof datos.sessionId === 'string') localStorage.setItem('personal_session_id', datos.sessionId)
+    } catch {
+      // El acceso sigue funcionando si el registro de auditoría no está disponible.
+    }
+  }
+
+  const cerrarSesion = (motivo = 'salida') => {
+    cerrarRegistroSesion(motivo)
     const llavesSesion = ['usuario', 'rol', 'codigo', 'sesion_id', 'auth_token', 'token']
     llavesSesion.forEach((llave) => localStorage.removeItem(llave))
     usuarioActual.value = null
@@ -74,6 +106,7 @@ export function useSesion() {
     esOperador,
     recargarSesion,
     cerrarSesion,
+    registrarIngreso,
     validarSesion,
   }
 }

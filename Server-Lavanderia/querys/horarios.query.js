@@ -75,35 +75,71 @@ const mapNotificacion = (row) => ({
 
 /* ───────────────── Estado completo (carga inicial) ───────────────── */
 
+const ERRORES_CONEXION_TRANSITORIOS = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "PROTOCOL_CONNECTION_LOST",
+]);
+
+const esperarReintentoConexion = (intento) =>
+  new Promise((resolve) => setTimeout(resolve, 350 * intento));
+
 const obtenerEstado = async () => {
-  const [registros] = await pool.query("SELECT * FROM horarios_registros");
-  const [turnos] = await pool.query("SELECT * FROM horarios_turnos");
-  const [pagos] = await pool.query(
-    "SELECT * FROM horarios_pagos ORDER BY fecha DESC",
-  );
-  const [notificaciones] = await pool.query(
-    "SELECT * FROM horarios_notificaciones ORDER BY creada_at DESC",
-  );
-  const [pagoPorHoraRows] = await pool.query(
-    "SELECT empleado_id, monto FROM horarios_pago_por_hora",
-  );
-  const [configRows] = await pool.query(
-    "SELECT periodo_pago FROM horarios_config WHERE id = 1",
-  );
+  for (let intento = 1; intento <= 2; intento += 1) {
+    let conexion;
+    let destruirConexion = false;
+    try {
+      conexion = await pool.getConnection();
+      const [registros] = await conexion.query(
+        "SELECT * FROM horarios_registros",
+      );
+      const [turnos] = await conexion.query(
+        "SELECT * FROM horarios_turnos",
+      );
+      const [pagos] = await conexion.query(
+        "SELECT * FROM horarios_pagos ORDER BY fecha DESC",
+      );
+      const [notificaciones] = await conexion.query(
+        "SELECT * FROM horarios_notificaciones ORDER BY creada_at DESC",
+      );
+      const [pagoPorHoraRows] = await conexion.query(
+        "SELECT empleado_id, monto FROM horarios_pago_por_hora",
+      );
+      const [configRows] = await conexion.query(
+        "SELECT periodo_pago FROM horarios_config WHERE id = 1",
+      );
 
-  const pagoPorHora = {};
-  pagoPorHoraRows.forEach((row) => {
-    pagoPorHora[row.empleado_id] = Number(row.monto);
-  });
+      const pagoPorHora = {};
+      pagoPorHoraRows.forEach((row) => {
+        pagoPorHora[row.empleado_id] = Number(row.monto);
+      });
 
-  return {
-    registros: registros.map(mapRegistro),
-    turnos: turnos.map(mapTurno),
-    pagos: pagos.map(mapPago),
-    notificaciones: notificaciones.map(mapNotificacion),
-    pagoPorHora,
-    periodoPago: configRows[0]?.periodo_pago ?? "semanal",
-  };
+      return {
+        registros: registros.map(mapRegistro),
+        turnos: turnos.map(mapTurno),
+        pagos: pagos.map(mapPago),
+        notificaciones: notificaciones.map(mapNotificacion),
+        pagoPorHora,
+        periodoPago: configRows[0]?.periodo_pago ?? "semanal",
+      };
+    } catch (error) {
+      const transitorio = ERRORES_CONEXION_TRANSITORIOS.has(error?.code);
+      destruirConexion = Boolean(error?.fatal || transitorio);
+      if (!transitorio || intento === 2) throw error;
+      await esperarReintentoConexion(intento);
+    } finally {
+      if (conexion) {
+        if (destruirConexion) {
+          conexion.destroy();
+        } else {
+          conexion.release();
+        }
+      }
+    }
+  }
+
+  throw new Error("No se pudo cargar el estado de horarios.");
 };
 
 /* ───────────────── Reemplazo total por recurso ─────────────────

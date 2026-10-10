@@ -35,6 +35,7 @@ export interface CrearOrdenInput {
   envioDomicilio: boolean
   direccionEntrega: string
   fechaEntregaActiva: boolean
+  moraActiva: boolean
   fechaEntrega: string
   horaEntrega: string
   estadoPago: EstadoPago
@@ -92,6 +93,7 @@ export interface Orden {
   envioDomicilio: boolean
   direccionEntrega: string
   fechaEntregaActiva: boolean
+  moraActiva: boolean
   fechaEntrega: string | null
   horaEntrega: string | null
   estadoPago: EstadoPago
@@ -120,6 +122,8 @@ export interface Orden {
   updatedAt: string
   movimientos: OrdenMovimiento[]
   turnoHuerfano?: boolean
+  moraDiasCobrados: number
+  moraDetenida: boolean
 }
 
 const ordenes = ref<Orden[]>([])
@@ -206,6 +210,14 @@ const payloadUsuario = () => {
 const reemplazarOrden = (ordenActualizada: Orden) => {
   const indice = ordenes.value.findIndex((orden) => orden.id === ordenActualizada.id)
   if (indice >= 0) ordenes.value[indice] = ordenActualizada
+  return ordenActualizada
+}
+
+const combinarActualizacionParcialOrden = (actualizacion: Partial<Orden> & Pick<Orden, 'id'>) => {
+  const indice = ordenes.value.findIndex((orden) => orden.id === actualizacion.id)
+  if (indice < 0) return null
+  const ordenActualizada = { ...ordenes.value[indice], ...actualizacion }
+  ordenes.value[indice] = ordenActualizada
   return ordenActualizada
 }
 
@@ -401,6 +413,42 @@ const ventaDelDiaTurnoActual = computed(() =>
     return reemplazarOrden(ordenActualizada)
   }
 
+  const detenerMora = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${id}/detener-mora`, {
+      method: 'POST',
+      body: JSON.stringify(payloadUsuario()),
+      signal: AbortSignal.timeout(15000)
+    }) as Partial<Orden> & Pick<Orden, 'id'>
+    return combinarActualizacionParcialOrden(ordenActualizada)
+  }
+
+  const reanudarMora = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${id}/reanudar-mora`, {
+      method: 'POST',
+      body: JSON.stringify(payloadUsuario()),
+      signal: AbortSignal.timeout(15000)
+    }) as Partial<Orden> & Pick<Orden, 'id'>
+    return combinarActualizacionParcialOrden(ordenActualizada)
+  }
+
+  const eliminarMora = async (id: string, suspenderFuturas: boolean) => {
+    const ordenActualizada = await api(`/ordenes/${id}/eliminar-mora`, {
+      method: 'POST',
+      body: JSON.stringify({ ...payloadUsuario(), suspenderFuturas }),
+      signal: AbortSignal.timeout(15000)
+    }) as Partial<Orden> & Pick<Orden, 'id'>
+    return combinarActualizacionParcialOrden(ordenActualizada)
+  }
+
+  const aplicarMora = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${id}/aplicar-mora`, {
+      method: 'POST',
+      body: JSON.stringify(payloadUsuario()),
+      signal: AbortSignal.timeout(15000)
+    }) as Partial<Orden> & Pick<Orden, 'id'>
+    return combinarActualizacionParcialOrden(ordenActualizada)
+  }
+
   const eliminarAnticipo = async (id: string, idAnticipo: string) => {
     const ordenActualizada = await api(`/ordenes/${id}/anticipos/${encodeURIComponent(idAnticipo)}`, {
       method: 'DELETE',
@@ -420,6 +468,13 @@ const ventaDelDiaTurnoActual = computed(() =>
   }
 
   const obtenerOrdenPorId = (id: string) => ordenes.value.find((orden) => orden.id === id) ?? null
+
+  const refrescarOrden = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(15000)
+    }) as Orden
+    return reemplazarOrden(ordenActualizada)
+  }
 
   const actualizarOrden = async (
     id: string,
@@ -547,6 +602,7 @@ const ventaDelDiaTurnoActual = computed(() =>
     cargarOrdenes,
     crearOrden,
     obtenerOrdenPorId,
+    refrescarOrden,
     actualizarOrden,
     registrarMovimiento,
     cambiarEstado,
@@ -554,6 +610,10 @@ const ventaDelDiaTurnoActual = computed(() =>
     registrarAnticipo,
     agregarCargoExtra,
     eliminarCargoExtra,
+    detenerMora,
+    reanudarMora,
+    eliminarMora,
+    aplicarMora,
     eliminarAnticipo,
     agregarItemAOrden,
     eliminarItemDeOrden,

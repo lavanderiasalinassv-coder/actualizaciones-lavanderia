@@ -6,6 +6,7 @@ const {
   nativeImage,
   shell,
   session,
+  webContents,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const fs = require("fs");
@@ -413,6 +414,62 @@ ipcMain.handle("copiar-imagen-cupon-whatsapp", (_event, dataUrl) => {
     throw new Error("No se pudo preparar la imagen del cupón.");
   clipboard.writeImage(imagen);
   return true;
+});
+
+ipcMain.handle("adjuntar-pdf-whatsapp", async (event, webContentsId, data, nombre) => {
+  if (ventanaPrincipal && event.sender !== ventanaPrincipal.webContents) {
+    throw new Error("No se autorizó la solicitud para adjuntar la factura.");
+  }
+  if (typeof data !== "string" || data.length > 30_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+    throw new Error("El PDF de la factura no es válido o excede el tamaño permitido.");
+  }
+  const contenidoPdf = Buffer.from(data, "base64");
+  if (contenidoPdf.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    throw new Error("El archivo recibido no es un PDF válido.");
+  }
+
+  const destino = webContents.fromId(Number(webContentsId));
+  if (!destino || !destino.getURL().startsWith("https://web.whatsapp.com")) {
+    throw new Error("No se encontró el panel de WhatsApp abierto.");
+  }
+
+  const nombreSeguro = String(nombre || "factura.pdf").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const rutaPdf = path.join(app.getPath("temp"), `whatsapp-${Date.now()}-${nombreSeguro}`);
+  await fs.promises.writeFile(rutaPdf, contenidoPdf);
+
+  const yaAdjunto = destino.debugger.isAttached();
+  try {
+    if (!yaAdjunto) destino.debugger.attach("1.3");
+    await destino.debugger.sendCommand("DOM.enable");
+    const espera = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let nodoArchivo = null;
+    for (let intento = 0; intento < 30 && !nodoArchivo; intento += 1) {
+      const { root } = await destino.debugger.sendCommand("DOM.getDocument", { depth: -1 });
+      const { nodeIds } = await destino.debugger.sendCommand("DOM.querySelectorAll", {
+        nodeId: root.nodeId,
+        selector: 'input[type="file"]',
+      });
+      for (const nodeId of nodeIds) {
+        const { node } = await destino.debugger.sendCommand("DOM.describeNode", { nodeId });
+        const atributos = node.attributes || [];
+        const indiceAccept = atributos.indexOf("accept");
+        const accept = indiceAccept >= 0 ? atributos[indiceAccept + 1].toLowerCase() : "";
+        if (!accept || /pdf|application|\.doc|\.xls|\.ppt/i.test(accept) || accept === "*/*" || accept === "*") {
+          nodoArchivo = nodeId;
+          break;
+        }
+      }
+      if (!nodoArchivo) await espera(300);
+    }
+    if (!nodoArchivo) throw new Error("WhatsApp no mostró el control para adjuntar documentos.");
+    await destino.debugger.sendCommand("DOM.setFileInputFiles", {
+      nodeId: nodoArchivo,
+      files: [rutaPdf],
+    });
+    return true;
+  } finally {
+    if (!yaAdjunto && destino.debugger.isAttached()) destino.debugger.detach();
+  }
 });
 
 function iniciarBackend() {

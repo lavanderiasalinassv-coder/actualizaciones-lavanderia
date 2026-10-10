@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("abrir-whatsapp-desktop", url),
   copiarImagenCuponWhatsApp: (dataUrl) =>
     ipcRenderer.invoke("copiar-imagen-cupon-whatsapp", dataUrl),
+  adjuntarPdfWhatsApp: (webContentsId, data, nombre) =>
+    ipcRenderer.invoke("adjuntar-pdf-whatsapp", webContentsId, data, nombre),
   isElectron: true,
   onUpdateDisponible: (callback) =>
     ipcRenderer.on("update-disponible", (_e, info) => callback(info)),

@@ -13,6 +13,22 @@
       </header>
 
       <nav class="configuracion-menu" aria-label="Opciones de configuración">
+        <button v-if="esAdministrador" class="configuracion-opcion tema-sali" @click="irA('/tabs/registros-personal')">
+          <ion-icon :icon="chevronForwardOutline" class="configuracion-opcion-flecha" />
+          <span class="configuracion-opcion-icono"><ion-icon :icon="timeOutline" /></span>
+          <span class="configuracion-opcion-texto"><strong>Registros de personal</strong><small>Ingresos, salidas y movimientos de órdenes</small></span>
+        </button>
+
+        <button v-if="esAdministrador" class="configuracion-opcion tema-sali" @click="irA('/tabs/ticket')">
+          <ion-icon :icon="chevronForwardOutline" class="configuracion-opcion-flecha" />
+          <span class="configuracion-opcion-icono" aria-hidden="true">🧾</span>
+          <span class="configuracion-opcion-texto"><strong>Diseño de tickets y prendas</strong><small>Personaliza y previsualiza los formatos de impresión</small></span>
+        </button>
+        <button class="configuracion-opcion tema-sali" @click="irA('/tabs/impresora')">
+          <ion-icon :icon="chevronForwardOutline" class="configuracion-opcion-flecha" />
+          <span class="configuracion-opcion-icono" aria-hidden="true">🖨️</span>
+          <span class="configuracion-opcion-texto"><strong>Impresora Bluetooth</strong><small>Selecciona la impresora predeterminada para este dispositivo</small></span>
+        </button>
         <button v-if="esAdministrador" class="configuracion-opcion tema-apariencia" @click="irA('/tabs/apariencia')">
           <ion-icon :icon="chevronForwardOutline" class="configuracion-opcion-flecha" />
           <span class="configuracion-opcion-icono">
@@ -106,6 +122,10 @@
         </button>
       </nav>
 
+      <div class="configuracion-watermark" aria-label="Powered by Bryan_Systems">
+        Powered by <strong>Bryan_Systems</strong>
+      </div>
+
       <ion-modal :is-open="modalPublicacionAbierto" :backdrop-dismiss="!publicando" @didDismiss="modalPublicacionAbierto = false">
         <div class="publicacion-modal">
           <div class="publicacion-modal-header">
@@ -195,7 +215,8 @@ import {
   micOutline,
   bookOutline,
   serverOutline,
-  sparklesOutline
+  sparklesOutline,
+  timeOutline
 } from 'ionicons/icons'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 
@@ -378,6 +399,22 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 2px 0;
+}
+
+.configuracion-watermark {
+  margin-top: 12px;
+  padding: 12px 0 4px;
+  color: #6d829c;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  opacity: 0.28;
+}
+
+.configuracion-watermark strong {
+  color: #123a66;
+  font-weight: 800;
 }
 
 .configuracion-eyebrow {

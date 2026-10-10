@@ -17,14 +17,4 @@ const pool = mysql.createPool({
   connectTimeout: 10000,
 });
 
-pool
-  .getConnection()
-  .then((conn) => {
-    console.log("¡Conexión directa y exitosa a MySQL local!");
-    conn.release();
-  })
-  .catch((err) => {
-    console.error("Error de conexión. Revisa tus datos:", err.message);
-  });
-
 module.exports = { pool };

@@ -8,6 +8,7 @@
       :url-inicial="urlWhatsappInicial"
       :solicitud-carga="solicitudCargaWhatsapp"
       :imagen-pendiente="imagenWhatsappPendiente"
+      :pdf-pendiente="pdfWhatsappPendiente"
       :texto-adjunto="textoWhatsappPendiente"
       :solicitud-adjunto="solicitudAdjuntoWhatsapp"
       @adjunto-resuelto="limpiarAdjuntoWhatsapp"
@@ -145,25 +146,36 @@ watch([
 }, { immediate: true })
 
 const abrirWhatsappConMensaje = (evento: Event) => {
-  const detalle = (evento as CustomEvent<{ phone?: string; message?: string; image?: string }>).detail
+  const detalle = (evento as CustomEvent<{ phone?: string; message?: string; image?: string; pdf?: string; fileName?: string }>).detail
   const phone = String(detalle?.phone || '').replace(/\D/g, '')
   const message = String(detalle?.message || '')
   const image = typeof detalle?.image === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(detalle.image)
     ? detalle.image
     : ''
   imagenWhatsappPendiente.value = image
+  const pdf = typeof detalle?.pdf === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(detalle.pdf) && detalle.pdf.length <= 30_000_000
+    ? detalle.pdf
+    : ''
+  pdfWhatsappPendiente.value = pdf ? { data: pdf, name: String(detalle?.fileName || 'factura.pdf').replace(/[^a-zA-Z0-9._-]/g, '_') } : null
   textoWhatsappPendiente.value = image ? message : ''
   solicitudAdjuntoWhatsapp.value += 1
-  const url = `https://web.whatsapp.com/send${phone ? `?phone=${phone}&text=${encodeURIComponent(message)}` : `?text=${encodeURIComponent(message)}`}`
+  const textoEnUrl = image ? '' : message
+  const parametros = new URLSearchParams()
+  if (phone) parametros.set('phone', phone)
+  if (textoEnUrl) parametros.set('text', textoEnUrl)
+  const query = parametros.toString()
+  const url = `https://web.whatsapp.com/send${query ? `?${query}` : ''}`
   abrirWhatsapp(url)
 }
 
 const imagenWhatsappPendiente = ref('')
+const pdfWhatsappPendiente = ref<{ data: string; name: string } | null>(null)
 const textoWhatsappPendiente = ref('')
 const solicitudAdjuntoWhatsapp = ref(0)
 
 const limpiarAdjuntoWhatsapp = () => {
   imagenWhatsappPendiente.value = ''
+  pdfWhatsappPendiente.value = null
   textoWhatsappPendiente.value = ''
 }
 
@@ -217,7 +229,7 @@ const detenerCuentaRegresiva = () => {
 const cerrarSesionAhora = () => {
   detenerCuentaRegresiva()
   mostrarModalInactividad.value = false
-  cerrarSesion()
+  cerrarSesion('inactividad')
   router.replace('/login').catch(() => {})
 }
 

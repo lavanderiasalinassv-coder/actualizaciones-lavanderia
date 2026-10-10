@@ -373,8 +373,11 @@ const mapOrdenBase = (row) => ({
   envioDomicilio: toBool(row.envio_domicilio),
   direccionEntrega: row.direccion_entrega || "",
   fechaEntregaActiva: toBool(row.fecha_entrega_activa),
+  moraActiva: toBool(row.mora_activa),
   fechaEntrega: toDateStr(row.fecha_entrega),
   horaEntrega: toTimeStr(row.hora_entrega),
+  moraDiasCobrados: toNumber(row.mora_dias_cobrados),
+  moraDetenida: Boolean(row.mora_detenida_at),
   estadoPago: row.estado_pago,
   metodoPago: row.metodo_pago,
   montoRecibido: toNumber(row.monto_recibido),
@@ -398,6 +401,162 @@ const mapOrdenBase = (row) => ({
   createdAt: toISO(row.created_at),
   updatedAt: toISO(row.updated_at),
 });
+
+// La mora inicia después de dos días calendario de gracia desde la fecha prometida.
+const parseFechaHoraNegocio = (valor) => {
+  if (valor instanceof Date) return Date.UTC(valor.getUTCFullYear(), valor.getUTCMonth(), valor.getUTCDate(), valor.getUTCHours(), valor.getUTCMinutes(), valor.getUTCSeconds());
+  const texto = String(valor || "").replace(" ", "T");
+  return Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(texto) ? texto : `${texto}Z`);
+};
+
+const contarDiasMora = (orden, fechaReferencia = obtenerFechaHoraNegocioMySQL()) => {
+  if (!orden.mora_activa || !orden.fecha_entrega || !orden.hora_entrega || ["entregado", "cerrada", "cancelada", "Cerrada-Cancelada"].includes(orden.estado)) return 0;
+  const fecha = toDateStr(orden.fecha_entrega);
+  const hora = toTimeStr(orden.hora_entrega) || String(orden.hora_entrega).slice(0, 8);
+  const fechaPrometida = Date.parse(`${fecha}T${hora}Z`);
+  const referencia = orden.mora_detenida_at ? parseFechaHoraNegocio(orden.mora_detenida_at) : parseFechaHoraNegocio(fechaReferencia);
+  if (!Number.isFinite(fechaPrometida) || !Number.isFinite(referencia)) return 0;
+  const fechaAjustada = fechaPrometida + toNumber(orden.mora_pausa_segundos) * 1000;
+  const diaPrometido = Math.floor(fechaAjustada / 86400000);
+  const diaActual = Math.floor(referencia / 86400000);
+  return Math.max(0, diaActual - diaPrometido - 2);
+};
+
+const calcularPausaMoraDesdeHoy = (fechaEntrega, horaEntrega, fechaReferencia = obtenerFechaHoraNegocioMySQL()) => {
+  if (!fechaEntrega || !horaEntrega) return 0;
+  const fechaPrometida = Date.parse(`${toDateStr(fechaEntrega)}T${toTimeStr(horaEntrega) || String(horaEntrega).slice(0, 8)}Z`);
+  const referencia = parseFechaHoraNegocio(fechaReferencia);
+  if (!Number.isFinite(fechaPrometida) || !Number.isFinite(referencia)) {
+    throw new AppError("No se pudo calcular el reinicio de la mora con las fechas de la orden.", 409);
+  }
+  const inicioDiaReferencia = Math.floor(referencia / 86400000) * 86400000;
+  return Math.max(0, Math.ceil((inicioDiaReferencia - 2 * 86400000 - fechaPrometida) / 1000));
+};
+
+const sincronizarCargosMoraConn = async (conn, orden) => {
+  const diasEsperados = contarDiasMora(orden);
+  const [cargosMora] = await conn.query(
+    "SELECT id FROM orden_cargos_extra WHERE orden_id = ? AND descripcion LIKE 'Mora por entrega tardía%' ORDER BY fecha ASC, id ASC FOR UPDATE",
+    [orden.id],
+  );
+  const diferencia = diasEsperados - cargosMora.length;
+  if (diferencia < 0) {
+    for (const cargo of cargosMora.slice(diasEsperados)) {
+      await conn.execute("DELETE FROM orden_cargos_extra WHERE id = ?", [cargo.id]);
+    }
+  } else if (diferencia > 0) {
+    const fechaCargo = obtenerFechaHoraNegocioMySQL();
+    for (let dia = 0; dia < diferencia; dia += 1) {
+      await conn.execute("INSERT INTO orden_cargos_extra (id, orden_id, descripcion, monto, fecha) VALUES (?,?,?,?,?)", [randomUUID(), orden.id, "Mora por entrega tardía (día)", 0.5, fechaCargo]);
+    }
+  }
+  if (diferencia === 0 && toNumber(orden.mora_dias_cobrados) === diasEsperados) return;
+
+  const [cargos] = await conn.query("SELECT monto FROM orden_cargos_extra WHERE orden_id = ?", [orden.id]);
+  const { total, cambio } = recalcularTotales(toNumber(orden.subtotal), orden, cargos.reduce((suma, cargo) => suma + toNumber(cargo.monto), 0));
+  const estadoPago = toNumber(orden.monto_recibido) >= total
+    ? "pagado"
+    : diasEsperados > 0 ? "porCobrar" : toNumber(orden.monto_recibido) > 0 ? "anticipo" : "porCobrar";
+  await conn.execute("UPDATE ordenes SET fecha_entrega_activa = IF(fecha_entrega IS NULL, fecha_entrega_activa, 1), mora_dias_cobrados = ?, total = ?, cambio = ?, estado_pago = ? WHERE id = ?", [diasEsperados, total, cambio, estadoPago, orden.id]);
+  await registrarMovimientoConn(conn, orden.id, `Mora recalculada: ${diasEsperados} día(s), $${(diasEsperados * 0.5).toFixed(2)}`, "Sistema");
+};
+
+const obtenerOrdenActualizadaMoraConn = async (conn, id) => {
+  const [[row]] = await conn.query("SELECT * FROM ordenes WHERE id = ?", [id]);
+  if (!row) throw new AppError("Orden no encontrada.", 404);
+  const [cargosRows] = await conn.query(
+    "SELECT * FROM orden_cargos_extra WHERE orden_id = ? ORDER BY fecha ASC",
+    [id],
+  );
+  const [movimientosRows] = await conn.query(
+    "SELECT * FROM orden_movimientos WHERE orden_id = ? ORDER BY fecha DESC",
+    [id],
+  );
+  return {
+    ...mapOrdenBase(row),
+    cargosExtra: cargosRows.map((cargo) => ({
+      id: cargo.id,
+      descripcion: cargo.descripcion,
+      monto: toNumber(cargo.monto),
+      fecha: toISO(cargo.fecha),
+    })),
+    movimientos: movimientosRows.map((movimientoRow) => {
+      const movimiento = obtenerMovimientoLegado(
+        movimientoRow.texto,
+        movimientoRow.usuario_nombre,
+        movimientoRow.usuario_id,
+      );
+      return {
+        id: movimientoRow.id,
+        texto: movimiento.texto,
+        fecha: toISO(movimientoRow.fecha),
+        usuarioId: movimientoRow.usuario_id || null,
+        usuarioNombre: movimiento.usuarioNombre,
+      };
+    }),
+  };
+};
+
+const adquirirBloqueoMora = async (conn, clave, esperaSegundos) => {
+  const [[resultado]] = await conn.query(
+    "SELECT GET_LOCK(?, ?) AS adquirido",
+    [clave, esperaSegundos],
+  );
+  if (Number(resultado?.adquirido) !== 1) {
+    throw new AppError(
+      "La mora de esta orden está siendo actualizada por otra operación. Espera unos segundos y vuelve a intentarlo.",
+      409,
+    );
+  }
+};
+
+const liberarBloqueoMora = async (conn, clave) => {
+  try {
+    await conn.query("SELECT RELEASE_LOCK(?)", [clave]);
+  } catch (error) {
+    console.error("No se pudo liberar el bloqueo de mora en MySQL; se cierra la conexión del pool.", error.message);
+    conn.destroy();
+    return false;
+  }
+  return true;
+};
+
+const prepararConexionMora = async (conn, id) => {
+  await conn.query("SET SESSION innodb_lock_wait_timeout = 8");
+  await adquirirBloqueoMora(conn, `lavanderia:mora:${id}`, 3);
+};
+
+const liberarConexionMora = async (conn, id) => {
+  const bloqueoLiberado = await liberarBloqueoMora(conn, `lavanderia:mora:${id}`);
+  if (!bloqueoLiberado) return;
+  try {
+    await conn.query("SET SESSION innodb_lock_wait_timeout = DEFAULT");
+    conn.release();
+  } catch (error) {
+    console.error("No se pudo restaurar el timeout de bloqueo de MySQL; se cierra la conexión del pool.", error.message);
+    conn.destroy();
+  }
+};
+
+const actualizarMoraOrden = async (id) => {
+  const conn = await pool.getConnection();
+  try {
+    await prepararConexionMora(conn, id);
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query("SELECT * FROM ordenes WHERE id = ? FOR UPDATE", [id]);
+    if (orden) {
+      if (orden.fecha_entrega && !orden.fecha_entrega_activa) {
+        await conn.execute(
+          "UPDATE ordenes SET fecha_entrega_activa = 1 WHERE id = ?",
+          [id],
+        );
+      }
+      await sincronizarCargosMoraConn(conn, orden);
+    }
+    await conn.commit();
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { await liberarConexionMora(conn, id); }
+};
 
 // Ensambla una orden completa (items + insumos + fotos + cargos + anticipos + movimientos)
 const obtenerOrdenCompleta = async (id, ejecutor = pool) => {
@@ -561,9 +720,7 @@ const registrarMovimientoConn = async (
     return;
   }
 
-  const pad = (valor) => String(valor).padStart(2, "0");
-  const ahora = new Date();
-  const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+  const fechaLocalMySQL = obtenerFechaHoraNegocioMySQL();
 
   await conn.execute(
     "INSERT INTO orden_movimientos (id, orden_id, texto, usuario_id, usuario_nombre, fecha) VALUES (?,?,?,?,?,?)",
@@ -798,9 +955,7 @@ const actualizarCierreAlEliminarAnticipo = async (
     cierre.id,
   ]);
 
-  const pad = (valor) => String(valor).padStart(2, "0");
-  const ahora = new Date();
-  const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+  const fechaLocalMySQL = obtenerFechaHoraNegocioMySQL();
 
   await conn.execute(
     `INSERT INTO movimientos_caja (id, tipo, monto, concepto, turno_id, numero_caja, usuario, creado_at)
@@ -1007,10 +1162,161 @@ const obtenerOrdenes = async (reintento = false) => {
   }
 };
 
+let actualizacionMorasEnCurso = false;
+
+const actualizarMorasPendientes = async () => {
+  if (actualizacionMorasEnCurso) return;
+  actualizacionMorasEnCurso = true;
+  let conn;
+  const claveBloqueo = "lavanderia:actualizar-moras";
+  let bloqueoAdquirido = false;
+  let liberarConexion = true;
+  let ordenesConMora = [];
+  try {
+    try {
+      conn = await pool.getConnection();
+      const [[resultado]] = await conn.query(
+        "SELECT GET_LOCK(?, 0) AS adquirido",
+        [claveBloqueo],
+      );
+      if (Number(resultado?.adquirido) === 1) {
+        bloqueoAdquirido = true;
+        const ahora = obtenerFechaHoraNegocioMySQL();
+        [ordenesConMora] = await conn.query(
+          `SELECT o.id FROM ordenes o
+            LEFT JOIN (
+              SELECT orden_id, COUNT(*) AS cantidad
+              FROM orden_cargos_extra
+              WHERE descripcion LIKE 'Mora por entrega tardía%'
+              GROUP BY orden_id
+            ) cargos_mora ON cargos_mora.orden_id = o.id
+            WHERE o.mora_activa = 1 AND o.fecha_entrega IS NOT NULL AND o.hora_entrega IS NOT NULL
+              AND o.mora_detenida_at IS NULL AND o.estado NOT IN ('entregado','cerrada','cancelada')
+              AND (
+                GREATEST(0, DATEDIFF(DATE(?), DATE(DATE_ADD(CONCAT(o.fecha_entrega, ' ', o.hora_entrega), INTERVAL o.mora_pausa_segundos SECOND))) - 2)
+                  <> COALESCE(cargos_mora.cantidad, 0)
+                OR GREATEST(0, DATEDIFF(DATE(?), DATE(DATE_ADD(CONCAT(o.fecha_entrega, ' ', o.hora_entrega), INTERVAL o.mora_pausa_segundos SECOND))) - 2)
+                  <> o.mora_dias_cobrados
+              )`,
+          [ahora, ahora],
+        );
+      }
+    } finally {
+      if (conn && bloqueoAdquirido) {
+        liberarConexion = await liberarBloqueoMora(conn, claveBloqueo);
+      }
+      if (conn && liberarConexion) conn.release();
+    }
+
+    // No mantener el bloqueo global mientras se actualizan órdenes: así una tarea
+    // de fondo no bloquea las acciones manuales de mora en otras órdenes.
+    for (const orden of ordenesConMora) {
+      try {
+        await actualizarMoraOrden(orden.id);
+      } catch (error) {
+        console.error(`No se pudo actualizar la mora de la orden ${orden.id}:`, error.message);
+      }
+    }
+  } finally {
+    actualizacionMorasEnCurso = false;
+  }
+};
+
 const obtenerOrdenPorId = async (id) => {
   const orden = await obtenerOrdenCompleta(id);
   if (!orden) throw new AppError("Orden no encontrada.", 404);
   return orden;
+};
+
+const detenerMoraOrden = async (id, usuario = "Sistema") => {
+  const conn = await pool.getConnection();
+  try {
+    await prepararConexionMora(conn, id);
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query("SELECT * FROM ordenes WHERE id = ? FOR UPDATE", [id]);
+    if (!orden) throw new AppError("Orden no encontrada.", 404);
+    if (!orden.mora_activa) throw new AppError("La mora no está activada para esta orden.", 409);
+    if (!orden.mora_detenida_at) {
+      await conn.execute("UPDATE ordenes SET mora_detenida_at = ? WHERE id = ?", [obtenerFechaHoraNegocioMySQL(), id]);
+      await registrarMovimientoConn(conn, id, "Se detuvo la acumulación de mora", usuario);
+    }
+    const ordenActualizada = await obtenerOrdenActualizadaMoraConn(conn, id);
+    await conn.commit();
+    return ordenActualizada;
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { await liberarConexionMora(conn, id); }
+};
+
+const reanudarMoraOrden = async (id, usuario = "Sistema") => {
+  const conn = await pool.getConnection();
+  try {
+    await prepararConexionMora(conn, id);
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query("SELECT * FROM ordenes WHERE id = ? FOR UPDATE", [id]);
+    if (!orden) throw new AppError("Orden no encontrada.", 404);
+    if (!orden.mora_activa) throw new AppError("La mora no está activada para esta orden.", 409);
+    if (!orden.mora_detenida_at) throw new AppError("La mora de esta orden no está detenida.", 409);
+    if (["entregado", "cerrada", "cancelada", "Cerrada-Cancelada"].includes(orden.estado)) throw new AppError("No se puede reanudar la mora de una orden finalizada.", 409);
+    const segundosDetenida = Math.max(0, Math.floor((parseFechaHoraNegocio(obtenerFechaHoraNegocioMySQL()) - parseFechaHoraNegocio(orden.mora_detenida_at)) / 1000));
+    await conn.execute("UPDATE ordenes SET mora_detenida_at = NULL, mora_pausa_segundos = mora_pausa_segundos + ? WHERE id = ?", [segundosDetenida, id]);
+    await registrarMovimientoConn(conn, id, "⚠️ Se reanudó la acumulación de mora", usuario);
+    const ordenActualizada = await obtenerOrdenActualizadaMoraConn(conn, id);
+    await conn.commit();
+    return ordenActualizada;
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { await liberarConexionMora(conn, id); }
+};
+
+const eliminarMoraOrden = async (id, usuario = "Sistema", suspenderFuturas = true) => {
+  const conn = await pool.getConnection();
+  try {
+    await prepararConexionMora(conn, id);
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query("SELECT * FROM ordenes WHERE id = ? FOR UPDATE", [id]);
+    if (!orden) throw new AppError("Orden no encontrada.", 404);
+    if (["entregado", "cerrada", "cancelada", "Cerrada-Cancelada"].includes(orden.estado)) throw new AppError("No se puede eliminar la mora de una orden finalizada.", 409);
+    const [cargosMora] = await conn.query("SELECT id FROM orden_cargos_extra WHERE orden_id = ? AND descripcion LIKE 'Mora por entrega tardía%' FOR UPDATE", [id]);
+    await conn.execute("DELETE FROM orden_cargos_extra WHERE orden_id = ? AND descripcion LIKE 'Mora por entrega tardía%'", [id]);
+    const [cargosRestantes] = await conn.query("SELECT monto FROM orden_cargos_extra WHERE orden_id = ?", [id]);
+    const { total, cambio } = recalcularTotales(toNumber(orden.subtotal), orden, cargosRestantes.reduce((suma, cargo) => suma + toNumber(cargo.monto), 0));
+    const estadoPago = toNumber(orden.monto_recibido) >= total ? "pagado" : toNumber(orden.monto_recibido) > 0 ? "anticipo" : "porCobrar";
+    let moraPausaSegundos = 0;
+    if (!suspenderFuturas) {
+      moraPausaSegundos = calcularPausaMoraDesdeHoy(
+        orden.fecha_entrega,
+        orden.hora_entrega,
+      );
+    }
+    await conn.execute(
+      "UPDATE ordenes SET mora_activa = ?, mora_detenida_at = NULL, mora_pausa_segundos = ?, mora_dias_cobrados = 0, total = ?, cambio = ?, estado_pago = ? WHERE id = ?",
+      [suspenderFuturas ? 0 : 1, moraPausaSegundos, total, cambio, estadoPago, id],
+    );
+    const accionMoraFutura = suspenderFuturas ? "y se suspendió la mora futura" : "y se reinició el conteo para futuros retrasos";
+    await registrarMovimientoConn(conn, id, `Mora eliminada: ${cargosMora.length} cargo(s), -$${(cargosMora.length * 0.5).toFixed(2)} ${accionMoraFutura}`, usuario);
+    const ordenActualizada = await obtenerOrdenActualizadaMoraConn(conn, id);
+    await conn.commit();
+    return ordenActualizada;
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { await liberarConexionMora(conn, id); }
+};
+
+const aplicarMoraOrden = async (id, usuario = "Sistema") => {
+  const conn = await pool.getConnection();
+  try {
+    await prepararConexionMora(conn, id);
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query("SELECT * FROM ordenes WHERE id = ? FOR UPDATE", [id]);
+    if (!orden) throw new AppError("Orden no encontrada.", 404);
+    if (["entregado", "cerrada", "cancelada", "Cerrada-Cancelada"].includes(orden.estado)) throw new AppError("No se puede aplicar mora a una orden finalizada.", 409);
+    if (!orden.fecha_entrega || !orden.hora_entrega) throw new AppError("Asigna fecha y hora de entrega antes de aplicar la mora.", 409);
+    if (orden.mora_activa) throw new AppError("La mora ya está activada para esta orden.", 409);
+    await conn.execute("UPDATE ordenes SET mora_activa = 1, mora_detenida_at = NULL, mora_pausa_segundos = 0 WHERE id = ?", [id]);
+    await registrarMovimientoConn(conn, id, "⚠️ Se aplicó mora a la orden", usuario);
+    const resultado = await obtenerOrdenActualizadaMoraConn(conn, id);
+    await conn.commit();
+    return resultado;
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { await liberarConexionMora(conn, id); }
 };
 
 const obtenerOrdenesPorTerminos = async ({
@@ -1238,18 +1544,16 @@ const crearOrden = async (datos, usuario = "Sistema") => {
       );
     }
 
-    const pad = (valor) => String(valor).padStart(2, "0");
-    const ahora = new Date();
-    const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+    const fechaLocalMySQL = obtenerFechaHoraNegocioMySQL();
 
     await conn.execute(
       `INSERT INTO ordenes (
         id, estado, turno_id, nombre_cliente, codigo_pais, telefono, correo,
-        guardar_directorio, envio_domicilio, direccion_entrega, fecha_entrega_activa, fecha_entrega, hora_entrega,
+        guardar_directorio, envio_domicilio, direccion_entrega, fecha_entrega_activa, mora_activa, fecha_entrega, hora_entrega,
         estado_pago, metodo_pago, monto_recibido, descuento, descuento_manual, descuento_promocion,
         subtotal, total, cambio, cantidad_prendas, detalles_prendas, nota_interna, motivo_cancelacion,
         tarjeta_monto, tarjeta_referencia, transferencia_monto, transferencia_comprobante, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, // El UUID generado arriba
         "pendiente",
@@ -1262,6 +1566,7 @@ const crearOrden = async (datos, usuario = "Sistema") => {
         datos.envioDomicilio ? 1 : 0,
         datos.envioDomicilio ? (datos.direccionEntrega || "").trim() : null,
         datos.fechaEntregaActiva ? 1 : 0,
+        datos.moraActiva === undefined ? 1 : datos.moraActiva ? 1 : 0,
         datos.fechaEntregaActiva && datos.fechaEntrega
           ? datos.fechaEntrega
           : null,
@@ -1304,7 +1609,7 @@ const crearOrden = async (datos, usuario = "Sistema") => {
     }
 
     const anticipoId = montoRecibido > 0 ? randomUUID() : null;
-    let fechaAnticipo = new Date();
+    let fechaAnticipo = obtenerFechaHoraNegocioMySQL();
     if (montoRecibido > 0 && turnoId && datos.turnoId) {
       const [[cierreFecha]] = await conn.query(
         "SELECT resumen FROM cierres_caja WHERE turno_id = ? ORDER BY cerrado_at DESC LIMIT 1",
@@ -1321,7 +1626,7 @@ const crearOrden = async (datos, usuario = "Sistema") => {
         }
         const fechaBase = resumenFecha?.horaInicio || resumenFecha?.cerradoAt;
         if (fechaBase && !Number.isNaN(new Date(fechaBase).getTime())) {
-          fechaAnticipo = new Date(fechaBase);
+          fechaAnticipo = obtenerFechaHoraNegocioMySQL(new Date(fechaBase));
         }
       }
     }
@@ -1390,6 +1695,15 @@ const crearOrden = async (datos, usuario = "Sistema") => {
       `Creada por ${(datos.nombreCliente || "").trim()}`,
       usuario,
     );
+
+    if (montoRecibido > 0) {
+      await registrarMovimientoConn(
+        conn,
+        id,
+        `Se registró ${estadoPago === "pagado" ? "el pago" : "un anticipo"} de $${montoRecibido.toFixed(2)} en ${metodoPago}. Total recibido: $${montoRecibido.toFixed(2)}`,
+        usuario,
+      );
+    }
 
     const detallesPrendas = (datos.detallesPrendas || "").trim();
     if (detallesPrendas) {
@@ -1543,7 +1857,7 @@ const actualizarEstado = async (
       typeof cambios.textoMovimiento === "string" &&
       cambios.textoMovimiento.trim()
         ? cambios.textoMovimiento.trim()
-        : `Estado cambiado a ${estado}${cajaTexto}`;
+        : `Estado cambiado a ${estado === "cerrada" && cambios.turnoId ? "entregado" : estado}${cajaTexto}`;
     await registrarMovimientoConn(conn, id, textoMovimiento, usuario);
 
     await conn.commit();
@@ -1636,10 +1950,11 @@ const actualizarPago = async (
 
     if (turnoActualId) {
       const fechaTurnoPago = await obtenerFechaDelTurno(conn, turnoActualId);
-      const fechaPago = construirFechaConHora(fechaTurnoPago);
-      const pad = (valor) => String(valor).padStart(2, "0");
-      const ahora = new Date();
-      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+      const ahoraNegocio = obtenerFechaHoraNegocioMySQL();
+      const fechaPago = fechaTurnoPago
+        ? `${fechaTurnoPago} ${ahoraNegocio.slice(11)}`
+        : null;
+      const fechaLocalMySQL = ahoraNegocio;
       let anticipoId = null;
       if (saldoPendiente > 0) {
         anticipoId = randomUUID();
@@ -1765,10 +2080,13 @@ const registrarAnticipo = async (
     }
     if (montoAplicado > 0) {
       const anticipoId = randomUUID();
-      const fechaAnticipoValor = construirFechaConHora(fechaPersonalizada);
-      const pad = (valor) => String(valor).padStart(2, "0");
-      const ahora = new Date();
-      const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+      const ahoraNegocio = obtenerFechaHoraNegocioMySQL();
+      const fechaAnticipoValor =
+        typeof fechaPersonalizada === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(fechaPersonalizada)
+          ? `${fechaPersonalizada} ${ahoraNegocio.slice(11)}`
+          : null;
+      const fechaLocalMySQL = ahoraNegocio;
       await conn.execute(
         "INSERT INTO orden_anticipos (id, orden_id, turno_id, monto, fecha) VALUES (?,?,?,?, COALESCE(?, ?))",
         [
@@ -2294,9 +2612,13 @@ const limpiarOrdenDeCierres = async (conn, orden) => {
   );
 };
 
-const eliminarOrden = async (id) => {
+const eliminarOrden = async (id, usuario = "Sistema") => {
   const conn = await pool.getConnection();
   try {
+    await conn.execute(`CREATE TABLE IF NOT EXISTS ordenes_eliminadas_auditoria (id CHAR(36) NOT NULL PRIMARY KEY, orden_id CHAR(36) NOT NULL, secuencia INT NULL, usuario_id CHAR(36) NULL, usuario_nombre VARCHAR(150) NOT NULL, fecha DATETIME NOT NULL, orden_json LONGTEXT NULL, INDEX idx_ordenes_eliminadas_fecha (fecha), INDEX idx_ordenes_eliminadas_usuario (usuario_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    const [columnasAuditoria] = await conn.query("SHOW COLUMNS FROM ordenes_eliminadas_auditoria LIKE 'orden_json'");
+    if (!columnasAuditoria.length) await conn.execute("ALTER TABLE ordenes_eliminadas_auditoria ADD COLUMN orden_json LONGTEXT NULL");
+    await conn.execute(`CREATE TABLE IF NOT EXISTS orden_movimientos_archivados (id CHAR(36) NOT NULL PRIMARY KEY, orden_id CHAR(36) NOT NULL, secuencia INT NULL, texto TEXT NOT NULL, usuario_id CHAR(36) NULL, usuario_nombre VARCHAR(150) NOT NULL, fecha DATETIME NOT NULL, INDEX idx_movs_archivados_numero (secuencia), INDEX idx_movs_archivados_fecha (fecha)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     await conn.beginTransaction();
     await conn.query("SET SESSION innodb_lock_wait_timeout = 15");
     const [[orden]] = await conn.query(
@@ -2307,6 +2629,14 @@ const eliminarOrden = async (id) => {
 
     if (orden.estado !== "cancelada") {
       await revertirInventarioOrden(conn, id);
+    }
+
+    const usuarioNormalizado = normalizarUsuario(usuario);
+    if (usuarioNormalizado.id !== "dev-mode" && usuarioNormalizado.nombre !== "Desarrollador") {
+      await conn.execute(
+        "INSERT INTO ordenes_eliminadas_auditoria (id, orden_id, secuencia, usuario_id, usuario_nombre, fecha, orden_json) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?)",
+        [randomUUID(), id, orden.secuencia || null, usuarioNormalizado.id || null, usuarioNormalizado.nombre || "Sistema", JSON.stringify(orden)],
+      );
     }
 
     await limpiarOrdenDeCierres(conn, orden);
@@ -2322,6 +2652,10 @@ const eliminarOrden = async (id) => {
       id,
     ]);
     await conn.execute("DELETE FROM orden_anticipos WHERE orden_id = ?", [id]);
+    await conn.execute(
+      "INSERT INTO orden_movimientos_archivados (id, orden_id, secuencia, texto, usuario_id, usuario_nombre, fecha) SELECT UUID(), orden_id, ?, texto, usuario_id, usuario_nombre, fecha FROM orden_movimientos WHERE orden_id = ?",
+      [orden.secuencia || null, id],
+    );
     await conn.execute("DELETE FROM orden_movimientos WHERE orden_id = ?", [
       id,
     ]);
@@ -2350,7 +2684,15 @@ const eliminarOrden = async (id) => {
 // evitar que el cliente pueda desincronizar los totales calculados en el servidor.
 const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
   const conn = await pool.getConnection();
+  const recalcularMora =
+    typeof cambios.fechaEntrega === "string" ||
+    typeof cambios.horaEntrega === "string";
+  let bloqueoMoraPreparado = false;
   try {
+    if (recalcularMora) {
+      await prepararConexionMora(conn, id);
+      bloqueoMoraPreparado = true;
+    }
     await conn.beginTransaction();
     const [[orden]] = await conn.query(
       "SELECT * FROM ordenes WHERE id = ? FOR UPDATE",
@@ -2439,6 +2781,30 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
         `UPDATE ordenes SET ${sets.join(", ")} WHERE id = ?`,
         values,
       );
+    }
+
+    if (recalcularMora) {
+      const ordenParaRecalcularMora = {
+        ...orden,
+        fecha_entrega:
+          typeof cambios.fechaEntrega === "string"
+            ? cambios.fechaEntrega.trim()
+            : orden.fecha_entrega,
+        hora_entrega:
+          typeof cambios.horaEntrega === "string"
+            ? `${cambios.horaEntrega.trim()}:00`
+            : orden.hora_entrega,
+      };
+      if (
+        ordenParaRecalcularMora.mora_activa &&
+        ordenParaRecalcularMora.fecha_entrega &&
+        ordenParaRecalcularMora.hora_entrega &&
+        !["entregado", "cerrada", "cancelada", "Cerrada-Cancelada"].includes(
+          orden.estado,
+        )
+      ) {
+        await sincronizarCargosMoraConn(conn, ordenParaRecalcularMora);
+      }
     }
 
     if (Array.isArray(cambios.fotos)) {
@@ -2557,7 +2923,11 @@ const actualizarCamposOrden = async (id, cambios, usuario = "Sistema") => {
     await conn.rollback();
     throw error;
   } finally {
-    conn.release();
+    if (bloqueoMoraPreparado) {
+      await liberarConexionMora(conn, id);
+    } else {
+      conn.release();
+    }
   }
 };
 
@@ -2911,6 +3281,11 @@ module.exports = {
   obtenerOrdenes,
   obtenerOrdenesPorTerminos,
   obtenerOrdenPorId,
+  actualizarMorasPendientes,
+  detenerMoraOrden,
+  reanudarMoraOrden,
+  eliminarMoraOrden,
+  aplicarMoraOrden,
   crearOrden,
   actualizarEstado,
   actualizarPago,
@@ -2928,4 +3303,7 @@ module.exports = {
   actualizarCamposOrden,
   construirTextoCambioCliente,
   aplicarDescuentoOrden,
+  obtenerFechaHoraNegocioMySQL,
+  contarDiasMora,
+  calcularPausaMoraDesdeHoy,
 };

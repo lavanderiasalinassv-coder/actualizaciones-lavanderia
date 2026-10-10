@@ -587,7 +587,7 @@
                 <div v-if="ordenSeleccionada.cargosExtra.length" class="servicios-lista">
                   <article v-for="cargo in ordenSeleccionada.cargosExtra" :key="cargo.id" class="servicio-linea">
                     <div>
-                      <strong>{{ cargo.descripcion }}</strong>
+                      <strong>{{ textoCargoExtra(cargo.descripcion) }}</strong>
                       <span>{{ formatearFechaHora(cargo.fecha) }}</span>
                     </div>
                     <div class="linea-derecha">
@@ -745,6 +745,7 @@
                   <p class="label">📅 Fecha de entrega</p>
                   <input v-model="fechaEntregaBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
                   <input v-model="horaEntregaBorrador" type="time" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
+                  <span v-if="ordenSeleccionada.moraDiasCobrados > 0">Mora acumulada: ${{ (ordenSeleccionada.moraDiasCobrados * 0.5).toFixed(2) }} ({{ ordenSeleccionada.moraDiasCobrados }} días)</span>
                 </div>
 
                 <div class="mini-card">
@@ -764,6 +765,53 @@
                 {{ guardandoFechas ? 'Actualizando...' : '💾 Guardar fechas' }}
               </button>
 
+              <section v-if="esAdministrador && !['entregado','cerrada','cancelada'].includes(ordenSeleccionada.estado)" class="detalle-bloque mora-control">
+                <div class="seccion-titulo">
+                  <strong>⚠️ Control de mora</strong>
+                  <div class="seccion-titulo-acciones">
+                    <button
+                      v-if="ordenSeleccionada.moraActiva !== false && !ordenSeleccionada.moraDetenida"
+                      type="button"
+                      class="mora-accion mora-accion-detener"
+                      :disabled="peticionOrdenEnCurso"
+                      @click="detenerMoraSeleccionada"
+                    >
+                      <span aria-hidden="true">Ⅱ</span> Suspender mora
+                    </button>
+                    <button
+                      v-else-if="ordenSeleccionada.moraActiva !== false && ordenSeleccionada.moraDetenida"
+                      type="button"
+                      class="mora-accion mora-accion-reanudar"
+                      :disabled="peticionOrdenEnCurso"
+                      @click="reanudarMoraSeleccionada"
+                    >
+                      <span aria-hidden="true">▶</span> Reanudar mora
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="mora-accion mora-accion-aplicar"
+                      :disabled="peticionOrdenEnCurso"
+                      @click="aplicarMoraSeleccionada"
+                    >
+                      <span aria-hidden="true">⚠</span> Aplicar mora
+                    </button>
+                    <button
+                      v-if="montoMoraOrden(ordenSeleccionada) > 0"
+                      type="button"
+                      class="mora-accion mora-accion-eliminar"
+                      :disabled="peticionOrdenEnCurso"
+                      @click="eliminarMoraSeleccionada"
+                    >
+                      <span aria-hidden="true">×</span> Eliminar mora
+                    </button>
+                  </div>
+                </div>
+                <p v-if="ordenSeleccionada.moraDetenida" class="hint-texto-vacio mora-estado mora-estado-detenida">Acumulación detenida</p>
+                <p v-else-if="ordenSeleccionada.moraActiva === false" class="hint-texto-vacio mora-estado mora-estado-inactiva">Mora desactivada</p>
+                <p v-else class="hint-texto-vacio mora-estado mora-estado-activa">Activa: $0.50 por día después de 2 días calendario de gracia</p>
+              </section>
+
               <section
                 v-if="puedeVerMontos"
                 class="total-box"
@@ -781,7 +829,15 @@
                   <span>➖ Anticipo recibido</span>
                   <strong>-${{ ordenSeleccionada.montoRecibido.toFixed(2) }}</strong>
                 </div>
-                <div v-if="ordenSeleccionada.estadoPago === 'anticipo'" class="total-box-detalle total-box-total">
+                <div v-if="montoMoraOrden(ordenSeleccionada) > 0" class="total-box-detalle">
+                  <span>🧾 Total de la orden</span>
+                  <strong>${{ (ordenSeleccionada.total - montoMoraOrden(ordenSeleccionada)).toFixed(2) }}</strong>
+                </div>
+                <div v-if="montoMoraOrden(ordenSeleccionada) > 0" class="total-box-detalle total-box-mora">
+                  <span>⚠️ Cargo por mora</span>
+                  <strong>+${{ montoMoraOrden(ordenSeleccionada).toFixed(2) }}</strong>
+                </div>
+                <div v-if="ordenSeleccionada.estadoPago === 'anticipo' && montoMoraOrden(ordenSeleccionada) === 0" class="total-box-detalle total-box-total">
                   <span>🧾 Total de la orden</span>
                   <strong>${{ ordenSeleccionada.total.toFixed(2) }}</strong>
                 </div>
@@ -877,10 +933,11 @@
                 </div>
                 <div class="movimientos-lista">
                   <article
-                    v-for="mov in ordenSeleccionada.movimientos"
+                    v-for="mov in movimientosOrdenSeleccionada"
                     :key="mov.id"
                     class="movimiento"
                     :class="claseMovimiento(mov.texto)"
+                    :style="estiloColorMovimiento(mov.texto)"
                   >
                     <div class="movimiento-bullet" :class="claseMovimientoBullet(mov.texto)">+</div>
                     <div>
@@ -964,6 +1021,33 @@
           <a :href="comprobanteActual" target="_blank" rel="noreferrer" class="comprobante-externo-link">
             Abrir en nueva pestaña
           </a>
+        </div>
+      </ion-modal>
+
+      <ion-modal
+        :is-open="mostrarConfirmacionPagoEntrega"
+        class="modal-confirmacion"
+        :backdrop-dismiss="false"
+        @didDismiss="alCerrarConfirmacionPagoEntrega"
+      >
+        <div class="modal-confirmacion-contenido force-light">
+          <div class="modal-confirmacion-header">
+            <div class="modal-confirmacion-icon">$</div>
+            <div>
+              <p class="modal-confirmacion-titulo">Confirmar pago pendiente</p>
+              <p class="modal-confirmacion-subtitulo">
+                Pago a procesar por
+                <strong>${{ saldoPendienteEntrega.toFixed(2) }} USD</strong>
+                para la orden {{ ordenCambioPendiente?.numero ?? '' }}.
+              </p>
+            </div>
+          </div>
+          <div class="modal-confirmacion-botones">
+            <button class="btn-outline" type="button" :disabled="peticionOrdenEnCurso" @click="cancelarConfirmacionPagoEntrega">Cancelar</button>
+            <button class="btn-principal" type="button" :disabled="peticionOrdenEnCurso" @click="aceptarConfirmacionPagoEntrega">
+              {{ peticionOrdenEnCurso ? 'Procesando...' : 'Aceptar' }}
+            </button>
+          </div>
         </div>
       </ion-modal>
 
@@ -1075,6 +1159,32 @@
             </template>
             <button class="btn-outline" type="button" @click="cerrarModalCargoExtra">Listo</button>
           </section>
+        </div>
+      </ion-modal>
+
+      <ion-modal :is-open="mostrarModalEliminarMora" class="modal-confirmacion" @didDismiss="cerrarModalEliminarMora">
+        <div class="modal-confirmacion-contenido force-light">
+          <div class="modal-confirmacion-header">
+            <div class="modal-confirmacion-icon">!</div>
+            <div>
+              <p class="modal-confirmacion-titulo">Eliminar cargos por mora</p>
+              <p class="modal-confirmacion-subtitulo">
+                ¿Qué deseas hacer después de eliminar los cargos actuales de la orden {{ ordenSeleccionada?.numero ?? '' }}?
+              </p>
+            </div>
+          </div>
+          <p class="hint-texto-vacio">
+            Si reinicias el conteo, no se cobrarán días anteriores y, si la orden ya venció, el próximo cargo se generará mañana. Si aún no vence, se respetarán la fecha de entrega y los dos días de gracia. También puedes suspender la mora futura.
+          </p>
+          <div class="modal-confirmacion-botones mora-eliminar-botones">
+            <button class="btn-outline" type="button" :disabled="peticionOrdenEnCurso" @click="cerrarModalEliminarMora">Cancelar</button>
+            <button class="btn-outline" type="button" :disabled="peticionOrdenEnCurso" @click="confirmarEliminarMora(false)">
+              {{ peticionOrdenEnCurso ? 'Guardando...' : 'Eliminar y reiniciar conteo' }}
+            </button>
+            <button class="btn-principal peligro" type="button" :disabled="peticionOrdenEnCurso" @click="confirmarEliminarMora(true)">
+              {{ peticionOrdenEnCurso ? 'Guardando...' : 'Eliminar y suspender' }}
+            </button>
+          </div>
         </div>
       </ion-modal>
 
@@ -1390,6 +1500,7 @@ const emit = defineEmits<{
 import AppShell from '@/components/AppShell.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { IonIcon, IonModal, IonSpinner, onIonViewWillEnter, toastController } from '@ionic/vue'
 import {
   useOrdenes,
@@ -1405,7 +1516,7 @@ import { useHistorialCierres } from '@/composables/useHistorialCierres'
 import { useTurno } from '@/composables/useTurno'
 import { useSesion } from '@/composables/useSesion'
 import { enviarCorreoNotificacion } from '@/composables/useCorreo'
-import { enviarFacturaOrdenPorCorreo, generarHtmlFacturaOrden } from '@/composables/Usepedido'
+import { enviarFacturaOrdenPorCorreo, generarHtmlFacturaOrden, resumirCargosExtraMora } from '@/composables/Usepedido'
 import { imprimirTicketOrden, imprimirTicketPrendas } from '@/utils/documentosOrden'
 import {
   checkmarkCircleOutline,
@@ -1434,6 +1545,53 @@ import {
 const route = useRoute()
 const router = useRouter()
 
+let pingModalInterval: number | undefined
+let refrescarOrdenModalInterval: number | undefined
+let pingModalAbortController: AbortController | null = null
+let pingModalEnCurso = false
+let refrescarOrdenModalEnCurso = false
+let pingModalErrorRegistrado = false
+
+const detenerPingModal = () => {
+  if (pingModalInterval !== undefined) {
+    window.clearInterval(pingModalInterval)
+    pingModalInterval = undefined
+  }
+  pingModalAbortController?.abort()
+  pingModalAbortController = null
+  pingModalEnCurso = false
+  if (refrescarOrdenModalInterval !== undefined) {
+    window.clearInterval(refrescarOrdenModalInterval)
+    refrescarOrdenModalInterval = undefined
+  }
+  refrescarOrdenModalEnCurso = false
+}
+
+const pingServidorMientrasEditaOrden = async () => {
+  if (pingModalEnCurso) return
+  pingModalEnCurso = true
+  const controlador = new AbortController()
+  pingModalAbortController = controlador
+  const timeout = window.setTimeout(() => controlador.abort(), 4000)
+  try {
+    const respuesta = await fetch(`${getApiBaseUrl()}/ping`, {
+      cache: 'no-store',
+      signal: controlador.signal
+    })
+    if (!respuesta.ok) throw new Error(`El servidor respondió con HTTP ${respuesta.status}.`)
+    pingModalErrorRegistrado = false
+  } catch (error) {
+    if (!controlador.signal.aborted && !pingModalErrorRegistrado) {
+      console.warn('No se pudo mantener activo el servidor mientras se edita la orden:', error)
+      pingModalErrorRegistrado = true
+    }
+  } finally {
+    window.clearTimeout(timeout)
+    if (pingModalAbortController === controlador) pingModalAbortController = null
+    pingModalEnCurso = false
+  }
+}
+
 const { servicios, cargarCatalogo } = useCatalogo()
 const { clientesConEstado } = useClientes()
 const { turno } = useTurno()
@@ -1451,12 +1609,17 @@ const {
   error: errorOrdenes,
   cargarOrdenes,
   obtenerOrdenPorId,
+  refrescarOrden,
   actualizarOrden,
   cambiarEstado,
   marcarPago,
   registrarAnticipo,
   agregarCargoExtra,
   eliminarCargoExtra,
+  detenerMora,
+  reanudarMora,
+  eliminarMora,
+  aplicarMora,
   eliminarAnticipo,
   eliminarFoto,
   agregarItemAOrden,
@@ -1626,6 +1789,8 @@ const prioridadEstado: Record<string, number> = {
 
 const arrastrandoOrdenId = ref('')
 const columnaActivaDrop = ref<OrdenEstado | ''>('')
+const mostrarConfirmacionPagoEntrega = ref(false)
+const avanzandoConfirmacionPagoEntrega = ref(false)
 const mostrarConfirmacionEstado = ref(false)
 const ordenCambioPendienteId = ref('')
 const estadoObjetivoCambio = ref<OrdenEstado | ''>('')
@@ -1647,6 +1812,7 @@ const enviandoCorreo = ref(false)
 const peticionOrdenEnCurso = ref(false)
 const mostrarModalComprobante = ref(false)
 const comprobanteActual = ref('')
+const mostrarModalEliminarMora = ref(false)
 
 const comprobanteEsImagen = computed(() => {
   const comprobante = comprobanteActual.value
@@ -2144,15 +2310,67 @@ const mostrarToastAnticipo = async (mensaje: string) => {
   await toast.present()
 }
 
+const esMovimientoEliminarMora = (texto: string) =>
+  texto.toLocaleLowerCase().includes('mora eliminada')
+
 const textoMovimientoVisible = (texto: string) =>
-  texto
+  (texto.toLocaleLowerCase().includes('mora') && !esMovimientoEliminarMora(texto) && !texto.includes('⚠️') ? `⚠️ ${texto}` : texto)
     .replace(/(Caja\s+#\d+)\s*\([^)]*\)/gi, '$1')
     .replace(/\s*\(turno\s+[^)]+\)/gi, '')
 
+const textoCargoExtra = (descripcion: string) =>
+  descripcion.toLocaleLowerCase().includes('mora') && !descripcion.includes('⚠️')
+    ? `⚠️ Cargo por mora · ${descripcion}`
+    : descripcion
+
+const montoMoraOrden = (orden?: Pick<Orden, 'cargosExtra'> | null) =>
+  Number((orden?.cargosExtra
+    .filter((cargo) => cargo.descripcion.toLocaleLowerCase().includes('mora'))
+    .reduce((suma, cargo) => suma + Number(cargo.monto || 0), 0) ?? 0).toFixed(2))
+
+const estadoDelMovimiento = (texto: string): OrdenEstado | null => {
+  const textoLimpio = texto.toLocaleLowerCase()
+  if (!textoLimpio.includes('estado cambiado a')) return null
+  if (textoLimpio.includes('pendiente')) return 'pendiente'
+  if (textoLimpio.includes('en_proceso') || textoLimpio.includes('en proceso')) return 'en_proceso'
+  if (textoLimpio.includes('listo')) return 'listo'
+  if (textoLimpio.includes('entregado')) return 'entregado'
+  if (textoLimpio.includes('cancelada')) return 'cancelada'
+  if (textoLimpio.includes('cerrada')) return 'cerrada'
+  return null
+}
+
+const estiloColorMovimiento = (texto: string): Record<string, string> => {
+  const estado = estadoDelMovimiento(texto)
+  const textoLimpio = texto.toLocaleLowerCase()
+  const colores = estado
+    ? estadoColores[estado]
+    : esMovimientoEliminarMora(texto)
+      ? { dot: '#dc2626', textStrong: '#b91c1c', bg: 'rgba(220, 38, 38, 0.10)' }
+      : textoLimpio.includes('mora')
+        ? { dot: '#d97706', textStrong: '#b45309', bg: 'rgba(245, 158, 11, 0.12)' }
+      : textoLimpio.includes('se elimin')
+      ? { dot: '#dc2626', textStrong: '#b91c1c', bg: 'rgba(220, 38, 38, 0.10)' }
+      : textoLimpio.includes('descuento aplicado')
+        ? { dot: '#f97316', textStrong: '#ea580c', bg: 'rgba(249, 115, 22, 0.10)' }
+        : textoLimpio.includes('pagado') || textoLimpio.includes('anticipo')
+          ? { dot: '#16a34a', textStrong: '#15803d', bg: 'rgba(22, 163, 74, 0.10)' }
+          : null
+  if (!colores) return {}
+  return {
+    '--estado-mov-color': colores.dot,
+    '--estado-mov-text': colores.textStrong,
+    '--estado-mov-bg': colores.bg
+  }
+}
+
 const claseMovimiento = (texto: string) => {
   const textoLimpio = texto.toLowerCase()
+  if (esMovimientoEliminarMora(texto)) return 'movimiento-rojo'
+  if (textoLimpio.includes('mora')) return 'movimiento-mora'
   if (textoLimpio.includes('se elimin')) return 'movimiento-rojo'
   if (textoLimpio.includes('descuento aplicado')) return 'movimiento-naranja'
+  if (estadoDelMovimiento(texto)) return 'movimiento-estado'
   if (textoLimpio.includes('pagado') || textoLimpio.includes('entregado')) return 'movimiento-verde'
   return ''
 }
@@ -2163,8 +2381,11 @@ const claseMovimientoBullet = (texto: string) => {
 
 const claseTextoMovimiento = (texto: string) => {
   const textoLimpio = texto.toLowerCase()
+  if (esMovimientoEliminarMora(texto)) return 'movimiento-texto-rojo'
+  if (textoLimpio.includes('mora')) return 'movimiento-texto-mora'
   if (textoLimpio.includes('se elimin')) return 'movimiento-texto-rojo'
   if (textoLimpio.includes('descuento aplicado')) return 'movimiento-texto-naranja'
+  if (estadoDelMovimiento(texto)) return 'movimiento-texto-estado'
   if (textoLimpio.includes('pagado') || textoLimpio.includes('entregado')) return 'movimiento-texto-verde'
   return ''
 }
@@ -2244,8 +2465,94 @@ const eliminarCargoExtraSeleccionado = async (idCargo: string) => {
   }
 }
 
+const detenerMoraSeleccionada = async () => {
+  if (!ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  peticionOrdenEnCurso.value = true
+  try {
+    await detenerMora(ordenSeleccionada.value.id)
+  } catch (error) {
+    window.alert(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? 'La solicitud para detener la mora tardó demasiado. Verifica la conexión y vuelve a abrir la orden para confirmar el estado.'
+        : error instanceof Error ? error.message : 'No se pudo detener la mora.'
+    )
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const reanudarMoraSeleccionada = async () => {
+  if (!ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  peticionOrdenEnCurso.value = true
+  try {
+    await reanudarMora(ordenSeleccionada.value.id)
+  } catch (error) {
+    window.alert(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? 'La solicitud para reanudar la mora tardó demasiado. Verifica la conexión y vuelve a abrir la orden para confirmar el estado.'
+        : error instanceof Error ? error.message : 'No se pudo reanudar la mora.'
+    )
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const eliminarMoraSeleccionada = async () => {
+  if (!ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  mostrarModalEliminarMora.value = true
+}
+
+const cerrarModalEliminarMora = () => {
+  if (peticionOrdenEnCurso.value) return
+  mostrarModalEliminarMora.value = false
+}
+
+const confirmarEliminarMora = async (suspenderFuturas: boolean) => {
+  if (!ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  peticionOrdenEnCurso.value = true
+  try {
+    await eliminarMora(ordenSeleccionada.value.id, suspenderFuturas)
+    mostrarModalEliminarMora.value = false
+  } catch (error) {
+    window.alert(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? 'La solicitud para eliminar la mora tardó demasiado. No se confirmó el resultado; vuelve a abrir la orden para verificar el estado antes de intentarlo de nuevo.'
+        : error instanceof Error ? error.message : 'No se pudo eliminar la mora.'
+    )
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const aplicarMoraSeleccionada = async () => {
+  if (!ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  const ordenId = ordenSeleccionada.value.id
+  peticionOrdenEnCurso.value = true
+  try {
+    await aplicarMora(ordenId)
+    try {
+      await refrescarOrden(ordenId)
+    } catch (error) {
+      window.alert(
+        `La mora se activó, pero no se pudo actualizar la información de la orden. ${error instanceof Error ? error.message : 'Vuelve a abrir la orden para actualizarla.'}`
+      )
+    }
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'No se pudo aplicar la mora.')
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
 const eliminarAnticipoSeleccionado = async (idAnticipo: string) => {
   if (!esAdministrador.value || !ordenSeleccionada.value || peticionOrdenEnCurso.value) return
+  const anticipo = ordenSeleccionada.value.anticipos.find((item) => item.id === idAnticipo)
+  if (!anticipo) return
+  const confirmado = window.confirm(
+    `¿Eliminar el anticipo de $${anticipo.monto.toFixed(2)} de la orden ${ordenSeleccionada.value.numero}? También se actualizará el cierre de caja correspondiente.`
+  )
+  if (!confirmado) return
+
   peticionOrdenEnCurso.value = true
 
   try {
@@ -2486,6 +2793,20 @@ const ordenSeleccionada = computed(() =>
   ordenSeleccionadaId.value ? obtenerOrdenPorId(ordenSeleccionadaId.value) : null
 )
 
+const movimientosOrdenSeleccionada = computed(() => {
+  const prioridadMovimiento = (texto: string) => {
+    const normalizado = texto.toLocaleLowerCase()
+    if (normalizado.includes('estado cambiado a entregado') || normalizado.includes('entrega antigua')) return 0
+    if (normalizado.includes('pago actualizado a pagado') || normalizado.includes('se registró el pago final')) return 1
+    return 2
+  }
+  return [...(ordenSeleccionada.value?.movimientos ?? [])].sort((a, b) => {
+    const diferenciaFecha = Date.parse(b.fecha) - Date.parse(a.fecha)
+    if (Number.isFinite(diferenciaFecha) && diferenciaFecha !== 0) return diferenciaFecha
+    return prioridadMovimiento(a.texto) - prioridadMovimiento(b.texto)
+  })
+})
+
 const clienteFrecuenteOrdenSeleccionada = computed(() => {
   const orden = ordenSeleccionada.value
   if (!orden) return null
@@ -2579,6 +2900,27 @@ const guardarEdicionCliente = async () => {
 
 const detalleAbierto = computed(() => Boolean(ordenSeleccionada.value))
 
+watch(detalleAbierto, (abierto) => {
+  detenerPingModal()
+  if (!abierto) return
+  void pingServidorMientrasEditaOrden()
+  pingModalInterval = window.setInterval(() => {
+    void pingServidorMientrasEditaOrden()
+  }, 5000)
+  refrescarOrdenModalInterval = window.setInterval(() => {
+    const id = ordenSeleccionada.value?.id
+    if (!id || refrescarOrdenModalEnCurso) return
+    refrescarOrdenModalEnCurso = true
+    void refrescarOrden(id)
+      .catch((error) => {
+        console.warn('No se pudo actualizar la orden mientras el modal está abierto:', error)
+      })
+      .finally(() => {
+        refrescarOrdenModalEnCurso = false
+      })
+  }, 30000)
+}, { immediate: true })
+
 const siguienteEstado = (estado: OrdenEstado): OrdenEstado | null => {
   const indice = estadosOrden.indexOf(estado)
 
@@ -2604,6 +2946,11 @@ const ordenCambioPendiente = computed(() =>
   ordenCambioPendienteId.value ? obtenerOrdenPorId(ordenCambioPendienteId.value) : null
 )
 
+const saldoPendienteEntrega = computed(() => {
+  const orden = ordenCambioPendiente.value
+  return Math.max(0, Number((orden?.total ?? 0) - (orden?.montoRecibido ?? 0)))
+})
+
 const ordenRecepcionPendiente = computed(() =>
   ordenRecepcionPendienteId.value ? obtenerOrdenPorId(ordenRecepcionPendienteId.value) : null
 )
@@ -2617,7 +2964,7 @@ const reiniciarArrastre = () => {
   columnaActivaDrop.value = ''
 }
 
-const abrirDetalle = (id: string) => {
+const abrirDetalle = async (id: string) => {
   const orden = obtenerOrdenPorId(id)
   if (requiereIntervencion(orden) && !esAdministrador.value) return
 
@@ -2628,6 +2975,12 @@ const abrirDetalle = (id: string) => {
     horaEntregaBorrador.value = orden.horaEntrega ?? ''
     cantidadPrendasBorrador.value = Number(orden.cantidadPrendas || 0)
   }
+  void refrescarOrden(id).catch((error) => {
+    console.error('No se pudo cargar la orden al abrirla:', error)
+    if (ordenSeleccionadaId.value === id) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo actualizar la orden. Revisa la conexión e intenta de nuevo.')
+    }
+  })
   if (props.soloDetalleId) return
   const query = { ...route.query, id }
   router.replace({ query }).catch(() => {})
@@ -2710,7 +3063,9 @@ const alternarCantidadPrendasCero = () => {
   cantidadPrendasBorrador.value = 0
 }
 
-watch(ordenSeleccionada, (orden) => {
+watch(() => ordenSeleccionada.value?.id, (id) => {
+  if (!id) return
+  const orden = obtenerOrdenPorId(id)
   if (!orden) return
   fechaCreacionBorrador.value = fechaISOaCentroamerica(orden.createdAt)
   fechaEntregaBorrador.value = orden.fechaEntrega ?? ''
@@ -2829,7 +3184,7 @@ const totalFinalOrden = (orden?: Pick<Orden, 'total' | 'montoRecibido' | 'estado
   Number(((orden?.estado === 'cancelada' ? -1 : 1) * Math.abs(
     orden?.estadoPago === 'pagado'
       ? (orden?.total ?? 0)
-      : (orden?.total ?? 0) - (orden?.montoRecibido ?? 0)
+      : Math.max(0, (orden?.total ?? 0) - (orden?.montoRecibido ?? 0))
   )).toFixed(2))
 
 // Se usa durante el cálculo de la lista de órdenes, que se evalúa antes que
@@ -2893,7 +3248,9 @@ const construirMensajeWhatsApp = (avisoActualizacion = '') => {
 
   const descuento = Math.max(0, Number(orden.descuento) || 0)
   const cargosExtra = orden.cargosExtra.length
-    ? orden.cargosExtra.map((cargo) => `${cargo.descripcion}: ${formatoMonto(cargo.monto)}`).join('\n')
+    ? resumirCargosExtraMora(orden.cargosExtra)
+        .map((cargo) => `${cargo.descripcion}: ${formatoMonto(cargo.monto)}`)
+        .join('\n')
     : ''
   const entrega = orden.fechaEntrega
     ? textoEntrega(orden)
@@ -3112,7 +3469,7 @@ const generarHtmlReporteOrden = (orden: Orden) => {
           </div>
           <div class="footer">Gracias por su preferencia.</div>
           <p>Contrato de servicio
-            Para retirar las prendas, es indispensable presentar este recibo como único comprobante válido. Las prendas deberán ser retiradas en un máximo de 1 día; de no hacerlo, se aplicará un cargo adicional de $0.50 por cada día de retraso. El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega. La lavandería no se responsabiliza por pérdidas o daños causados por eventos fortuitos o fuerza mayor, como robos, incendios o desastres naturales, siendo este riesgo asumido por el clienteb. Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas, liberando a la lavandería de toda responsabilidad sobre ellas. Si dichas prendas no son reclamadas en un plazo adicional de 10 días (40 días en total desde su disponibilidad), la lavandería se reserva el derecho de donarlas a refugios u organizaciones benéficas sin posibilidad de reclamos futuros. En caso de dudas, comuníquese con nosotros a lavanderiasalinassv@gmail.com o al teléfono 2497 6699.
+            Para retirar las prendas, es indispensable presentar este recibo como único comprobante válido. La mora por retraso en la entrega inicia después de 2 días calendario de gracia desde la fecha prometida; luego se aplica $0.50 por día. El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega. La lavandería no se responsabiliza por pérdidas o daños causados por eventos fortuitos o fuerza mayor, como robos, incendios o desastres naturales, siendo este riesgo asumido por el clienteb. Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas, liberando a la lavandería de toda responsabilidad sobre ellas. Si dichas prendas no son reclamadas en un plazo adicional de 10 días (40 días en total desde su disponibilidad), la lavandería se reserva el derecho de donarlas a refugios u organizaciones benéficas sin posibilidad de reclamos futuros. En caso de dudas, comuníquese con nosotros a lavanderiasalinassv@gmail.com o al teléfono 2497 6699.
             Este documento es válido como comprobante de pago emitido por Lavandería Salinas.</p>
           </div>
       </body>
@@ -3260,7 +3617,54 @@ const solicitarCambioEstado = (
     // No se requiere modal de recepción para este cambio
   }
 
+  if (
+    estadoDestino === 'entregado' &&
+    saldoPendienteEntrega.value > 0
+  ) {
+    mostrarConfirmacionPagoEntrega.value = true
+    return
+  }
+
   mostrarConfirmacionEstado.value = true
+}
+
+const cancelarConfirmacionPagoEntrega = () => {
+  mostrarConfirmacionPagoEntrega.value = false
+  ordenCambioPendienteId.value = ''
+  estadoObjetivoCambio.value = ''
+}
+
+const alCerrarConfirmacionPagoEntrega = () => {
+  if (avanzandoConfirmacionPagoEntrega.value) {
+    avanzandoConfirmacionPagoEntrega.value = false
+    mostrarConfirmacionEstado.value = true
+    return
+  }
+  cancelarConfirmacionPagoEntrega()
+}
+
+const aceptarConfirmacionPagoEntrega = async () => {
+  const orden = ordenCambioPendiente.value
+  if (!orden || peticionOrdenEnCurso.value) return
+  peticionOrdenEnCurso.value = true
+  try {
+    const movimiento = await registrarMovimiento(
+      orden.id,
+      `Pago a procesar por $${saldoPendienteEntrega.value.toFixed(2)} USD`
+    )
+    if (!movimiento) throw new Error('No se pudo registrar el movimiento de pago pendiente.')
+  } catch (error) {
+    window.alert(
+      error instanceof Error
+        ? error.message
+        : 'No se pudo registrar el movimiento de pago pendiente.'
+    )
+    return
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+  avanzandoConfirmacionPagoEntrega.value = true
+  mostrarConfirmacionPagoEntrega.value = false
 }
 
 const cancelarCambioEstado = () => {
@@ -3453,17 +3857,17 @@ const confirmarCambioEstado = async () => {
   peticionOrdenEnCurso.value = true
 
   try {
-    const estadoParaActualizar = usarEntregaAntigua ? 'cerrada' : estado
-    const ordenActualizada = await cambiarEstado(orden.id, estadoParaActualizar, {
-      ...(usarEntregaAntigua ? { turnoId: turnoIdEntregaAntigua.value } : {})
-    })
-
-    // Al entregar la orden, marcar automáticamente como pagada
-    if (estado === 'entregado') {
+    // Registrar el pago antes del movimiento de entrega para conservar el orden del historial.
+    if (estado === 'entregado' && orden.estadoPago !== 'pagado') {
       await marcarPago(orden.id, 'pagado', {
         turnoId: usarEntregaAntigua ? turnoIdEntregaAntigua.value : turno.id
       })
     }
+
+    const estadoParaActualizar = usarEntregaAntigua ? 'cerrada' : estado
+    const ordenActualizada = await cambiarEstado(orden.id, estadoParaActualizar, {
+      ...(usarEntregaAntigua ? { turnoId: turnoIdEntregaAntigua.value } : {})
+    })
 
     if (usarEntregaAntigua) await cargarHistorial()
 
@@ -3518,6 +3922,18 @@ const cambiarEstadoPago = async (id: string) => {
 
   const nuevoEstado = orden.estadoPago === 'pagado' ? 'porCobrar' : 'pagado'
   if (orden.estadoPago === 'pagado' && !esAdministrador.value) return
+  if (nuevoEstado === 'porCobrar') {
+    const ultimoCobro = [...orden.anticipos].sort((a, b) =>
+      `${b.fecha}-${b.id}`.localeCompare(`${a.fecha}-${a.id}`)
+    )[0]
+    const detalleCobro = ultimoCobro
+      ? ` Se eliminará el último cobro de $${ultimoCobro.monto.toFixed(2)}${orden.anticipos.length > 1 ? ' y se conservarán los anticipos anteriores.' : '.'}`
+      : ''
+    const confirmado = window.confirm(
+      `¿Regresar la orden ${orden.numero} a Por cobrar?${detalleCobro} También se actualizará el cierre de caja correspondiente.`
+    )
+    if (!confirmado) return
+  }
 
   peticionOrdenEnCurso.value = true
   try {
@@ -3541,6 +3957,7 @@ onIonViewWillEnter(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', actualizarOrdenesPorPagina)
+  detenerPingModal()
 })
 
 </script>
@@ -5656,6 +6073,11 @@ onBeforeUnmount(() => {
   color: #123a66;
 }
 
+.total-box-mora span,
+.total-box-mora strong {
+  color: #b45309;
+}
+
 .saldo-pendiente-box {
   display: flex;
   justify-content: space-between;
@@ -5728,6 +6150,22 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 0;
   align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--estado-mov-bg, transparent);
+}
+
+.movimiento-estado {
+  --bullet-color: var(--estado-mov-color);
+}
+
+.movimiento-estado .movimiento-bullet {
+  --bullet-color: var(--estado-mov-color);
+  background: var(--bullet-color);
+}
+
+.movimiento-estado .movimiento-texto-estado {
+  color: var(--estado-mov-text);
 }
 
 .movimiento:not(:last-child)::after {
@@ -5768,6 +6206,15 @@ onBeforeUnmount(() => {
 .movimiento-naranja .movimiento-bullet,
 .movimiento-naranja .movimiento-texto-naranja {
   color: #ea580c;
+}
+
+.movimiento-mora .movimiento-bullet,
+.movimiento-mora .movimiento-texto-mora {
+  color: #b45309;
+}
+
+.movimiento-mora .movimiento-bullet {
+  --bullet-color: #d97706;
 }
 
 .movimiento-verde .movimiento-bullet {
@@ -5882,6 +6329,10 @@ onBeforeUnmount(() => {
 .modal-confirmacion-botones {
   display: flex;
   gap: 10px;
+}
+
+.mora-eliminar-botones {
+  flex-direction: column;
 }
 
 .modal-confirmacion-botones button {
@@ -6242,6 +6693,109 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.mora-control .seccion-titulo {
+  align-items: center;
+}
+
+.mora-control .seccion-titulo-acciones {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.mora-accion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.mora-accion:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 9px rgba(10, 31, 56, 0.12);
+}
+
+.mora-accion:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.32);
+  outline-offset: 2px;
+}
+
+.mora-accion:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.mora-accion-detener {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.mora-accion-reanudar {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.mora-accion-aplicar {
+  color: #a16207;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.mora-accion-eliminar {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.mora-estado {
+  width: fit-content;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.mora-estado-detenida {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.mora-estado-inactiva {
+  color: #a16207;
+  background: #fffbeb;
+}
+
+.mora-estado-activa {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+@media (max-width: 560px) {
+  .mora-control .seccion-titulo-acciones {
+    justify-content: flex-start;
+  }
+
+  .mora-accion {
+    min-height: 30px;
+    padding: 6px 9px;
+    font-size: 0.71rem;
+  }
 }
 
 .lista-productos-modal {

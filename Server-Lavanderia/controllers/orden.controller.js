@@ -1,6 +1,10 @@
 const {
   obtenerOrdenes,
   obtenerOrdenPorId,
+  detenerMoraOrden,
+  reanudarMoraOrden,
+  eliminarMoraOrden,
+  aplicarMoraOrden,
   crearOrden,
   actualizarEstado,
   actualizarPago,
@@ -24,6 +28,20 @@ const { obtenerTurno } = require("../querys/turno.query");
 const manejarError = (res, error) => {
   if (error instanceof AppError) {
     return res.status(error.statusCode).json({ error: error.message });
+  }
+
+  if (["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "PROTOCOL_CONNECTION_LOST"].includes(error?.code)) {
+    console.warn("Conexión con MySQL interrumpida al procesar una orden:", error.code);
+    return res.status(503).json({
+      error: "No se pudo conectar con la base de datos. Verifica la conexión e intenta nuevamente.",
+    });
+  }
+
+  if (["ER_LOCK_WAIT_TIMEOUT", "ER_LOCK_DEADLOCK"].includes(error?.code)) {
+    console.warn("No se pudo completar la acción de orden por bloqueo concurrente en MySQL:", error.code);
+    return res.status(503).json({
+      error: "La orden está siendo actualizada por otra solicitud. Espera unos segundos y vuelve a intentarlo.",
+    });
   }
 
   console.error("Error inesperado en ordenes.controller:", error);
@@ -197,6 +215,43 @@ const cambiarEstado = async (req, res) => {
   } catch (error) {
     manejarError(res, error);
   }
+};
+
+const detenerMora = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) return res.status(403).json({ error: "Solo un administrador puede detener la mora." });
+    const orden = await detenerMoraOrden(req.params.id, usuario);
+    res.status(200).json(orden);
+  } catch (error) { manejarError(res, error); }
+};
+
+const reanudarMora = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) return res.status(403).json({ error: "Solo un administrador puede reanudar la mora." });
+    const orden = await reanudarMoraOrden(req.params.id, usuario);
+    res.status(200).json(orden);
+  } catch (error) { manejarError(res, error); }
+};
+
+const eliminarMora = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) return res.status(403).json({ error: "Solo un administrador puede eliminar la mora." });
+    const suspenderFuturas = req.body?.suspenderFuturas !== false;
+    const orden = await eliminarMoraOrden(req.params.id, usuario, suspenderFuturas);
+    res.status(200).json(orden);
+  } catch (error) { manejarError(res, error); }
+};
+
+const aplicarMora = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) return res.status(403).json({ error: "Solo un administrador puede aplicar la mora." });
+    const orden = await aplicarMoraOrden(req.params.id, usuario);
+    res.status(200).json(orden);
+  } catch (error) { manejarError(res, error); }
 };
 
 const marcarPago = async (req, res) => {
@@ -406,7 +461,7 @@ const restaurar = async (req, res) => {
 
 const eliminar = async (req, res) => {
   try {
-    await eliminarOrden(req.params.id);
+    await eliminarOrden(req.params.id, obtenerUsuarioAuditoria(req));
     res.status(204).send();
   } catch (error) {
     manejarError(res, error);
@@ -610,6 +665,10 @@ module.exports = {
   obtenerOrden,
   crear,
   cambiarEstado,
+  detenerMora,
+  reanudarMora,
+  eliminarMora,
+  aplicarMora,
   marcarPago,
   crearAnticipo,
   borrarAnticipo,

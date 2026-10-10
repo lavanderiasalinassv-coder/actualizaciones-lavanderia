@@ -2,10 +2,18 @@
   <AppShell>
     <main class="facturas-page force-light">
       <header class="page-header">
+        <div class="action-buttons">
         <button class="download-button" type="button" :disabled="!factura || generandoPdf" @click="descargarPdf">
           <ion-icon :icon="downloadOutline" />
           {{ generandoPdf ? 'Generando...' : 'Descargar PDF' }}
         </button>
+        <button class="share-button whatsapp-button" type="button" :disabled="!factura || generandoPdf" @click="compartirPdf('whatsapp')">
+          <ion-icon :icon="logoWhatsapp" /> WhatsApp
+        </button>
+        <button class="share-button email-button" type="button" :disabled="!factura || generandoPdf" @click="compartirPdf('correo')">
+          <ion-icon :icon="mailOutline" /> Correo
+        </button>
+        </div>
       </header>
 
       <section class="order-picker">
@@ -97,7 +105,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { IonIcon } from '@ionic/vue'
-import { addOutline, downloadOutline, receiptOutline, refreshOutline, searchOutline, trashOutline } from 'ionicons/icons'
+import { addOutline, downloadOutline, logoWhatsapp, mailOutline, receiptOutline, refreshOutline, searchOutline, trashOutline } from 'ionicons/icons'
 import { jsPDF } from 'jspdf'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -194,101 +202,102 @@ const restablecerFactura = () => {
 
 const agregarItem = () => factura.items.push({ uid: crypto.randomUUID(), nombre: '', cantidad: 1, precio: 0 })
 const quitarItem = (index: number) => factura.items.splice(index, 1)
-const textoEstado = (estado: string) => ({ pendiente: 'Pendiente', en_proceso: 'En proceso', listo: 'Listo', entregado: 'Entregado', cancelada: 'Cancelada', porCobrar: 'Por cobrar', anticipo: 'Anticipo', pagado: 'Pagado' }[estado] ?? estado)
+type DestinoCompartir = 'whatsapp' | 'correo'
+
+const generarPdf = () => {
+  const pdf = new jsPDF({ unit: 'mm', format: 'letter' })
+  const ancho = pdf.internal.pageSize.getWidth()
+  const alto = pdf.internal.pageSize.getHeight()
+  const margen = 16
+  let y = 18
+  const nuevaPagina = () => { pdf.addPage(); y = 18; encabezado() }
+  const encabezado = () => {
+    pdf.setFillColor(255, 255, 255); pdf.rect(0, 0, ancho, alto, 'F')
+    pdf.addImage(logoFactura, 'JPEG', margen, 10, 28, 28)
+    pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(22); pdf.text('Lavandería Salinas', margen + 34, 21)
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(111, 131, 153); pdf.text('Tu orden', margen + 34, 28)
+    pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12); pdf.text(`Orden ${factura.numero || 'Sin número'}`, ancho - margen, 20, { align: 'right' })
+    pdf.setDrawColor(10, 31, 56); pdf.setLineWidth(.6); pdf.line(margen, 42, ancho - margen, 42)
+    pdf.setTextColor(20, 39, 61); y = 53
+  }
+  const textoEstado = (estado: string) => ({ pendiente: 'Pendiente', en_proceso: 'En proceso', listo: 'Listo', entregado: 'Entregado', cancelada: 'Cancelada', porCobrar: 'Por cobrar', anticipo: 'Anticipo', pagado: 'Pagado' }[estado] ?? estado)
+  encabezado()
+  pdf.setFillColor(243, 251, 250); pdf.setDrawColor(205, 235, 230); pdf.roundedRect(margen, y, ancho - margen * 2, 45, 3, 3, 'FD')
+  pdf.setTextColor(18, 58, 102); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.text(`Orden ${factura.numero || 'Sin número'}`, margen + 6, y + 8)
+  pdf.setTextColor(20, 39, 61); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+  pdf.text(`Cliente: ${factura.nombreCliente || '-'}`, margen + 6, y + 16)
+  pdf.text(`Fecha de creación: ${factura.fechaCreacion || '-'}`, margen + 6, y + 23)
+  pdf.text(`Prendas recibidas: ${factura.cantidadPrendas || 0}`, margen + 6, y + 30)
+  pdf.text(`Estado de pago: ${textoEstado(factura.estadoPago)}`, margen + 6, y + 37)
+  pdf.text(`Monto recibido: $${Math.max(0, Number(factura.montoRecibido) || 0).toFixed(2)}`, margen + 86, y + 16)
+  const textoEntrega = factura.fechaEntrega ? `${factura.fechaEntrega}${factura.horaEntrega ? ` a las ${factura.horaEntrega}` : ''}` : 'Sin fecha'
+  pdf.text(`Entrega: ${textoEntrega}`, margen + 86, y + 23)
+  pdf.text(`Saldo pendiente: $${saldoPendiente.value.toFixed(2)}`, margen + 86, y + 30)
+  if (factura.detallesPrendas.trim()) pdf.text(pdf.splitTextToSize(`Detalles: ${factura.detallesPrendas.trim()}`, 80), margen + 86, y + 37)
+  y += 55
+  pdf.setTextColor(18, 58, 102); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.text('Servicios', margen, y); y += 8
+  pdf.setFillColor(10, 31, 56); pdf.rect(margen, y, ancho - margen * 2, 9, 'F'); pdf.setTextColor(255, 255, 255); pdf.setFontSize(9)
+  pdf.text('SERVICIO', margen + 3, y + 5.8); pdf.text('CANT.', ancho - 67, y + 5.8, { align: 'right' }); pdf.text('PRECIO', ancho - 42, y + 5.8, { align: 'right' }); pdf.text('SUBTOTAL', ancho - margen - 3, y + 5.8, { align: 'right' }); y += 13
+  pdf.setTextColor(20, 39, 61)
+  for (const item of factura.items) {
+    if (y > alto - 62) nuevaPagina()
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+    const nombre = pdf.splitTextToSize(item.nombre || 'Servicio', 92)
+    pdf.text(nombre, margen + 3, y)
+    pdf.text(String(Math.max(0, Number(item.cantidad) || 0)), ancho - 67, y, { align: 'right' })
+    pdf.text(`$${Math.max(0, Number(item.precio) || 0).toFixed(2)}`, ancho - 42, y, { align: 'right' })
+    pdf.text(`$${subtotalItem(item).toFixed(2)}`, ancho - margen - 3, y, { align: 'right' })
+    y += Math.max(7, nombre.length * 4.5)
+  }
+  y += 4
+  if (y > alto - 57) nuevaPagina()
+  const cajaTotalesX = ancho - 82
+  const cajaTotalesAncho = 66
+  const cajaTotalesPad = 12
+  pdf.setFillColor(248, 251, 254); pdf.setDrawColor(201, 217, 232); pdf.roundedRect(cajaTotalesX, y, cajaTotalesAncho, 42, 2, 2, 'FD'); y += 7
+  const formatoMonto = (monto: number) => monto < 0 ? `-$${Math.abs(monto).toFixed(2)}` : `$${monto.toFixed(2)}`
+  const totalLinea = (etiqueta: string, monto: number, fuerte = false) => { pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', fuerte ? 'bold' : 'normal'); pdf.setFontSize(fuerte ? 12 : 9); pdf.text(etiqueta, cajaTotalesX + cajaTotalesPad, y); pdf.text(formatoMonto(monto), cajaTotalesX + cajaTotalesAncho - cajaTotalesPad, y, { align: 'right' }); y += fuerte ? 8 : 6 }
+  totalLinea('Subtotal', subtotal.value)
+  totalLinea('Descuento total', -descuentoMonto.value)
+  totalLinea('Total', total.value, true)
+  totalLinea('Monto recibido', Math.max(0, Number(factura.montoRecibido) || 0))
+  totalLinea('Saldo pendiente', saldoPendiente.value)
+  pdf.setTextColor(111, 131, 153); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.text('Gracias por su preferencia.', margen, alto - 15)
+  pdf.setDrawColor(216, 228, 238); pdf.line(margen, alto - 11, ancho - margen, alto - 11)
+  pdf.text('Este documento es válido como comprobante de pago emitido por Lavandería Salinas.', margen, alto - 6)
+  pdf.addPage()
+  pdf.setFillColor(255, 249, 230); pdf.setDrawColor(255, 215, 0); pdf.roundedRect(margen, 16, ancho - margen * 2, alto - 32, 3, 3, 'FD')
+  pdf.addImage(logoFactura, 'JPEG', margen + 8, 24, 20, 20)
+  pdf.setTextColor(184, 134, 11); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16); pdf.text('CONDICIONES DEL SERVICIO', margen + 34, 36)
+  const politicas = [
+    'Para retirar las prendas, es indispensable presentar este recibo como único comprobante válido.',
+    'La mora por retraso en la entrega inicia después de 2 días calendario de gracia desde la fecha prometida; luego se aplica $0.50 por día.',
+    'El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega.',
+    'La lavandería no se responsabiliza por pérdidas o daños causados por eventos fortuitos o fuerza mayor, como robos, incendios o desastres naturales, siendo este riesgo asumido por el cliente.',
+    'Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas, liberando a la lavandería de toda responsabilidad sobre ellas.',
+    'Si dichas prendas no son reclamadas en un plazo adicional de 10 días (40 días en total desde su disponibilidad), la lavandería se reserva el derecho de donarlas a refugios u organizaciones benéficas sin posibilidad de reclamos futuros.',
+    'En caso de dudas, comuníquese con nosotros: lavanderiasalinassv@gmail.com o 2497 6699 por WhatsApp.'
+  ]
+  y = 57; pdf.setTextColor(51, 51, 51); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
+  for (const politica of politicas) {
+    const lineas = pdf.splitTextToSize(politica, ancho - margen * 2 - 16)
+    pdf.text(lineas, margen + 8, y)
+    y += lineas.length * 4.6 + 8
+  }
+  pdf.setDrawColor(230, 237, 243); pdf.line(margen + 8, alto - 30, ancho - margen - 8, alto - 30)
+  pdf.setTextColor(111, 131, 153); pdf.setFontSize(8); pdf.text('Este documento es válido como comprobante de pago emitido por Lavandería Salinas.', ancho / 2, alto - 22, { align: 'center' })
+  pdf.text('Gracias por confiar en nuestros servicios.', ancho / 2, alto - 16, { align: 'center' })
+  return pdf
+}
+
+const nombreArchivoPdf = () => `Factura-Lavandería-Salinas-${(factura.numero || 'orden').replace(/[^a-z0-9_-]/gi, '')}.pdf`
 
 const descargarPdf = async () => {
   if (!ordenSeleccionada.value || generandoPdf.value) return
   generandoPdf.value = true
   try {
-    const pdf = new jsPDF({ unit: 'mm', format: 'letter' })
-    const ancho = pdf.internal.pageSize.getWidth()
-    const alto = pdf.internal.pageSize.getHeight()
-    const margen = 16
-    let y = 18
-    const nuevaPagina = () => { pdf.addPage(); y = 18; encabezado() }
-    const texto = (valor: string, x: number, maxWidth: number, size = 10, estilo: 'normal' | 'bold' = 'normal') => {
-      pdf.setFont('helvetica', estilo); pdf.setFontSize(size)
-      const lineas = pdf.splitTextToSize(valor || '-', maxWidth)
-      pdf.text(lineas, x, y)
-      y += lineas.length * (size * 0.42)
-    }
-    const encabezado = () => {
-      pdf.setFillColor(255, 255, 255); pdf.rect(0, 0, ancho, alto, 'F')
-      pdf.addImage(logoFactura, 'JPEG', margen, 10, 28, 28)
-      pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(22); pdf.text('Lavandería Salinas', margen + 34, 21)
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(111, 131, 153); pdf.text('Tu orden', margen + 34, 28)
-      pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12); pdf.text(`Orden ${factura.numero || 'Sin número'}`, ancho - margen, 20, { align: 'right' })
-      pdf.setDrawColor(10, 31, 56); pdf.setLineWidth(.6); pdf.line(margen, 42, ancho - margen, 42)
-      pdf.setTextColor(20, 39, 61); y = 53
-    }
-    encabezado()
-    pdf.setFillColor(243, 251, 250); pdf.setDrawColor(205, 235, 230); pdf.roundedRect(margen, y, ancho - margen * 2, 45, 3, 3, 'FD')
-    pdf.setTextColor(18, 58, 102); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.text(`Orden ${factura.numero || 'Sin número'}`, margen + 6, y + 8)
-    pdf.setTextColor(20, 39, 61); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
-    pdf.text(`Cliente: ${factura.nombreCliente || '-'}`, margen + 6, y + 16)
-    pdf.text(`Fecha de creación: ${factura.fechaCreacion || '-'}`, margen + 6, y + 23)
-    pdf.text(`Prendas recibidas: ${factura.cantidadPrendas || 0}`, margen + 6, y + 30)
-    pdf.text(`Estado de pago: ${textoEstado(factura.estadoPago)}`, margen + 6, y + 37)
-    pdf.text(`Monto recibido: $${Math.max(0, Number(factura.montoRecibido) || 0).toFixed(2)}`, margen + 86, y + 16)
-    const textoEntrega = factura.fechaEntrega ? `${factura.fechaEntrega}${factura.horaEntrega ? ` a las ${factura.horaEntrega}` : ''}` : 'Sin fecha'
-    pdf.text(`Entrega: ${textoEntrega}`, margen + 86, y + 23)
-    pdf.text(`Saldo pendiente: $${saldoPendiente.value.toFixed(2)}`, margen + 86, y + 30)
-    if (factura.detallesPrendas.trim()) pdf.text(pdf.splitTextToSize(`Detalles: ${factura.detallesPrendas.trim()}`, 80), margen + 86, y + 37)
-    y += 55
-    pdf.setTextColor(18, 58, 102); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.text('Servicios', margen, y); y += 8
-    pdf.setFillColor(10, 31, 56); pdf.rect(margen, y, ancho - margen * 2, 9, 'F'); pdf.setTextColor(255, 255, 255); pdf.setFontSize(9)
-    pdf.text('SERVICIO', margen + 3, y + 5.8); pdf.text('CANT.', ancho - 67, y + 5.8, { align: 'right' }); pdf.text('PRECIO', ancho - 42, y + 5.8, { align: 'right' }); pdf.text('SUBTOTAL', ancho - margen - 3, y + 5.8, { align: 'right' }); y += 13
-    pdf.setTextColor(20, 39, 61)
-    for (const item of factura.items) {
-      if (y > alto - 62) nuevaPagina()
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
-      const nombre = pdf.splitTextToSize(item.nombre || 'Servicio', 92)
-      pdf.text(nombre, margen + 3, y)
-      pdf.text(String(Math.max(0, Number(item.cantidad) || 0)), ancho - 67, y, { align: 'right' })
-      pdf.text(`$${Math.max(0, Number(item.precio) || 0).toFixed(2)}`, ancho - 42, y, { align: 'right' })
-      pdf.text(`$${subtotalItem(item).toFixed(2)}`, ancho - margen - 3, y, { align: 'right' })
-      y += Math.max(7, nombre.length * 4.5)
-    }
-    y += 4
-    if (y > alto - 57) nuevaPagina()
-    const cajaTotalesX = ancho - 82
-    const cajaTotalesAncho = 66
-    const cajaTotalesPad = 12
-    pdf.setFillColor(248, 251, 254); pdf.setDrawColor(201, 217, 232); pdf.roundedRect(cajaTotalesX, y, cajaTotalesAncho, 42, 2, 2, 'FD'); y += 7
-    const formatoMonto = (monto: number) => monto < 0 ? `-$${Math.abs(monto).toFixed(2)}` : `$${monto.toFixed(2)}`
-    const totalLinea = (etiqueta: string, monto: number, fuerte = false) => { pdf.setTextColor(10, 31, 56); pdf.setFont('helvetica', fuerte ? 'bold' : 'normal'); pdf.setFontSize(fuerte ? 12 : 9); pdf.text(etiqueta, cajaTotalesX + cajaTotalesPad, y); pdf.text(formatoMonto(monto), cajaTotalesX + cajaTotalesAncho - cajaTotalesPad, y, { align: 'right' }); y += fuerte ? 8 : 6 }
-    totalLinea('Subtotal', subtotal.value)
-    totalLinea('Descuento total', -descuentoMonto.value)
-    totalLinea('Total', total.value, true)
-    totalLinea('Monto recibido', Math.max(0, Number(factura.montoRecibido) || 0))
-    totalLinea('Saldo pendiente', saldoPendiente.value)
-    pdf.setTextColor(111, 131, 153); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.text('Gracias por su preferencia.', margen, alto - 15)
-    pdf.setDrawColor(216, 228, 238); pdf.line(margen, alto - 11, ancho - margen, alto - 11)
-    pdf.text('Este documento es válido como comprobante de pago emitido por Lavandería Salinas.', margen, alto - 6)
-
-    pdf.addPage()
-    pdf.setFillColor(255, 249, 230); pdf.setDrawColor(255, 215, 0); pdf.roundedRect(margen, 16, ancho - margen * 2, alto - 32, 3, 3, 'FD')
-    pdf.addImage(logoFactura, 'JPEG', margen + 8, 24, 20, 20)
-    pdf.setTextColor(184, 134, 11); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16); pdf.text('CONDICIONES DEL SERVICIO', margen + 34, 36)
-    const politicas = [
-      'Para retirar las prendas, es indispensable presentar este recibo como único comprobante válido.',
-      'Las prendas deberán ser retiradas en un máximo de 1 día; de no hacerlo, se aplicará un cargo adicional de $0.50 por cada día de retraso.',
-      'El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega.',
-      'La lavandería no se responsabiliza por pérdidas o daños causados por eventos fortuitos o fuerza mayor, como robos, incendios o desastres naturales, siendo este riesgo asumido por el cliente.',
-      'Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas, liberando a la lavandería de toda responsabilidad sobre ellas.',
-      'Si dichas prendas no son reclamadas en un plazo adicional de 10 días (40 días en total desde su disponibilidad), la lavandería se reserva el derecho de donarlas a refugios u organizaciones benéficas sin posibilidad de reclamos futuros.',
-      'En caso de dudas, comuníquese con nosotros: lavanderiasalinassv@gmail.com o 2497 6699 por WhatsApp.'
-    ]
-    y = 57; pdf.setTextColor(51, 51, 51); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10)
-    for (const politica of politicas) {
-      const lineas = pdf.splitTextToSize(politica, ancho - margen * 2 - 16)
-      pdf.text(lineas, margen + 8, y)
-      y += lineas.length * 4.6 + 8
-    }
-    pdf.setDrawColor(230, 237, 243); pdf.line(margen + 8, alto - 30, ancho - margen - 8, alto - 30)
-    pdf.setTextColor(111, 131, 153); pdf.setFontSize(8); pdf.text('Este documento es válido como comprobante de pago emitido por Lavandería Salinas.', ancho / 2, alto - 22, { align: 'center' })
-    pdf.text('Gracias por confiar en nuestros servicios.', ancho / 2, alto - 16, { align: 'center' })
-    const nombreArchivo = `Factura-Lavandería-Salinas-${(factura.numero || 'orden').replace(/[^a-z0-9_-]/gi, '')}.pdf`
+    const pdf = generarPdf()
+    const nombreArchivo = nombreArchivoPdf()
     if (Capacitor.isNativePlatform()) {
       const guardado = await Filesystem.writeFile({ path: nombreArchivo, data: pdf.output('datauristring').split(',')[1], directory: Directory.Cache })
       await Share.share({ title: `Factura ${factura.numero}`, text: 'Factura de Lavandería Salinas', url: guardado.uri, dialogTitle: 'Guardar o compartir factura' })
@@ -302,16 +311,54 @@ const descargarPdf = async () => {
     generandoPdf.value = false
   }
 }
+
+const compartirPdf = async (destino: DestinoCompartir) => {
+  if (!ordenSeleccionada.value || generandoPdf.value) return
+  generandoPdf.value = true
+  try {
+    const pdf = generarPdf()
+    const nombreArchivo = nombreArchivoPdf()
+    const mensaje = `Hola ${factura.nombreCliente || ''}, te compartimos la factura ${factura.numero} de Lavandería Salinas. Total: $${total.value.toFixed(2)}.`
+    if (destino === 'whatsapp') {
+      const datosPdf = pdf.output('datauristring').split(',')[1]
+      window.dispatchEvent(new CustomEvent('whatsapp-compose', {
+        detail: { phone: factura.telefono, message: mensaje, pdf: datosPdf, fileName: nombreArchivo }
+      }))
+      return
+    }
+    if (Capacitor.isNativePlatform()) {
+      const guardado = await Filesystem.writeFile({ path: nombreArchivo, data: pdf.output('datauristring').split(',')[1], directory: Directory.Cache })
+      await Share.share({ title: `Factura ${factura.numero}`, text: mensaje, url: guardado.uri, dialogTitle: 'Elige tu correo para compartir la factura' })
+      return
+    }
+    const archivo = new File([pdf.output('blob')], nombreArchivo, { type: 'application/pdf' })
+    if (navigator.canShare?.({ files: [archivo] }) && navigator.share) {
+      await navigator.share({ title: `Factura ${factura.numero}`, text: mensaje, files: [archivo] })
+      return
+    }
+    pdf.save(nombreArchivo)
+    const asunto = `Factura ${factura.numero} - Lavandería Salinas`
+    window.location.href = `mailto:${encodeURIComponent(factura.correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(`${mensaje}\n\nAdjunta el archivo PDF descargado antes de enviar.`)}`
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    console.error('No se pudo compartir la factura PDF:', error)
+    window.alert('No se pudo compartir la factura. Intenta descargar el PDF.')
+  } finally {
+    generandoPdf.value = false
+  }
+}
+
 </script>
 
 <style scoped>
 .force-light { --ion-background-color: #f4f7f9; --ion-text-color: #10263d; color: #10263d; }
 .facturas-page { min-height: 100%; padding: 28px; background: #f4f7f9; }
-.page-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 24px; }
+.page-header { display: flex; justify-content: flex-end; gap: 20px; align-items: flex-start; margin-bottom: 24px; }.action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .eyebrow { margin: 0 0 4px; color: #17756c; font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: 0; }
 h1, h2, h3, p { margin-top: 0; } h1 { margin-bottom: 6px; font-size: 2rem; } .page-header p:not(.eyebrow) { color: #60758a; margin-bottom: 0; }
 .download-button, .add-item, .reset-button, .icon-button { border: 0; cursor: pointer; font: inherit; }
 .download-button { display: inline-flex; align-items: center; gap: 8px; background: #123a66; color: #fff; padding: 11px 16px; border-radius: 6px; font-weight: 700; white-space: nowrap; }.download-button:disabled { opacity: .6; cursor: not-allowed; }
+.share-button { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 6px; padding: 11px 16px; color: #fff; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }.whatsapp-button { background: #168b54; }.email-button { background: #52687d; }.share-button:disabled { opacity: .6; cursor: not-allowed; }
 .order-picker, .editor-panel, .preview-panel { background: #fff; border: 1px solid #dbe5ed; border-radius: 8px; }
 .order-picker { padding: 16px; margin-bottom: 20px; }.order-picker label, .field span { display: block; margin-bottom: 7px; font-size: .82rem; font-weight: 700; color: #40566d; }.search-control, .picker-control { display: flex; align-items: center; gap: 8px; max-width: 640px; color: #60758a; }.search-control { position: relative; margin-bottom: 10px; }.search-control input, .picker-control select { flex: 1; }.clear-search { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border: 0; border-radius: 4px; background: #edf3f7; color: #40566d; cursor: pointer; }.clear-search:hover, .clear-search:focus-visible { background: #dce9f1; outline: 0; }.search-results { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; overflow: hidden; border: 1px solid #c7d6e2; border-radius: 5px; background: #fff; box-shadow: 0 8px 18px rgba(25, 55, 78, .14); }.search-result { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; border: 0; border-bottom: 1px solid #edf1f4; background: #fff; color: #10263d; cursor: pointer; text-align: left; font: inherit; }.search-result:last-child { border-bottom: 0; }.search-result:hover, .search-result:focus-visible { background: #eef8f6; outline: 0; }.search-result span { margin: 0; color: #60758a; font-size: .8rem; font-weight: 400; }.no-results { margin: 0; padding: 12px; color: #60758a; font-size: .86rem; }
 select, input, textarea { width: 100%; box-sizing: border-box; border: 1px solid #c7d6e2; border-radius: 5px; background: #fff; color: #10263d; padding: 9px 10px; font: inherit; } textarea { resize: vertical; }
@@ -325,7 +372,7 @@ select, input, textarea { width: 100%; box-sizing: border-box; border: 1px solid
   .preview-panel { position: static; }
   .preview-sheet { min-height: 0; }
   .page-header { flex-direction: column; }
-  .download-button { width: 100%; justify-content: center; }
+  .action-buttons { width: 100%; }.download-button, .share-button { flex: 1; justify-content: center; }
   .order-picker { margin-bottom: 16px; }
   .picker-control { max-width: none; }
 }

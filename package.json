@@ -1,6 +1,6 @@
 {
   "name": "lavanderia-desktop",
-  "version": "3.3.5",
+  "version": "3.3.6",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -49,6 +49,10 @@
       {
         "from": "lavanderia-salinas/dist",
         "to": "backend/frontend/dist"
+      },
+      {
+        "from": "lavanderia-salinas/MYSQLTABLES.sql",
+        "to": "backend/migrations/MYSQLTABLES.sql"
       },
       {
         "from": "logoapp.png",

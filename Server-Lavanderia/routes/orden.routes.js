@@ -7,6 +7,10 @@ router.get("/:id", controller.obtenerOrden);
 router.post("/", controller.crear);
 
 router.patch("/:id/estado", controller.cambiarEstado);
+router.post("/:id/detener-mora", controller.detenerMora);
+router.post("/:id/reanudar-mora", controller.reanudarMora);
+router.post("/:id/eliminar-mora", controller.eliminarMora);
+router.post("/:id/aplicar-mora", controller.aplicarMora);
 router.patch("/:id/pago", controller.marcarPago);
 router.patch("/:id", controller.actualizarCampos); // solo notaInterna y/o fotos
 

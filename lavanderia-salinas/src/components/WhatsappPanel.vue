@@ -24,20 +24,13 @@
 
       <div ref="bodyRef" class="whatsapp-panel-body">
         <webview
-          v-if="esElectron"
           ref="webviewRef"
           class="whatsapp-webview"
-          :src="urlInicial || 'https://web.whatsapp.com'"
+          :src="urlWhatsappInicialSegura"
           partition="persist:lavanderia-whatsapp"
           useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-          allowpopups
           @dom-ready="onWebviewListo"
         ></webview>
-        <div v-else class="whatsapp-browser-fallback">
-          <ion-icon :icon="logoWhatsapp" />
-          <strong>WhatsApp Web se abrirá en una pestaña nueva</strong>
-          <button type="button" @click="abrirEnNavegador">Abrir WhatsApp Web</button>
-        </div>
       </div>
     </aside>
   </Teleport>
@@ -46,16 +39,34 @@
 <script setup lang="ts">
 import { IonIcon } from '@ionic/vue'
 import { closeOutline, contractOutline, expandOutline, logoWhatsapp, refreshOutline } from 'ionicons/icons'
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   abierto: boolean
   urlInicial?: string
   solicitudCarga?: number
   imagenPendiente?: string
+  pdfPendiente?: { data: string; name: string } | null
   textoAdjunto?: string
   solicitudAdjunto?: number
 }>()
+const URL_WHATSAPP = 'https://web.whatsapp.com'
+const normalizarUrlWhatsapp = (url?: string) => {
+  if (!url) return URL_WHATSAPP
+  const destino = new URL(url)
+  if (destino.origin !== URL_WHATSAPP) {
+    throw new Error('El panel solo puede cargar WhatsApp Web.')
+  }
+  return destino.href
+}
+const urlWhatsappInicialSegura = computed(() => {
+  try {
+    return normalizarUrlWhatsapp(props.urlInicial)
+  } catch (error) {
+    console.error('No se pudo validar la URL inicial de WhatsApp:', error)
+    return URL_WHATSAPP
+  }
+})
 const emit = defineEmits<{
   cerrar: []
   'modo-cambio': [lateral: boolean]
@@ -84,8 +95,6 @@ const alternarModo = () => {
   lateral.value = !lateral.value
   emit('modo-cambio', lateral.value)
 }
-
-const esElectron = typeof window !== 'undefined' && Boolean((window as Window & { electronAPI?: unknown }).electronAPI)
 
 // CSS que se inyecta DENTRO de la página de WhatsApp Web (no del panel).
 // En vez de ocultar el scroll, lo dejamos visible pero delgado y discreto,
@@ -120,6 +129,7 @@ const webviewListo = ref(false)
 let ultimaSolicitudCargaAplicada = props.solicitudCarga ?? 0
 let ultimaSolicitudAdjuntoAplicada = props.solicitudAdjunto ?? 0
 let cargaWhatsappEnCurso: Promise<void> | null = null
+let mensajeWhatsappPrecargado = false
 const estadoAdjunto = ref('')
 
 let resizeObserver: ResizeObserver | null = null
@@ -142,8 +152,59 @@ const forzarReajuste = () => {
   }
 }
 
+const enfocarEditorMensaje = async (esperarEditor: boolean) => {
+  const webview = webviewRef.value
+  if (!webview || !mensajeWhatsappPrecargado) return
+
+  const resultado = esperarEditor
+    ? await webview.executeJavaScript(`new Promise(resolve => {
+        let intentos = 0;
+        const enfocarEditor = () => {
+          const editor = document.querySelector('[contenteditable="true"][data-tab="10"]') ||
+            document.querySelector('[contenteditable="true"][role="textbox"]');
+          if (editor) {
+            editor.focus();
+            const rango = document.createRange();
+            rango.selectNodeContents(editor);
+            rango.collapse(false);
+            const seleccion = window.getSelection();
+            seleccion.removeAllRanges();
+            seleccion.addRange(rango);
+            resolve(true);
+            return;
+          }
+          intentos += 1;
+          if (intentos >= 40) {
+            resolve(false);
+            return;
+          }
+          setTimeout(enfocarEditor, 250);
+        };
+        enfocarEditor();
+      })`)
+    : await webview.executeJavaScript(`(() => {
+        const editor = document.querySelector('[contenteditable="true"][data-tab="10"]') ||
+          document.querySelector('[contenteditable="true"][role="textbox"]');
+        if (!editor) return false;
+        editor.focus();
+        const rango = document.createRange();
+        rango.selectNodeContents(editor);
+        rango.collapse(false);
+        const seleccion = window.getSelection();
+        seleccion.removeAllRanges();
+        seleccion.addRange(rango);
+        return true;
+      })()`)
+
+  if (!resultado && esperarEditor) {
+    console.warn('No se encontró el cuadro de mensaje de WhatsApp para enfocarlo.')
+  }
+}
+
 const onWebviewListo = () => {
   webviewListo.value = true
+  const urlActual = webviewRef.value?.getURL?.() || props.urlInicial || ''
+  mensajeWhatsappPrecargado = new URL(urlActual).searchParams.has('text')
   try {
     webviewRef.value?.insertCSS(CSS_ESTILO_SCROLL)
   } catch {
@@ -155,6 +216,12 @@ const onWebviewListo = () => {
   // Un segundo empujón tras el primer pintado, por si la página
   // todavía no había terminado de montar su layout inicial.
   setTimeout(forzarReajuste, 400)
+  restaurarFocoWebview()
+  if (mensajeWhatsappPrecargado) {
+    void enfocarEditorMensaje(true).catch((error: unknown) => {
+      console.error('No se pudo enfocar el cuadro de mensaje de WhatsApp:', error)
+    })
+  }
 }
 
 // Cada vez que el CONTENEDOR cambia de tamaño (se abre/cierra el panel,
@@ -173,13 +240,29 @@ const observarTamano = () => {
   resizeObserver.observe(bodyRef.value)
 }
 
+const restaurarFocoWebview = () => {
+  if (!props.abierto || !webviewListo.value || document.visibilityState !== 'visible') return
+  const webview = webviewRef.value
+  if (!webview) return
+
+  webview.focus()
+  const restaurarFoco = mensajeWhatsappPrecargado
+    ? enfocarEditorMensaje(false)
+    : webview.executeJavaScript('window.focus()')
+  void restaurarFoco.catch((error: unknown) => {
+    console.warn('No se pudo restaurar el foco de WhatsApp:', error)
+  })
+}
+
 onMounted(() => {
   observarTamano()
+  window.addEventListener('focus', restaurarFocoWebview)
 })
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
+  window.removeEventListener('focus', restaurarFocoWebview)
 })
 
 // Cuando el panel pasa de cerrado a abierto, el webview pudo haberse
@@ -193,6 +276,7 @@ watch(
     }
     await nextTick()
     forzarReajuste()
+    restaurarFocoWebview()
     if (!resizeObserver) observarTamano()
   }
 )
@@ -200,14 +284,27 @@ watch(
 const aplicarSolicitudCargaWhatsapp = () => {
   const solicitud = props.solicitudCarga ?? 0
   if (solicitud === ultimaSolicitudCargaAplicada) return
-  const url = props.urlInicial
+  let url: string
+  try {
+    url = normalizarUrlWhatsapp(props.urlInicial)
+  } catch (error) {
+    console.error('No se pudo validar la URL de WhatsApp:', error)
+    estadoAdjunto.value = 'No se pudo abrir el chat de WhatsApp.'
+    return
+  }
   const webview = webviewRef.value
   if (!url || !webview || !webviewListo.value) return
 
   ultimaSolicitudCargaAplicada = solicitud
+  mensajeWhatsappPrecargado = new URL(url).searchParams.has('text')
   try {
     cargaWhatsappEnCurso = Promise.resolve(webview.loadURL(url)).then(() => {
       cargaWhatsappEnCurso = null
+      if (mensajeWhatsappPrecargado) {
+        void enfocarEditorMensaje(true).catch((error: unknown) => {
+          console.error('No se pudo enfocar el cuadro de mensaje de WhatsApp:', error)
+        })
+      }
       void adjuntarImagenCupon()
     }).catch((error) => {
       cargaWhatsappEnCurso = null
@@ -226,9 +323,31 @@ watch(() => props.solicitudCarga, aplicarSolicitudCargaWhatsapp)
 const adjuntarImagenCupon = async () => {
   const solicitud = props.solicitudAdjunto ?? 0
   const dataUrl = props.imagenPendiente || ''
-  if (!solicitud || solicitud === ultimaSolicitudAdjuntoAplicada || !dataUrl || !webviewListo.value) return
+  const pdfPendiente = props.pdfPendiente
+  if (!solicitud || solicitud === ultimaSolicitudAdjuntoAplicada || (!dataUrl && !pdfPendiente) || !webviewListo.value) return
   if (cargaWhatsappEnCurso) await cargaWhatsappEnCurso.catch(() => {})
   if (solicitud !== (props.solicitudAdjunto ?? 0) || solicitud === ultimaSolicitudAdjuntoAplicada) return
+
+  if (pdfPendiente) {
+    ultimaSolicitudAdjuntoAplicada = solicitud
+    estadoAdjunto.value = 'Adjuntando el PDF de la factura al chat...'
+    try {
+      const apiElectron = (window as Window & {
+        electronAPI?: { adjuntarPdfWhatsApp?: (webContentsId: number, data: string, nombre: string) => Promise<boolean> }
+      }).electronAPI
+      const webContentsId = webviewRef.value?.getWebContentsId?.()
+      if (!apiElectron?.adjuntarPdfWhatsApp || !webContentsId) {
+        finalizarSolicitudAdjunto('No se pudo adjuntar automáticamente el PDF. Adjunta la factura desde el botón de archivo de WhatsApp.')
+        return
+      }
+      await apiElectron.adjuntarPdfWhatsApp(webContentsId, pdfPendiente.data, pdfPendiente.name)
+      finalizarSolicitudAdjunto('Factura PDF agregada al chat. Presiona enviar en WhatsApp.')
+    } catch (error) {
+      console.error('No se pudo adjuntar el PDF en WhatsApp:', error)
+      finalizarSolicitudAdjunto('No se pudo adjuntar automáticamente el PDF. Adjunta la factura desde el botón de archivo de WhatsApp.')
+    }
+    return
+  }
 
   const coincidencia = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl)
   if (!coincidencia) {
@@ -289,6 +408,52 @@ const adjuntarImagenCupon = async () => {
     }
     webviewRef.value.sendInputEvent({ type: 'keyDown', keyCode: 'V', modifiers: ['control'] })
     webviewRef.value.sendInputEvent({ type: 'keyUp', keyCode: 'V', modifiers: ['control'] })
+    const textoPieFoto = props.textoAdjunto?.trim() ?? ''
+    if (textoPieFoto) {
+      const pieFotoListo = await webviewRef.value.executeJavaScript(`new Promise(resolve => {
+        const texto = ${JSON.stringify(textoPieFoto)};
+        let intentos = 0;
+        const buscarPieFoto = () => {
+          const editor = document.querySelector('[contenteditable="true"][data-tab="10"]') ||
+            document.querySelector('[contenteditable="true"][role="textbox"]');
+          const botonEnviar = document.querySelector('[data-icon="send"]') ||
+            document.querySelector('button[aria-label="Send"], button[aria-label="Enviar"]');
+          if (editor && botonEnviar) {
+            editor.focus();
+            if (editor.innerText.trim() !== texto) {
+              const rangoActual = document.createRange();
+              rangoActual.selectNodeContents(editor);
+              rangoActual.deleteContents();
+              rangoActual.collapse(true);
+              const seleccionActual = window.getSelection();
+              seleccionActual.removeAllRanges();
+              seleccionActual.addRange(rangoActual);
+              document.execCommand('insertText', false, texto);
+            }
+            const rango = document.createRange();
+            rango.selectNodeContents(editor);
+            rango.collapse(false);
+            const seleccion = window.getSelection();
+            seleccion.removeAllRanges();
+            seleccion.addRange(rango);
+            resolve(true);
+            return;
+          }
+          intentos += 1;
+          if (intentos >= 40) {
+            resolve(false);
+            return;
+          }
+          setTimeout(buscarPieFoto, 250);
+        };
+        buscarPieFoto();
+      })`)
+      if (!pieFotoListo) {
+        finalizarSolicitudAdjunto('QR agregado, pero no se encontró el pie de foto. Escribe el mensaje manualmente antes de enviar.')
+        return
+      }
+      mensajeWhatsappPrecargado = true
+    }
     finalizarSolicitudAdjunto('Cupón agregado, presiona enviar.')
   } catch (error) {
     console.error('No se pudo pegar el QR en WhatsApp:', error)
@@ -305,10 +470,6 @@ watch(() => props.solicitudAdjunto, () => {
   estadoAdjunto.value = ''
   void adjuntarImagenCupon()
 })
-
-const abrirEnNavegador = () => {
-  window.open('https://web.whatsapp.com', '_blank', 'noopener,noreferrer')
-}
 
 const recargarWebview = () => {
   if (webviewRef.value && webviewListo.value) {
@@ -439,34 +600,6 @@ const recargarWebview = () => {
   width: 100%;
   height: 100%;
   border: 0;
-}
-
-.whatsapp-browser-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 32px;
-  color: #425466;
-  text-align: center;
-}
-
-.whatsapp-browser-fallback > ion-icon {
-  color: #128c7e;
-  font-size: 58px;
-}
-
-.whatsapp-browser-fallback button {
-  padding: 11px 18px;
-  border: 0;
-  border-radius: 10px;
-  background: #128c7e;
-  color: white;
-  cursor: pointer;
-  font-weight: 700;
 }
 
 @keyframes whatsapp-panel-in {

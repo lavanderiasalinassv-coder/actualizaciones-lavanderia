@@ -80,6 +80,11 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@/views/EquipoPage.vue')
       },
       {
+        path: 'registros-personal',
+        component: () => import('@/views/RegistrosPersonalPage.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
         path: 'clientes',
         component: () => import('@/views/ClientesPage.vue')
       },
@@ -136,6 +141,14 @@ const routes: Array<RouteRecordRaw> = [
       {
         path: 'modelosia',
         component: () => import('@/views/modelosia.vue')
+      },
+      {
+        path: 'ticket',
+        component: () => import('@/views/ticketpage.vue')
+      },
+      {
+        path: 'impresora',
+        component: () => import('@/views/impresorapage.vue')
       }
     ]
   }
@@ -155,6 +168,7 @@ const rutasPermitidasRecepcionista = new Set([
   '/verificacion-2fa',
   '/tabs/calendario',
   '/tabs/configuracion',
+  '/tabs/impresora',
   '/tabs/ajustes-burbujita',
   '/tabs/guia'
 ])
@@ -168,6 +182,7 @@ const rutasPermitidasOperador = new Set([
   '/verificacion-2fa',
   '/tabs/calendario',
   '/tabs/configuracion',
+  '/tabs/impresora',
   '/tabs/ajustes-burbujita',
   '/tabs/guia'
 ])

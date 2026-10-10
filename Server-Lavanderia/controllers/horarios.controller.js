@@ -15,6 +15,13 @@ const manejarError = (res, error) => {
     return res.status(error.statusCode).json({ error: error.message });
   }
 
+  if (["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "PROTOCOL_CONNECTION_LOST"].includes(error?.code)) {
+    console.warn("La base de datos no respondió al cargar horarios:", error.code);
+    return res.status(503).json({
+      error: "La base de datos no está disponible temporalmente. Espera unos segundos y vuelve a intentarlo.",
+    });
+  }
+
   console.error("Error inesperado en horarios.controller:", error);
   return res.status(500).json({ error: "Error interno del servidor." });
 };

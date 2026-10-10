@@ -65,6 +65,33 @@ export interface FacturaOrdenCorreo {
   esFacturaFinal?: boolean
 }
 
+export interface CargoExtraOrden {
+  descripcion: string
+  monto: number
+  fecha?: string
+}
+
+export const resumirCargosExtraMora = (cargos: CargoExtraOrden[]): CargoExtraOrden[] => {
+  const cargosMora = cargos.filter((cargo) => cargo.descripcion.startsWith('Mora por entrega tardía'))
+  if (cargosMora.length <= 1) return cargos
+
+  const indicePrimeraMora = cargos.findIndex((cargo) => cargo.descripcion.startsWith('Mora por entrega tardía'))
+  const cargosResumen: CargoExtraOrden[] = []
+  cargos.forEach((cargo, indice) => {
+    if (indice === indicePrimeraMora) {
+      const dias = cargosMora.length
+      cargosResumen.push({
+        descripcion: `Cargo por mora de ${dias} ${dias === 1 ? 'día' : 'días'}`,
+        monto: cargosMora.reduce((total, cargoMora) => total + (Number(cargoMora.monto) || 0), 0)
+      })
+    }
+    if (!cargo.descripcion.startsWith('Mora por entrega tardía')) {
+      cargosResumen.push(cargo)
+    }
+  })
+  return cargosResumen
+}
+
 export interface FaltanteInsumoPedido {
   productoId: string
   nombreProducto: string
@@ -165,9 +192,10 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
   const prendasRecibidas = Number(orden.cantidadPrendas || 0)
   const mostrarPrendasRecibidas = Number.isFinite(prendasRecibidas) && prendasRecibidas > 0
   const cargosExtra = orden.cargosExtra ?? []
+  const cargosExtraResumen = resumirCargosExtraMora(cargosExtra)
   const totalCargosExtra = cargosExtra.reduce((suma, cargo) => suma + Math.max(0, Number(cargo.monto) || 0), 0)
   const cargosExtraHtml = cargosExtra.length
-    ? `<div style="margin-top:18px;"><h3 style="margin:0 0 10px;font-size:1.2rem;color:#123a66;">Cargos extra</h3><table role="presentation" style="width:100%;border-collapse:collapse;">${cargosExtra.map((cargo) => `<tr><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;">${escaparHtml(cargo.descripcion)}</td><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;text-align:right;">$${(Number(cargo.monto) || 0).toFixed(2)}</td></tr>`).join('')}</table></div>`
+    ? `<div style="margin-top:18px;"><h3 style="margin:0 0 10px;font-size:1.2rem;color:#123a66;">Cargos extra</h3><table role="presentation" style="width:100%;border-collapse:collapse;">${cargosExtraResumen.map((cargo) => `<tr><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;">${escaparHtml(cargo.descripcion)}</td><td style="padding:8px 9px;border-bottom:1px solid #e6edf3;text-align:right;">$${(Number(cargo.monto) || 0).toFixed(2)}</td></tr>`).join('')}</table></div>`
     : ''
   const avisoActualizacionHtml = orden.avisoActualizacion
     ? `<div style="margin:14px 0;padding:12px 16px;border-left:4px solid #168276;border-radius:8px;background:#eef8f5;color:#155e55;font-size:1rem;font-weight:700;">${escaparHtml(orden.avisoActualizacion)}</div>`
@@ -278,7 +306,7 @@ export const generarHtmlFacturaOrden = (orden: FacturaOrdenCorreo) => {
           </div>
 
           <div style="width:100%;margin-top:18px;border-top:1px solid #d8e4ee;background:#ffffff;">
-            <p style="margin:0;padding:14px 28px 12px;color:#4a627e;font-size:0.98rem;line-height:1.5;">Contrato de servicio: para retirar las prendas, es indispensable presentar este recibo como único comprobante válido. Las prendas deberán ser retiradas en un máximo de 1 día; de no hacerlo, se aplicará un cargo adicional de $0.50 por cada día de retraso. El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega. Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas. En caso de dudas, comuníquese con nosotros a <a style="color:#168276;font-weight:700;text-decoration:underline;" href="mailto:lavanderiasalinassv@gmail.com">lavanderiasalinassv@gmail.com</a> o al <a style="color:#168276;font-weight:700;text-decoration:underline;" href="https://wa.me/50324976699">2497 6699 por WhatsApp</a>. Este documento es válido como comprobante de pago emitido por Lavandería Salinas.</p>
+            <p style="margin:0;padding:14px 28px 12px;color:#4a627e;font-size:0.98rem;line-height:1.5;">Contrato de servicio: para retirar las prendas, es indispensable presentar este recibo como único comprobante válido. La mora por retraso en la entrega inicia después de 2 días calendario de gracia desde la fecha prometida; luego se aplica $0.50 por día. El plazo para realizar cualquier reclamación sobre el servicio es de 2 días hábiles después de la entrega. Las prendas no retiradas en un plazo de 30 días serán consideradas abandonadas. En caso de dudas, comuníquese con nosotros a <a style="color:#168276;font-weight:700;text-decoration:underline;" href="mailto:lavanderiasalinassv@gmail.com">lavanderiasalinassv@gmail.com</a> o al <a style="color:#168276;font-weight:700;text-decoration:underline;" href="https://wa.me/50324976699">2497 6699 por WhatsApp</a>. Este documento es válido como comprobante de pago emitido por Lavandería Salinas.</p>
             <div style="height:5mm;background:#123a66;"></div>
           </div>
         </div>
@@ -310,6 +338,7 @@ const pedido = reactive({
   envioDomicilio: false,
   direccionEntrega: '',
   fechaEntregaActiva: true,
+  moraActiva: true,
   fechaEntrega: fechaHoyISO(),
   horaEntrega: horaEntregaPorDefecto(),
   estadoPago: 'porCobrar' as 'porCobrar' | 'anticipo' | 'pagado',
@@ -567,6 +596,7 @@ export function usePedido() {
     pedido.envioDomicilio = false
     pedido.direccionEntrega = ''
     pedido.fechaEntrega = fechaHoyISO()
+    pedido.moraActiva = true
     pedido.horaEntrega = horaEntregaPorDefecto(),
     pedido.estadoPago = 'porCobrar'
     pedido.metodoPago = 'efectivo'
@@ -618,6 +648,7 @@ export function usePedido() {
           envioDomicilio: pedido.envioDomicilio,
           direccionEntrega: pedido.direccionEntrega,
           fechaEntregaActiva: pedido.fechaEntregaActiva,
+          moraActiva: pedido.moraActiva,
           fechaEntrega: pedido.fechaEntrega,
           horaEntrega: pedido.horaEntrega,
           estadoPago: pedido.estadoPago,
