@@ -1,10 +1,14 @@
 const {
   obtenerOrdenes,
   obtenerOrdenPorId,
+  actualizarMoraOrden,
+  actualizarMorasPendientes,
+  recalcularMoraOrden,
   detenerMoraOrden,
   reanudarMoraOrden,
   eliminarMoraOrden,
   aplicarMoraOrden,
+  aplicarMoraAntiguaOrden,
   crearOrden,
   actualizarEstado,
   actualizarPago,
@@ -83,8 +87,18 @@ const esAdministrador = (usuario) =>
 
 const listarOrdenes = async (_req, res) => {
   try {
+    await actualizarMorasPendientes();
     const ordenes = await obtenerOrdenes();
     res.status(200).json(ordenes);
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
+const actualizarMoraAntesDeOperacion = async (req, res, next) => {
+  try {
+    await actualizarMoraOrden(req.params.id);
+    next();
   } catch (error) {
     manejarError(res, error);
   }
@@ -93,6 +107,21 @@ const listarOrdenes = async (_req, res) => {
 const obtenerOrden = async (req, res) => {
   try {
     const orden = await obtenerOrdenPorId(req.params.id);
+    res.status(200).json(orden);
+  } catch (error) {
+    manejarError(res, error);
+  }
+};
+
+const recalcularMora = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) {
+      return res
+        .status(403)
+        .json({ error: "Solo un administrador puede recalcular la mora." });
+    }
+    const orden = await recalcularMoraOrden(req.params.id);
     res.status(200).json(orden);
   } catch (error) {
     manejarError(res, error);
@@ -252,6 +281,21 @@ const aplicarMora = async (req, res) => {
     const orden = await aplicarMoraOrden(req.params.id, usuario);
     res.status(200).json(orden);
   } catch (error) { manejarError(res, error); }
+};
+
+const aplicarMoraAntigua = async (req, res) => {
+  try {
+    const usuario = obtenerUsuarioAuditoria(req);
+    if (!esAdministrador(usuario)) {
+      return res
+        .status(403)
+        .json({ error: "Solo un administrador puede aplicar la mora antigua." });
+    }
+    const orden = await aplicarMoraAntiguaOrden(req.params.id, usuario);
+    res.status(200).json(orden);
+  } catch (error) {
+    manejarError(res, error);
+  }
 };
 
 const marcarPago = async (req, res) => {
@@ -662,13 +706,16 @@ const aplicarDescuento = async (req, res) => {
 
 module.exports = {
   listarOrdenes,
+  actualizarMoraAntesDeOperacion,
   obtenerOrden,
+  recalcularMora,
   crear,
   cambiarEstado,
   detenerMora,
   reanudarMora,
   eliminarMora,
   aplicarMora,
+  aplicarMoraAntigua,
   marcarPago,
   crearAnticipo,
   borrarAnticipo,

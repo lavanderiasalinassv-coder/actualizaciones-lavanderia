@@ -123,6 +123,7 @@ export interface Orden {
   movimientos: OrdenMovimiento[]
   turnoHuerfano?: boolean
   moraDiasCobrados: number
+  moraAntiguaDiasPendientes: number
   moraDetenida: boolean
 }
 
@@ -449,6 +450,24 @@ const ventaDelDiaTurnoActual = computed(() =>
     return combinarActualizacionParcialOrden(ordenActualizada)
   }
 
+  const recalcularMora = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${id}/recalcular-mora`, {
+      method: 'POST',
+      body: JSON.stringify(payloadUsuario()),
+      signal: AbortSignal.timeout(30000)
+    }) as Orden
+    return reemplazarOrden(ordenActualizada)
+  }
+
+  const aplicarMoraAntigua = async (id: string) => {
+    const ordenActualizada = await api(`/ordenes/${id}/aplicar-mora-antigua`, {
+      method: 'POST',
+      body: JSON.stringify(payloadUsuario()),
+      signal: AbortSignal.timeout(30000)
+    }) as Orden
+    return reemplazarOrden(ordenActualizada)
+  }
+
   const eliminarAnticipo = async (id: string, idAnticipo: string) => {
     const ordenActualizada = await api(`/ordenes/${id}/anticipos/${encodeURIComponent(idAnticipo)}`, {
       method: 'DELETE',
@@ -614,6 +633,8 @@ const ventaDelDiaTurnoActual = computed(() =>
     reanudarMora,
     eliminarMora,
     aplicarMora,
+    recalcularMora,
+    aplicarMoraAntigua,
     eliminarAnticipo,
     agregarItemAOrden,
     eliminarItemDeOrden,

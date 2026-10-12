@@ -72,20 +72,22 @@ export interface CargoExtraOrden {
 }
 
 export const resumirCargosExtraMora = (cargos: CargoExtraOrden[]): CargoExtraOrden[] => {
-  const cargosMora = cargos.filter((cargo) => cargo.descripcion.startsWith('Mora por entrega tardía'))
-  if (cargosMora.length <= 1) return cargos
+  const esCargoMora = (cargo: CargoExtraOrden) =>
+    cargo.descripcion.startsWith('Mora por entrega tardía') ||
+    cargo.descripcion.startsWith('Mora antigua por entrega tardía')
+  const cargosMora = cargos.filter(esCargoMora)
+  if (cargosMora.length === 0) return cargos
 
-  const indicePrimeraMora = cargos.findIndex((cargo) => cargo.descripcion.startsWith('Mora por entrega tardía'))
+  const indicePrimeraMora = cargos.findIndex(esCargoMora)
   const cargosResumen: CargoExtraOrden[] = []
   cargos.forEach((cargo, indice) => {
     if (indice === indicePrimeraMora) {
-      const dias = cargosMora.length
       cargosResumen.push({
-        descripcion: `Cargo por mora de ${dias} ${dias === 1 ? 'día' : 'días'}`,
+        descripcion: 'Cargo por mora',
         monto: cargosMora.reduce((total, cargoMora) => total + (Number(cargoMora.monto) || 0), 0)
       })
     }
-    if (!cargo.descripcion.startsWith('Mora por entrega tardía')) {
+    if (!esCargoMora(cargo)) {
       cargosResumen.push(cargo)
     }
   })

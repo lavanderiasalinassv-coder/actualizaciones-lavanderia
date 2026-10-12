@@ -369,6 +369,7 @@ CREATE TABLE `ordenes` (
   `mora_dias_cobrados` int NOT NULL DEFAULT '0',
   `mora_detenida_at` datetime DEFAULT NULL,
   `mora_pausa_segundos` int NOT NULL DEFAULT '0',
+  `mora_dias_antiguos_pendientes` int NOT NULL DEFAULT '0',
   `entregado_at` datetime DEFAULT NULL,
   `estado_pago` enum('porCobrar','anticipo','pagado') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'porCobrar',
   `metodo_pago` enum('efectivo','tarjeta','transferencia') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'efectivo',

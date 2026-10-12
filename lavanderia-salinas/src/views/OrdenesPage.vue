@@ -185,13 +185,68 @@
                 : receiptOutline"
             />
           </span>
-          <strong>
-            {{ estadoActivo === 'todos' ? 'Todas las órdenes'
-              : estadoActivo === 'intervencion' ? 'Requieren intervención'
-              : textoEstado(estadoActivo) }}
-          </strong>
+          <div class="grid-header-titulo">
+            <strong>
+              {{ estadoActivo === 'todos' ? 'Todas las órdenes'
+                : estadoActivo === 'intervencion' ? 'Requieren intervención'
+                : textoEstado(estadoActivo) }}
+            </strong>
+            <div class="ayuda-alertas-ordenes">
+              <button
+                type="button"
+                class="ayuda-alertas-boton"
+                :class="{ activo: ayudaAlertasAbierta }"
+                :aria-expanded="ayudaAlertasAbierta"
+                aria-label="Ayuda sobre alertas e información de órdenes"
+                @click="ayudaAlertasAbierta = !ayudaAlertasAbierta"
+              >
+                <ion-icon :icon="helpCircleOutline" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
           <span class="grid-header-count">{{ ordenesFiltradas.length }}</span>
         </div>
+        <ion-modal
+          :is-open="ayudaAlertasAbierta"
+          :backdrop-dismiss="true"
+          class="modal-ayuda-alertas"
+          @didDismiss="ayudaAlertasAbierta = false"
+        >
+          <div class="ayuda-modal-contenido force-light" role="dialog" aria-labelledby="titulo-ayuda-alertas">
+            <header class="ayuda-modal-header">
+              <div>
+                <p class="ayuda-modal-etiqueta">Guía de órdenes</p>
+                <h2 id="titulo-ayuda-alertas">Alertas e información importante</h2>
+              </div>
+              <button
+                type="button"
+                class="ayuda-modal-cerrar"
+                aria-label="Cerrar ayuda"
+                @click="ayudaAlertasAbierta = false"
+              >
+                <ion-icon :icon="closeOutline" />
+              </button>
+            </header>
+            <div class="ayuda-modal-secciones">
+              <div class="ayuda-alerta-item">
+                <span class="ayuda-alerta-color amarillo" aria-hidden="true" />
+                <p><strong>Brillo amarillo:</strong> ya pasó la hora prometida de entrega. Es una alerta de retraso; todavía puede estar dentro de los 2 días de gracia.</p>
+              </div>
+              <div class="ayuda-alerta-item">
+                <span class="ayuda-alerta-color rojo" aria-hidden="true" />
+                <p><strong>Brillo rojo:</strong> ya transcurrieron los 2 días calendario de gracia y la mora está activa. Se cobra $0.50 por día. Si la mora está suspendida o desactivada, no se muestra en rojo.</p>
+              </div>
+              <div class="ayuda-alerta-item">
+                <ion-icon :icon="warningOutline" aria-hidden="true" />
+                <p><strong>Requiere intervención:</strong> revisa la orden porque puede tener un pago incompleto al cerrarse, una entrega que no aparece en el cierre o un anticipo que no aparece en el cierre.</p>
+              </div>
+            </div>
+            <p class="ayuda-alertas-nota">Las órdenes entregadas, cerradas o canceladas no muestran alertas de vencimiento. Selecciona «Requieren intervención» para revisar esas órdenes.</p>
+            <div class="ayuda-modal-acciones">
+              <button type="button" class="btn-principal" @click="ayudaAlertasAbierta = false">Cerrar</button>
+            </div>
+          </div>
+        </ion-modal>
 
         <div v-if="totalPaginas > 1" class="paginacion-ordenes" aria-label="Paginación de órdenes">
           <button
@@ -228,7 +283,7 @@
                 v-for="(orden, index) in ordenesLlegada"
                 :key="orden.id"
                 class="cola-orden-item"
-                :class="{ vencida: orden.estado === 'pendiente' && ordenVencida(orden) }"
+                :class="clasesAlertaEntrega(orden)"
               >
                 <span class="cola-orden-posicion">{{ index + 1 }}</span>
                 <span class="cola-orden-info">
@@ -248,7 +303,7 @@
               v-for="orden in ordenesPagina"
               :key="orden.id"
               class="orden-card"
-              :class="{ selected: orden.id === ordenSeleccionadaId, vencida: ordenVencida(orden) }"
+              :class="{ selected: orden.id === ordenSeleccionadaId, ...clasesAlertaEntrega(orden) }"
               :style="{
                 '--card-accent': estadoColores[orden.estado].dot,
                 '--card-accent-bg': estadoColores[orden.estado].bg,
@@ -299,6 +354,13 @@
                     ? '✓ Orden pagada'
                     : `$${totalFinalOrden(orden).toFixed(2)}` }}
                 </strong>
+                <span
+                  v-if="montoMoraOrden(orden) > 0"
+                  class="total-mora-desglose"
+                >
+                  Precio ${{ Math.max(0, orden.total - montoMoraOrden(orden)).toFixed(2) }}
+                  + mora ${{ montoMoraOrden(orden).toFixed(2) }}
+                </span>
               </div>
 
               <span v-if="puedeVerMontos && orden.estado !== 'cancelada'" class="pill pago" :class="`pago-${orden.estadoPago}`">
@@ -746,6 +808,27 @@
                   <input v-model="fechaEntregaBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
                   <input v-model="horaEntregaBorrador" type="time" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
                   <span v-if="ordenSeleccionada.moraDiasCobrados > 0">Mora acumulada: ${{ (ordenSeleccionada.moraDiasCobrados * 0.5).toFixed(2) }} ({{ ordenSeleccionada.moraDiasCobrados }} días)</span>
+                  <span
+                    v-if="recalculandoMoraOrdenId === ordenSeleccionada.id"
+                    class="mora-recalculando"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <ion-spinner name="crescent" />
+                    Recalculando mora...
+                  </span>
+                  <button
+                    v-else-if="
+                      moraRecalculoPendienteId === ordenSeleccionada.id &&
+                      ordenSeleccionada.moraActiva !== false &&
+                      !ordenSeleccionada.moraDetenida
+                    "
+                    type="button"
+                    class="mora-reintentar"
+                    @click="reintentarRecalculoMora"
+                  >
+                    Reintentar cálculo de mora
+                  </button>
                 </div>
 
                 <div class="mini-card">
@@ -759,7 +842,12 @@
                 v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada'"
                 type="button"
                 class="guardar-fechas-orden"
-                :disabled="guardandoFechas || peticionOrdenEnCurso || !fechaEntregaBorrador"
+                :disabled="
+                  guardandoFechas ||
+                  peticionOrdenEnCurso ||
+                  !fechaEntregaBorrador ||
+                  recalculandoMoraOrdenId === ordenSeleccionada.id
+                "
                 @click="guardarFechasOrden"
               >
                 {{ guardandoFechas ? 'Actualizando...' : '💾 Guardar fechas' }}
@@ -795,6 +883,21 @@
                       @click="aplicarMoraSeleccionada"
                     >
                       <span aria-hidden="true">⚠</span> Aplicar mora
+                    </button>
+                    <button
+                      v-if="
+                        ordenSeleccionada.moraAntiguaDiasPendientes > 0 &&
+                        ordenSeleccionada.moraActiva !== false &&
+                        !ordenSeleccionada.moraDetenida
+                      "
+                      type="button"
+                      class="mora-accion mora-accion-aplicar-antigua"
+                      :disabled="peticionOrdenEnCurso"
+                      @click="aplicarMoraAntiguaSeleccionada"
+                    >
+                      <ion-spinner v-if="peticionOrdenEnCurso && aplicandoMoraAntigua" name="crescent" />
+                      <span v-else aria-hidden="true">↻</span>
+                      {{ peticionOrdenEnCurso && aplicandoMoraAntigua ? 'Aplicando...' : 'Aplicar mora antigua' }}
                     </button>
                     <button
                       v-if="montoMoraOrden(ordenSeleccionada) > 0"
@@ -1174,7 +1277,7 @@
             </div>
           </div>
           <p class="hint-texto-vacio">
-            Si reinicias el conteo, no se cobrarán días anteriores y, si la orden ya venció, el próximo cargo se generará mañana. Si aún no vence, se respetarán la fecha de entrega y los dos días de gracia. También puedes suspender la mora futura.
+            Si reinicias el conteo, los días de mora anteriores quedarán sin cobrar y podrás aplicarlos después con el botón «Aplicar mora antigua». Si la orden ya venció, el próximo cargo se generará mañana; si aún no vence, se respetarán la fecha de entrega y los dos días de gracia. También puedes suspender la mora futura.
           </p>
           <div class="modal-confirmacion-botones mora-eliminar-botones">
             <button class="btn-outline" type="button" :disabled="peticionOrdenEnCurso" @click="cerrarModalEliminarMora">Cancelar</button>
@@ -1509,7 +1612,7 @@ import {
   type OrdenItem,
   type EstadoPago
 } from '@/composables/useOrdenes'
-import { fechaHoyCentroamerica, fechaISOaCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
+import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, fechaISOaCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
 import { useCatalogo } from '@/composables/Usecatalogo'
 import { useClientes } from '@/composables/useClientes'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
@@ -1538,6 +1641,7 @@ import {
   lockClosedOutline,
   banOutline,
   warningOutline,
+  helpCircleOutline,
   printOutline,
   shirtOutline,
   starOutline,
@@ -1620,6 +1724,8 @@ const {
   reanudarMora,
   eliminarMora,
   aplicarMora,
+  aplicarMoraAntigua,
+  recalcularMora,
   eliminarAnticipo,
   eliminarFoto,
   agregarItemAOrden,
@@ -1633,6 +1739,9 @@ const {
 
 const busqueda = ref('')
 const estadoActivo = ref<'todos' | 'intervencion' | OrdenEstado>('todos')
+const ayudaAlertasAbierta = ref(false)
+const ahoraTablero = ref(Date.now())
+let relojTableroIntervalo: number | undefined
 const mostrarModalEliminarDia = ref(false)
 const mostrarModalMotivoIntervencion = ref(false)
 const ordenIntervencionSeleccionada = ref<Orden | null>(null)
@@ -1810,6 +1919,7 @@ const tipoDescuento = ref<'porcentaje' | 'monto'>('porcentaje')
 const valorDescuento = ref(0)
 const enviandoCorreo = ref(false)
 const peticionOrdenEnCurso = ref(false)
+const aplicandoMoraAntigua = ref(false)
 const mostrarModalComprobante = ref(false)
 const comprobanteActual = ref('')
 const mostrarModalEliminarMora = ref(false)
@@ -2257,6 +2367,8 @@ const cantidadPrendasAntesDeCero = ref<number | null>(null)
 const guardandoPrendas = ref(false)
 const horaEntregaBorrador = ref('')
 const guardandoFechas = ref(false)
+const recalculandoMoraOrdenId = ref<string | null>(null)
+const moraRecalculoPendienteId = ref<string | null>(null)
 
 const turnosParaAnticipoAntiguo = computed(() => {
   const lista: { id: string; etiqueta: string; horaInicio: string | null; numeroCaja: number }[] = []
@@ -2493,6 +2605,34 @@ const reanudarMoraSeleccionada = async () => {
         : error instanceof Error ? error.message : 'No se pudo reanudar la mora.'
     )
   } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const aplicarMoraAntiguaSeleccionada = async () => {
+  const orden = ordenSeleccionada.value
+  if (
+    !orden ||
+    peticionOrdenEnCurso.value ||
+    orden.moraAntiguaDiasPendientes <= 0 ||
+    orden.moraActiva === false ||
+    orden.moraDetenida
+  ) {
+    return
+  }
+
+  peticionOrdenEnCurso.value = true
+  aplicandoMoraAntigua.value = true
+  try {
+    await aplicarMoraAntigua(orden.id)
+  } catch (error) {
+    window.alert(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? 'La aplicación de la mora antigua tardó demasiado. Vuelve a abrir la orden para confirmar el resultado antes de intentarlo de nuevo.'
+        : error instanceof Error ? error.message : 'No se pudo aplicar la mora antigua.'
+    )
+  } finally {
+    aplicandoMoraAntigua.value = false
     peticionOrdenEnCurso.value = false
   }
 }
@@ -2994,21 +3134,82 @@ watch(
   { immediate: true }
 )
 
+const recalcularMoraConIndicador = async (id: string) => {
+  recalculandoMoraOrdenId.value = id
+  try {
+    await recalcularMora(id)
+    moraRecalculoPendienteId.value = null
+  } catch (error) {
+    moraRecalculoPendienteId.value = id
+    throw error
+  } finally {
+    if (recalculandoMoraOrdenId.value === id) {
+      recalculandoMoraOrdenId.value = null
+    }
+  }
+}
+
+const reintentarRecalculoMora = async () => {
+  const orden = ordenSeleccionada.value
+  if (
+    !orden ||
+    moraRecalculoPendienteId.value !== orden.id ||
+    orden.moraActiva === false ||
+    orden.moraDetenida
+  ) {
+    moraRecalculoPendienteId.value = null
+    return
+  }
+
+  try {
+    await recalcularMoraConIndicador(orden.id)
+  } catch (error) {
+    console.error('No se pudo reintentar el recálculo de mora:', error)
+    window.alert(
+      `No se pudo recalcular la mora. ${error instanceof Error ? error.message : 'Intenta de nuevo en unos momentos.'}`
+    )
+  }
+}
+
 const guardarFechasOrden = async () => {
   const orden = ordenSeleccionada.value
   if (!esAdministrador.value || !orden || !fechaCreacionBorrador.value || !fechaEntregaBorrador.value || guardandoFechas.value) return
 
   guardandoFechas.value = true
   try {
-    const ordenActualizada = await actualizarOrden(orden.id, {
-      fechaCreacion: fechaCreacionBorrador.value,
-      fechaEntrega: fechaEntregaBorrador.value,
-      horaEntrega: horaEntregaBorrador.value
-    })
+    const fechaEntregaCambio = fechaEntregaBorrador.value !== (orden.fechaEntrega ?? '')
+    const horaEntregaCambio = horaEntregaBorrador.value !== (orden.horaEntrega ?? '')
+    const cambios: {
+      fechaCreacion: string
+      fechaEntrega?: string
+      horaEntrega?: string
+    } = {
+      fechaCreacion: fechaCreacionBorrador.value
+    }
+    if (fechaEntregaCambio) cambios.fechaEntrega = fechaEntregaBorrador.value
+    if (horaEntregaCambio) cambios.horaEntrega = horaEntregaBorrador.value
+    const ordenActualizada = await actualizarOrden(orden.id, cambios)
     if (ordenActualizada) {
       fechaCreacionBorrador.value = fechaISOaCentroamerica(ordenActualizada.createdAt)
       fechaEntregaBorrador.value = ordenActualizada.fechaEntrega ?? ''
       horaEntregaBorrador.value = ordenActualizada.horaEntrega ?? ''
+    }
+
+    guardandoFechas.value = false
+    const requiereRecalcularMora =
+      (fechaEntregaCambio || horaEntregaCambio) &&
+      Boolean(ordenActualizada && ordenActualizada.moraActiva !== false) &&
+      !ordenActualizada?.moraDetenida
+    if (requiereRecalcularMora) {
+      try {
+        await recalcularMoraConIndicador(orden.id)
+      } catch (error) {
+        console.error('Las fechas se guardaron, pero no se pudo recalcular la mora:', error)
+        window.alert(
+          `Las fechas se guardaron, pero no se pudo recalcular la mora. ${error instanceof Error ? error.message : 'Puedes reintentar el cálculo desde el detalle de la orden.'}`
+        )
+        return
+      }
     }
     window.alert('Fechas de la orden actualizadas correctamente.')
   } catch (error) {
@@ -3493,9 +3694,29 @@ const textoEntrega = (orden: Orden) => {
   return fechaTexto
 }
 
-const ordenVencida = (orden: Orden) => {
-  if (!orden.fechaEntrega || orden.estado === 'entregado' || orden.estado === 'cancelada') return false
-  return orden.fechaEntrega < fechaHoyCentroamerica()
+const clasesAlertaEntrega = (orden: Orden) => {
+  ahoraTablero.value
+  const estadosFinales: OrdenEstado[] = ['entregado', 'cerrada', 'cancelada', 'Cerrada-Cancelada']
+  if (!orden.fechaEntrega || estadosFinales.includes(orden.estado)) {
+    return { 'alerta-entrega': false, 'alerta-mora': false }
+  }
+
+  const fechaPrometida = orden.fechaEntrega.slice(0, 10)
+  const horaPrometida = orden.horaEntrega?.slice(0, 5) || '23:59'
+  const fechaLimite = combinarFechaHoraCentroamerica(fechaPrometida, horaPrometida).getTime()
+  if (!Number.isFinite(fechaLimite) || ahoraTablero.value < fechaLimite) {
+    return { 'alerta-entrega': false, 'alerta-mora': false }
+  }
+
+  const hoy = fechaHoyCentroamerica()
+  const diasAtraso = Math.floor(
+    (Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${fechaPrometida}T00:00:00Z`)) / 86400000
+  )
+  const enMora = diasAtraso > 2 && orden.moraActiva !== false && !orden.moraDetenida
+  return {
+    'alerta-entrega': !enMora,
+    'alerta-mora': enMora
+  }
 }
 
 const formatearFecha = (valor: string) =>
@@ -3948,6 +4169,9 @@ const cambiarEstadoPago = async (id: string) => {
 onMounted(() => {
   actualizarOrdenesPorPagina()
   window.addEventListener('resize', actualizarOrdenesPorPagina)
+  relojTableroIntervalo = window.setInterval(() => {
+    ahoraTablero.value = Date.now()
+  }, 60000)
   void cargarCatalogo()
 })
 
@@ -3957,6 +4181,10 @@ onIonViewWillEnter(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', actualizarOrdenesPorPagina)
+  if (relojTableroIntervalo !== undefined) {
+    window.clearInterval(relojTableroIntervalo)
+    relojTableroIntervalo = undefined
+  }
   detenerPingModal()
 })
 
@@ -4309,6 +4537,14 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.grid-header-titulo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
 .grid-header-badge {
   width: 36px;
   height: 36px;
@@ -4322,6 +4558,165 @@ onBeforeUnmount(() => {
 .grid-header strong {
   font-size: 1.08rem;
   color: #0a1f38;
+}
+
+.ayuda-alertas-ordenes {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+.ayuda-alertas-boton {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #edf4f8;
+  color: #315f82;
+  cursor: pointer;
+}
+
+.ayuda-alertas-boton ion-icon {
+  font-size: 20px;
+}
+
+.ayuda-alertas-boton:hover,
+.ayuda-alertas-boton.activo {
+  background: #dcebf4;
+  color: #123a66;
+}
+
+.ayuda-alertas-boton:focus-visible {
+  outline: 2px solid #123a66;
+  outline-offset: 2px;
+}
+
+ion-modal.modal-ayuda-alertas {
+  --width: min(520px, calc(100vw - 32px));
+  --height: auto;
+  --border-radius: 18px;
+}
+
+ion-modal.modal-ayuda-alertas::part(backdrop) {
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+ion-modal.modal-ayuda-alertas::part(content) {
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(10, 31, 56, 0.28);
+}
+
+.ayuda-modal-contenido {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  background: #ffffff;
+}
+
+.ayuda-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ayuda-modal-etiqueta {
+  margin: 0 0 5px;
+  color: #168b83;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ayuda-modal-header h2 {
+  margin: 0;
+  color: #123a66;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.ayuda-modal-cerrar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #edf4f8;
+  color: #315f82;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.ayuda-modal-cerrar:hover {
+  background: #dcebf4;
+  color: #123a66;
+}
+
+.ayuda-modal-secciones {
+  display: grid;
+  gap: 14px;
+}
+
+.ayuda-modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ayuda-alerta-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.ayuda-alerta-item p,
+.ayuda-alertas-nota {
+  margin: 0;
+  color: #40566d;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.ayuda-alerta-item strong {
+  color: #123a66;
+}
+
+.ayuda-alerta-color {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+}
+
+.ayuda-alerta-color.amarillo {
+  background: #eab308;
+  box-shadow: 0 0 7px rgba(234, 179, 8, 0.65);
+}
+
+.ayuda-alerta-color.rojo {
+  background: #dc2626;
+  box-shadow: 0 0 7px rgba(220, 38, 38, 0.65);
+}
+
+.ayuda-alerta-item > ion-icon {
+  color: #d97706;
+  font-size: 15px;
+}
+
+.ayuda-alertas-nota {
+  padding-top: 8px;
+  border-top: 1px solid #e7eef3;
+  color: #657b90;
 }
 
 .grid-header-count {
@@ -4416,12 +4811,22 @@ onBeforeUnmount(() => {
   background: #f1fbfa;
 }
 
-.cola-orden-item.vencida {
-  border-color: rgba(220, 38, 38, 0.45);
-  animation: cola-vencida 1.4s ease-in-out infinite;
+.cola-orden-item.alerta-entrega {
+  border-color: rgba(234, 179, 8, 0.7);
+  animation: cola-vencida-amarilla 1.4s ease-in-out infinite;
 }
 
-@keyframes cola-vencida {
+.cola-orden-item.alerta-mora {
+  border-color: rgba(220, 38, 38, 0.65);
+  animation: cola-vencida-roja 1.4s ease-in-out infinite;
+}
+
+@keyframes cola-vencida-amarilla {
+  0%, 100% { box-shadow: inset 0 0 0 rgba(234, 179, 8, 0); }
+  50% { box-shadow: inset 0 0 10px rgba(234, 179, 8, 0.35); }
+}
+
+@keyframes cola-vencida-roja {
   0%, 100% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
   50% { box-shadow: inset 0 0 10px rgba(220, 38, 38, 0.32); }
 }
@@ -4514,18 +4919,33 @@ onBeforeUnmount(() => {
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.orden-card.vencida::before {
+.orden-card.alerta-entrega::before,
+.orden-card.alerta-mora::before {
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px solid #dc2626;
+  border: 2px solid;
   border-radius: inherit;
-  opacity: 0.35;
   pointer-events: none;
-  animation: destello-vencida 1.4s ease-in-out infinite;
+  z-index: 2;
 }
 
-@keyframes destello-vencida {
+.orden-card.alerta-entrega::before {
+  border-color: #eab308;
+  animation: destello-vencida-amarillo 1.4s ease-in-out infinite;
+}
+
+.orden-card.alerta-mora::before {
+  border-color: #dc2626;
+  animation: destello-vencida-rojo 1.4s ease-in-out infinite;
+}
+
+@keyframes destello-vencida-amarillo {
+  0%, 100% { opacity: 0.25; box-shadow: inset 0 0 0 rgba(234, 179, 8, 0), 0 0 0 rgba(234, 179, 8, 0); }
+  50% { opacity: 1; box-shadow: inset 0 0 10px rgba(234, 179, 8, 0.3), 0 0 14px rgba(234, 179, 8, 0.65); }
+}
+
+@keyframes destello-vencida-rojo {
   0%, 100% { opacity: 0.2; box-shadow: inset 0 0 0 rgba(220, 38, 38, 0), 0 0 0 rgba(220, 38, 38, 0); }
   50% { opacity: 1; box-shadow: inset 0 0 10px rgba(220, 38, 38, 0.35), 0 0 14px rgba(220, 38, 38, 0.75); }
 }
@@ -4671,6 +5091,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.total-mora-desglose {
+  display: block;
+  color: #a16207;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .saldo-pendiente {
@@ -4834,7 +5262,11 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modal-detalle::before {
+  .modal-detalle::before,
+  .cola-orden-item.alerta-entrega,
+  .cola-orden-item.alerta-mora,
+  .orden-card.alerta-entrega::before,
+  .orden-card.alerta-mora::before {
     animation: none;
   }
 }
@@ -6755,6 +7187,12 @@ onBeforeUnmount(() => {
   border-color: #fde68a;
 }
 
+.mora-accion-aplicar-antigua {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
 .mora-accion-eliminar {
   color: #b91c1c;
   background: #fef2f2;
@@ -6769,6 +7207,36 @@ onBeforeUnmount(() => {
   font-size: 0.69rem;
   font-weight: 650;
   line-height: 1.3;
+}
+
+.mora-recalculando {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #0a1f38;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.mora-recalculando ion-spinner {
+  width: 16px;
+  height: 16px;
+  --color: #0a1f38;
+}
+
+.mora-reintentar {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .mora-estado-detenida {

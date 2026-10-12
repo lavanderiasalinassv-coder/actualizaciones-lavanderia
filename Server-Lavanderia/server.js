@@ -15,7 +15,6 @@ const fs = require("fs");
 const { execFile } = require("child_process");
 const mysql = require("mysql2/promise");
 const { pool } = require("./database/MySQLConexion");
-const { actualizarMorasPendientes } = require("./querys/orden.query");
 const {
   leerConfiguracionPredeterminada,
   leerConfiguracionBaseDatos,
@@ -878,7 +877,4 @@ app.listen(PORT, async () => {
     }
   }
 
-  const procesarMoras = () => actualizarMorasPendientes().catch((error) => console.error("No se pudieron actualizar las moras:", error.message));
-  procesarMoras();
-  setInterval(procesarMoras, 60 * 1000);
 });

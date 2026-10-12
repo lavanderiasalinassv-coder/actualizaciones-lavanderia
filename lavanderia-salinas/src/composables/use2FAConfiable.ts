@@ -1,5 +1,6 @@
 const CLAVE_2FA_CONFIABLE = 'lavanderia_2fa_confiable'
-const DURACION_2FA_CONFIABLE = 30 * 60 * 1000
+const DURACION_2FA_CONFIABLE = 60 * 60 * 1000
+const DURACION_2FA_ADMIN = 3 * 24 * 60 * 60 * 1000
 
 export interface UsuarioConfiable {
   id: string
@@ -36,7 +37,12 @@ export const obtenerUsuarioConfiable = async (codigoIngresado: string, usuarioId
       return null
     }
 
-    if (Date.now() - confianza.verificadoEn >= DURACION_2FA_CONFIABLE) {
+    const rol = confianza.usuario.rol.trim().toLowerCase()
+    const duracionConfianza = ['admin', 'administrador'].includes(rol)
+      ? DURACION_2FA_ADMIN
+      : DURACION_2FA_CONFIABLE
+
+    if (Date.now() - confianza.verificadoEn >= duracionConfianza) {
       localStorage.removeItem(CLAVE_2FA_CONFIABLE)
       return null
     }
