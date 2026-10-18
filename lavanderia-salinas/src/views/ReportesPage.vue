@@ -7,6 +7,14 @@
             <ion-icon :icon="cashOutline" />
           </div>
           <div class="turno-panel-info">
+            <div v-if="cargandoTurno" class="reportes-seccion-cargando" role="status">
+              <ion-spinner name="crescent" />
+              <span>Cargando caja...</span>
+            </div>
+            <p v-else-if="errorTurno" class="reportes-seccion-error" role="alert">
+              No se pudo cargar la caja: {{ errorTurno }}
+            </p>
+            <template v-else>
             <p class="turno-panel-label">{{ turno.abierto ? 'Caja abierta' : 'Caja cerrada' }}</p>
             <div class="turno-panel-heading">
               <h2>{{ turno.abierto ? `Caja #${turno.numeroCaja}` : 'Inicia un turno' }}</h2>
@@ -15,10 +23,11 @@
                 <span>{{ tiempoTranscurrido }}</span>
               </p>
             </div>
+            </template>
           </div>
         </div>
 
-        <div class="turno-panel-actions">
+        <div v-if="!cargandoTurno && !errorTurno" class="turno-panel-actions">
           <ion-button v-if="!turno.abierto" class="btn-primario" @click="abrirModalTurno">
             Iniciar turno
           </ion-button>
@@ -48,7 +57,22 @@
       </div>
 
       <!-- ───────── Totales del turno ───────── -->
-      <section v-if="(!esCajero || esAdministrador) && resumenReportesExpandido" class="kpi-grid">
+      <div
+        v-if="(!esCajero || esAdministrador) && resumenReportesExpandido && cargandoResumenTurno"
+        class="reportes-seccion-cargando reporte-seccion-kpi"
+        role="status"
+      >
+        <ion-spinner name="crescent" />
+        <span>Cargando resumen del turno...</span>
+      </div>
+      <div
+        v-else-if="(!esCajero || esAdministrador) && resumenReportesExpandido && errorCargaResumenTurno"
+        class="reportes-seccion-error reporte-seccion-kpi"
+        role="alert"
+      >
+        No se pudo cargar el resumen: {{ errorCargaResumenTurno }}
+      </div>
+      <section v-else-if="(!esCajero || esAdministrador) && resumenReportesExpandido" class="kpi-grid">
         <button type="button" class="kpi-card kpi-card-interactivo kpi-efectivo" :class="{ activo: filtroKpi === 'efectivo' }" :disabled="ventasHoy - totalGastosTurnoActual <= 0" @click="seleccionarFiltroKpi('efectivo')">
           <div class="kpi-card-top">
             <p class="label">Efectivo en caja</p>
@@ -129,9 +153,16 @@
                 <ion-icon :icon="chevronForwardOutline" />
               </button>
             </div>
-            <span class="grafica-total">${{ ventasRangoTotal.toFixed(2) }}</span>
+            <span v-if="!cargandoOrdenesReporte && !errorOrdenesReporte" class="grafica-total">${{ ventasRangoTotal.toFixed(2) }}</span>
           </div>
-          <div class="barras-chart">
+          <div v-if="cargandoOrdenesReporte" class="reportes-seccion-cargando" role="status">
+            <ion-spinner name="crescent" />
+            <span>Cargando ventas...</span>
+          </div>
+          <div v-else-if="errorOrdenesReporte" class="reportes-seccion-error" role="alert">
+            No se pudieron cargar las ventas: {{ errorOrdenesReporte }}
+          </div>
+          <div v-else class="barras-chart">
             <div v-for="dia in ventasPorDia" :key="dia.label" class="barra-col">
               <div class="barra-wrap">
                 <div
@@ -150,9 +181,16 @@
         <div v-if="resumenReportesExpandido" class="grafica-card grafica-card-distribucion">
           <div class="grafica-header">
             <strong>Distribución de órdenes</strong>
-            <span class="grafica-total">{{ totalEstadosGrafico }} en el rango</span>
+            <span v-if="!cargandoOrdenesReporte && !errorOrdenesReporte" class="grafica-total">{{ totalEstadosGrafico }} en el rango</span>
           </div>
-          <div class="donut-contenedor">
+          <div v-if="cargandoOrdenesReporte" class="reportes-seccion-cargando" role="status">
+            <ion-spinner name="crescent" />
+            <span>Cargando distribución...</span>
+          </div>
+          <div v-else-if="errorOrdenesReporte" class="reportes-seccion-error" role="alert">
+            No se pudo cargar la distribución: {{ errorOrdenesReporte }}
+          </div>
+          <div v-else class="donut-contenedor">
             <div class="donut" :style="{ background: gradienteEstados }">
               <div class="donut-centro">
                 <strong>{{ totalEstadosGrafico }}</strong>
@@ -172,10 +210,17 @@
         <section ref="movimientosCardRef" class="movimientos-card">
           <div class="movimientos-header">
             <strong>Gastos de caja</strong>
-            <span class="grafica-total">{{ gastosTurnoActual.length }} gastos · ${{ totalGastosTurnoActual.toFixed(2) }}</span>
+            <span v-if="!cargandoMovimientos && !errorMovimientos" class="grafica-total">{{ gastosTurnoActual.length }} gastos · ${{ totalGastosTurnoActual.toFixed(2) }}</span>
           </div>
 
-          <div class="movimientos-scroll">
+          <div v-if="cargandoMovimientos" class="reportes-seccion-cargando" role="status">
+            <ion-spinner name="crescent" />
+            <span>Cargando gastos...</span>
+          </div>
+          <div v-else-if="errorMovimientos" class="reportes-seccion-error" role="alert">
+            No se pudieron cargar los gastos: {{ errorMovimientos }}
+          </div>
+          <div v-else class="movimientos-scroll">
             <article v-for="mov in movimientosTurnoActual" :key="mov.id" class="movimiento-item">
               <div class="movimiento-indicador" :class="`tipo-${mov.tipo}`"></div>
               <div class="movimiento-info">
@@ -309,7 +354,14 @@
 
           <!-- Vista: Órdenes -->
           <div v-if="vistaHistorial === 'ordenes'" class="historial-scroll">
-            <div class="historial-tabla">
+            <div v-if="cargandoOrdenesReporte" class="reportes-seccion-cargando" role="status">
+              <ion-spinner name="crescent" />
+              <span>Cargando órdenes...</span>
+            </div>
+            <div v-else-if="errorOrdenesReporte" class="reportes-seccion-error" role="alert">
+              No se pudieron cargar las órdenes: {{ errorOrdenesReporte }}
+            </div>
+            <div v-else class="historial-tabla">
               <div class="historial-fila historial-fila-head">
                 <span>Orden</span>
                 <span>Cliente</span>
@@ -337,10 +389,13 @@
                   class="pill"
                   :class="(orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? 'pago-vacio' : `pago-${orden.estadoPago}`"
                 >
-                  {{ (orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? '' : textoEstadoPago(orden.estadoPago) }}
+                    {{ textoPagoOrden(orden) }}
                 </span>
                 <div class="detalle-pago-historial">
-                  <template v-if="filtroKpi === 'efectivo' || filtroKpi === 'cobrado'">
+                    <template v-if="esOrdenCancelada(orden.estado)">
+                      <strong class="valor-pago-historial pago-vacio">{{ montoOrdenFirmado(orden) }}</strong>
+                    </template>
+                    <template v-else-if="filtroKpi === 'efectivo' || filtroKpi === 'cobrado'">
                     <span class="valor-pago-linea pago-pagado">
                       <small>{{ filtroKpi === 'efectivo' ? 'Recibido en caja' : 'Cobrado en el turno' }}</small>
                       <strong>${{ montoCobradoEnTurno(orden).toFixed(2) }}</strong>
@@ -360,7 +415,7 @@
                 </div>
               </button>
 
-              <div v-if="ordenesHistorialFiltradas.length === 0" class="historial-vacio">
+              <div v-if="!cargandoOrdenesReporte && !errorOrdenesReporte && ordenesHistorialFiltradas.length === 0" class="historial-vacio">
                 No hay órdenes con este filtro de pago.
               </div>
             </div>
@@ -368,18 +423,26 @@
 
           <!-- Vista: Reportes por fecha -->
           <div v-else class="historial-scroll">
-            <div class="reporte-resumen-grid">
-              <div class="reporte-resumen-card entregados">
-                <span>Total entregados</span>
-                <strong>${{ totalEntregadosReporte.toFixed(2) }}</strong>
-              </div>
-              <div class="reporte-resumen-card cobrados">
-                <span>Total cobrados</span>
-                <strong>${{ totalCobradosReporte.toFixed(2) }}</strong>
-              </div>
+            <div v-if="cargandoOrdenesReporte" class="reportes-seccion-cargando" role="status">
+              <ion-spinner name="crescent" />
+              <span>Cargando reporte...</span>
             </div>
+            <div v-else-if="errorOrdenesReporte" class="reportes-seccion-error" role="alert">
+              No se pudo cargar el reporte: {{ errorOrdenesReporte }}
+            </div>
+            <template v-else>
+              <div class="reporte-resumen-grid">
+                <div class="reporte-resumen-card entregados">
+                  <span>Total entregados</span>
+                  <strong>${{ totalEntregadosReporte.toFixed(2) }}</strong>
+                </div>
+                <div class="reporte-resumen-card cobrados">
+                  <span>Total cobrados</span>
+                  <strong>${{ totalCobradosReporte.toFixed(2) }}</strong>
+                </div>
+              </div>
 
-            <div class="historial-tabla">
+              <div class="historial-tabla">
               <div class="historial-fila historial-fila-head">
                 <span>Orden</span>
                 <span>Cliente</span>
@@ -407,15 +470,16 @@
                   class="pill"
                   :class="(orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? 'pago-vacio' : `pago-${orden.estadoPago}`"
                 >
-                  {{ (orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada') ? '' : textoEstadoPago(orden.estadoPago) }}
+                  {{ textoPagoOrden(orden) }}
                 </span>
-                <strong class="alinear-derecha">${{ montoVisibleReporte(orden).toFixed(2) }}</strong>
+                <strong class="alinear-derecha">{{ montoOrdenFirmado(orden, montoVisibleReporte(orden)) }}</strong>
               </button>
 
-              <div v-if="ordenesReporteFiltradas.length === 0" class="historial-vacio">
-                No hay órdenes en las fechas seleccionadas.
+                <div v-if="ordenesReporteFiltradas.length === 0" class="historial-vacio">
+                  No hay órdenes en las fechas seleccionadas.
+                </div>
               </div>
-            </div>
+            </template>
           </div>
         </section>
       </div>
@@ -676,8 +740,8 @@
             <div v-for="orden in cierreSeleccionado.ordenes" :key="orden.id" class="cierre-mini-item">
               <strong>{{ orden.numero }}</strong>
               <span>{{ orden.nombreCliente }}</span>
-              <span>{{ textoEstado(orden.estado) }}<template v-if="orden.estado !== 'cancelada' && orden.estado !== 'Cerrada-Cancelada'"> · {{ textoEstadoPago(orden.estadoPago) }}</template></span>
-              <span>${{ orden.total.toFixed(2) }}</span>
+              <span>{{ textoEstado(orden.estado) }} · {{ textoPagoOrden(orden) }}</span>
+              <span>{{ montoOrdenFirmado(orden, orden.total) }}</span>
             </div>
           </div>
         </div>
@@ -727,7 +791,7 @@
 <script setup lang="ts">
 import AppShell from '@/components/AppShell.vue'
 import OrdenesPage from '@/views/OrdenesPage.vue'
-import { IonButton, IonIcon, IonModal } from '@ionic/vue'
+import { IonButton, IonIcon, IonModal, IonSpinner } from '@ionic/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { searchOutline, cardOutline, cashOutline, checkmarkCircleOutline, receiptOutline, timeOutline, eyeOutline, closeOutline, chevronBackOutline, chevronForwardOutline, chevronUpOutline, chevronDownOutline, trashOutline } from 'ionicons/icons'
 import { useReportes } from '@/composables/useReportes'
@@ -744,10 +808,22 @@ import {
   inicioFechaCentroamericaUTC
 } from '@/composables/useFechas'
 
-const { turno, abrirTurno, cargarTurno } = useTurno()
-const { ordenes, cargarOrdenes, ordenesDelTurnoActual, ventaDelDiaTurnoActual, cantidadOrdenesTurnoActual, restaurarOrden } = useOrdenes()
+const { turno, abrirTurno, cargarTurno, cargando: cargandoTurno, error: errorTurno } = useTurno()
+const {
+  ordenes,
+  cargarOrdenes,
+  cargando: cargandoOrdenes,
+  error: errorOrdenes,
+  ordenesDelTurnoActual,
+  ventaDelDiaTurnoActual,
+  cantidadOrdenesTurnoActual,
+  restaurarOrden
+} = useOrdenes()
 const {
   movimientos,
+  cargando: cargandoMovimientos,
+  error: errorMovimientos,
+  cargarMovimientos,
   eliminarGasto
 } = useCajaMovimientos()
 
@@ -775,6 +851,15 @@ const {
   historial
 } = useReportes()
 const { historialCierres, obtenerCierrePorId, registrarCierreTurno, cargarHistorial } = useHistorialCierres()
+const ordenesReporteInicializadas = ref(false)
+const cargandoOrdenesReporte = computed(() => !ordenesReporteInicializadas.value || cargandoOrdenes.value)
+const errorOrdenesReporte = errorOrdenes
+const cargandoResumenTurno = computed(() =>
+  cargandoOrdenesReporte.value || cargandoMovimientos.value || cargandoTurno.value
+)
+const errorCargaResumenTurno = computed(() =>
+  errorOrdenes.value || errorMovimientos.value || errorTurno.value
+)
 
 interface Usuario {
   id?: string
@@ -793,8 +878,19 @@ const esAdministrador = computed(() => {
   return rol === 'administrador' || rol === 'admin'
 })
 
+const cargarDatosReporte = async () => {
+  await Promise.all([cargarOrdenes(), cargarMovimientos()])
+  ordenesReporteInicializadas.value = true
+  if (errorOrdenes.value) {
+    console.error('Error al cargar órdenes para reportes:', errorOrdenes.value)
+  }
+  if (errorMovimientos.value) {
+    console.error('Error al cargar movimientos para reportes:', errorMovimientos.value)
+  }
+}
+
 onMounted(() => {
-  void cargarOrdenes()
+  void cargarDatosReporte()
   void cargarTurno()
   void cargarHistorial().catch((error) => console.error('Error al cargar historial de cierres:', error))
 
@@ -1043,7 +1139,9 @@ const ordenesReporteFiltradas = computed(() => {
       const coincideEstado = esFiltroDePago || filtroEstadoReportes.value === 'todos'
         ? true
         : filtroEstadoReportes.value === 'cerradas'
-          ? orden.estado === 'cerrada' || orden.estado === 'Cerrada-Cancelada'
+        ? orden.estado === 'cerrada'
+        : filtroEstadoReportes.value === 'cancelada'
+          ? orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada'
           : orden.estado === filtroEstadoReportes.value
       const telefono = orden.telefono.replace(/\D/g, '')
       const coincideBusqueda = !consulta || [orden.numero, orden.nombreCliente, orden.telefono]
@@ -1265,8 +1363,8 @@ const exportarCierrePdf = () => {
           <td>${orden.numero}</td>
           <td>${orden.nombreCliente}</td>
           <td>${textoEstado(orden.estado)}</td>
-          <td>${orden.estado === 'cancelada' || orden.estado === 'Cerrada-Cancelada' ? '' : textoEstadoPago(orden.estadoPago)}</td>
-          <td>$${orden.total.toFixed(2)}</td>
+          <td>${textoPagoOrden(orden)}</td>
+          <td>${montoOrdenFirmado(orden, orden.total)}</td>
         </tr>
       `
     )
@@ -1395,6 +1493,17 @@ const textoEstadoPago = (estado: EstadoPago) => {
   }
   return map[estado]
 }
+
+const esOrdenCancelada = (estado: OrdenEstado) =>
+  estado === 'cancelada' || estado === 'Cerrada-Cancelada'
+
+const textoPagoOrden = (orden: Pick<Orden, 'estado' | 'estadoPago'>) =>
+  esOrdenCancelada(orden.estado) ? 'Orden cancelada' : textoEstadoPago(orden.estadoPago)
+
+const montoOrdenFirmado = (orden: Pick<Orden, 'estado' | 'total'>, monto = orden.total) =>
+  esOrdenCancelada(orden.estado)
+    ? `-$${Math.abs(Number(monto || 0)).toFixed(2)}`
+    : `$${Number(monto || 0).toFixed(2)}`
 
 const formatearFechaCorta = (valor: string) =>
   formatearFechaCentroamerica(valor, { day: '2-digit', month: 'short', year: 'numeric' })
@@ -2536,6 +2645,37 @@ const confirmarRestaurarOrden = async () => {
   text-align: center;
   color: #9fb4c9;
   padding: 24px;
+}
+
+.reportes-seccion-cargando,
+.reportes-seccion-error {
+  display: flex;
+  min-height: 88px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  color: #58738b;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.reportes-seccion-cargando ion-spinner {
+  width: 22px;
+  height: 22px;
+  color: #168b83;
+}
+
+.reportes-seccion-error {
+  color: #b91c1c;
+}
+
+.reporte-seccion-kpi {
+  min-height: 160px;
+  border: 1px solid #e1ebf2;
+  border-radius: 18px;
+  background: #fff;
 }
 
 /* ── Cierres ── */

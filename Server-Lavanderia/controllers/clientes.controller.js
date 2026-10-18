@@ -72,6 +72,24 @@ const actualizar = async (req, res) => {
   }
 };
 
+const actualizarTotalOrdenes = async (req, res) => {
+  try {
+    const cliente = await query.actualizarTotalOrdenesCliente(
+      req.params.id,
+      req.body?.totalOrdenes
+    );
+    res.json(cliente);
+  } catch (error) {
+    if (error.message.includes("No se encontró")) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message.includes("entero entre")) {
+      return res.status(400).json({ error: error.message });
+    }
+    manejarError(res, error);
+  }
+};
+
 const eliminar = async (req, res) => {
   try {
     await query.eliminarCliente(req.params.id);
@@ -121,6 +139,7 @@ module.exports = {
   buscarPorTelefono,
   crear,
   actualizar,
+  actualizarTotalOrdenes,
   eliminar,
   registrarOrden,
   buscar,

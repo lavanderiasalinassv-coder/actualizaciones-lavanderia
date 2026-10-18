@@ -12,8 +12,8 @@ const partesFecha = (fecha: Date) => {
   return { year: Number(valores.year), month: Number(valores.month), day: Number(valores.day) }
 }
 
-export const fechaHoyCentroamerica = () => {
-  const { year, month, day } = partesFecha(new Date())
+export const fechaHoyCentroamerica = (fecha = new Date()) => {
+  const { year, month, day } = partesFecha(fecha)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
@@ -66,4 +66,23 @@ export const formatearFechaCentroamerica = (valor: string | null, opciones: Intl
   if (!fecha || Number.isNaN(fecha.getTime())) return 'No disponible'
 
   return new Intl.DateTimeFormat('es-ES', { timeZone: ZONA_HORARIA_NEGOCIO, ...opciones }).format(fecha)
+}
+
+export const formatearFechaCentroamericaMesCorto = (
+  valor: string | null,
+  opciones: Intl.DateTimeFormatOptions = {}
+) => {
+  if (!valor) return 'No disponible'
+
+  const fecha = crearFechaDesdeValor(valor)
+  if (!fecha || Number.isNaN(fecha.getTime())) return 'No disponible'
+
+  return new Intl.DateTimeFormat('es-ES', {
+    timeZone: ZONA_HORARIA_NEGOCIO,
+    ...opciones,
+    month: 'short'
+  })
+    .formatToParts(fecha)
+    .map((parte) => (parte.type === 'month' ? parte.value.slice(0, 3) : parte.value))
+    .join('')
 }

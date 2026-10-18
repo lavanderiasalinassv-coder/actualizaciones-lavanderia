@@ -660,7 +660,10 @@
                         <span class="cierre-orden-estado" :class="`estado-${orden.estado}`">{{ orden.estado }}</span>
                       </td>
                       <td>
-                        <span class="cierre-orden-pago" :class="`pago-${orden.estadoPago}`">{{ orden.estadoPago }}</span>
+                        <span
+                          class="cierre-orden-pago"
+                          :class="orden.estado === 'Cerrada-Cancelada' || orden.estado === 'cancelada' ? 'pago-cancelada' : `pago-${orden.estadoPago}`"
+                        >{{ orden.estado === 'Cerrada-Cancelada' || orden.estado === 'cancelada' ? 'Orden cancelada' : orden.estadoPago }}</span>
                       </td>
                       <td class="cierres-tabla-total">${{ Number(orden.cobradoEnTurno || 0).toFixed(2) }}</td>
                       <td>${{ Number(orden.montoRecibido || 0).toFixed(2) }}</td>
@@ -729,86 +732,12 @@
       </div>
     </ion-modal>
 
-    <ion-modal :is-open="mostrarModalDetalleOrden" class="modal-shell modal-orden-cierre" @didDismiss="cerrarModalDetalleOrden">
-      <div class="modal-contenido modal-orden-cierre-contenido force-light">
-        <div class="modal-header">
-          <div class="modal-header-left">
-            <div class="modal-header-icon">
-              <ion-icon :icon="documentTextOutline" />
-            </div>
-            <div>
-              <p class="modal-titulo">Detalle de orden</p>
-              <p class="modal-subtitulo">{{ ordenSeleccionadaCierre?.numero || 'Sin número' }}</p>
-            </div>
-          </div>
-          <button class="modal-cerrar" @click="cerrarModalDetalleOrden">
-            <ion-icon :icon="closeOutline" />
-          </button>
-        </div>
-
-        <div v-if="ordenSeleccionadaCierre" class="detalle-orden-cierre-card">
-          <div class="detalle-orden-cierre-header">
-            <span class="detalle-orden-cierre-badge">N° {{ ordenSeleccionadaCierre.numero }}</span>
-            <span v-if="ordenSeleccionadaCierre.esReferencia" class="cierre-orden-referencia">Referencia</span>
-          </div>
-          <div class="detalle-orden-cierre-grid">
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Cliente</span>
-              <strong>{{ ordenSeleccionadaCierre.nombreCliente }}</strong>
-            </div>
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Cobrado en turno</span>
-              <strong>${{ ordenSeleccionadaCierre.cobradoEnTurno.toFixed(2) }}</strong>
-            </div>
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Estado</span>
-              <strong>{{ ordenSeleccionadaCierre.estado }}</strong>
-            </div>
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Pago</span>
-              <strong>{{ ordenSeleccionadaCierre.estadoPago }}</strong>
-            </div>
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Monto recibido</span>
-              <strong>${{ ordenSeleccionadaCierre.montoRecibido.toFixed(2) }}</strong>
-            </div>
-            <div class="detalle-orden-cierre-item">
-              <span class="detalle-label">Fecha</span>
-              <strong>{{ new Date(ordenSeleccionadaCierre.createdAt).toLocaleDateString('es-ES') }}</strong>
-            </div>
-          </div>
-
-          <section class="detalle-orden-cierre-movimientos">
-            <div class="detalle-orden-cierre-seccion-header">
-              <div>
-                <p class="modal-titulo small">Historial de movimientos</p>
-                <p class="modal-subtitulo">
-                  {{ ordenSeleccionadaCierre.movimientos?.length || 0 }} registros de la orden
-                </p>
-              </div>
-            </div>
-
-            <div v-if="ordenSeleccionadaCierre.movimientos?.length" class="detalle-orden-cierre-movimientos-lista">
-              <article
-                v-for="movimiento in ordenSeleccionadaCierre.movimientos"
-                :key="movimiento.id"
-                class="detalle-orden-cierre-movimiento"
-              >
-                <span class="detalle-orden-cierre-movimiento-bullet">+</span>
-                <div class="detalle-orden-cierre-movimiento-info">
-                  <strong>{{ movimiento.texto || 'Movimiento registrado' }}</strong>
-                  <span>Usuario a cargo: {{ movimiento.usuarioNombre || 'Sistema' }}</span>
-                  <span>Fecha: {{ formatearFechaHoraCierre(movimiento.fecha) }}</span>
-                </div>
-              </article>
-            </div>
-            <p v-else class="detalle-orden-cierre-movimientos-vacio">
-              No hay movimientos registrados para esta orden.
-            </p>
-          </section>
-        </div>
-      </div>
-    </ion-modal>
+    <OrdenesPage
+      v-if="ordenSeleccionadaCierreId"
+      :solo-detalle-id="ordenSeleccionadaCierreId"
+      :mostrar-restaurar-cerrada="true"
+      @cerrado="cerrarModalDetalleOrden"
+    />
 
     <!-- Modal: Reportar problema -->
     <ion-modal :is-open="mostrarModalReportarProblema" class="modal-shell modal-problema-compacto" @didDismiss="mostrarModalReportarProblema = false">
@@ -1647,7 +1576,7 @@
 
 <script setup lang="ts">
 import { IonButton, IonContent, IonIcon, IonModal, IonPage, IonSpinner } from '@ionic/vue'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logo.png'
 import imagenDesarrollador from '@/assets/perfilprogramador.png'
@@ -1668,6 +1597,7 @@ import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 import NieveNavidena from '@/components/NieveNavidena.vue'
 import { useDiciembre } from '@/composables/useDiciembre'
 import { jsPDF } from 'jspdf'
+const OrdenesPage = defineAsyncComponent(() => import('@/views/OrdenesPage.vue'))
 import logoNavidad from '@/assets/logo-navidad.png'
 const { validarSesion } = useSesion()
 const mensajeErrorActualizacion = ref('')
@@ -2154,7 +2084,7 @@ const abrirPerfil = () => {
   void router.replace({ path: '/tabs/principal', query: { perfil: '1' } }).catch(() => {})
 }
 const recargandoApp = ref(false)
-const mostrarCargador = computed(() => ['/tabs/home', '/tabs/ordenes', '/tabs/reportes'].includes(route.path))
+const mostrarCargador = computed(() => route.path === '/tabs/home')
 const cargandoVista = ref(mostrarCargador.value)
 let solicitudesPendientes = 0
 let fetchOriginal: typeof window.fetch | null = null
@@ -2490,7 +2420,6 @@ onUnmounted(() => {
 const { mostrarModalGasto, mostrarModalCierres, abrirModalGasto } = useModalesCaja()
 const mostrarModalCierre = ref(false)
 const mostrarModalOrdenesCierre = ref(false)
-const mostrarModalDetalleOrden = ref(false)
 const mostrarModalGastosCierre = ref(false)
 const montoGasto = ref(0)
 const tiposGasto = [
@@ -2522,7 +2451,7 @@ const errorDetalleCierre = ref('')
 const cierreSeleccionado = ref<any>(null)
 const referenciaOrdenAbiertaId = ref<string | null>(null)
 let solicitudDetalleCierre = 0
-const ordenSeleccionadaCierre = ref<any>(null)
+const ordenSeleccionadaCierreId = ref('')
 const cierrePendienteEliminar = ref<any>(null)
 const mostrarConfirmacionEliminarCierre = ref(false)
 const eliminandoCierre = ref(false)
@@ -2892,7 +2821,7 @@ const verOrdenesCierre = async (cierre: any) => {
   const solicitudActual = ++solicitudDetalleCierre
   referenciaOrdenAbiertaId.value = null
   cierreSeleccionado.value = null
-  ordenSeleccionadaCierre.value = null
+  ordenSeleccionadaCierreId.value = ''
   cargandoDetalleCierre.value = true
   errorDetalleCierre.value = ''
   mostrarModalOrdenesCierre.value = true
@@ -2947,30 +2876,13 @@ const extraerTipoGasto = (concepto: string) => {
   return { tipo: '', motivo: concepto }
 }
 
-const abrirModalDetalleOrden = async (orden: any) => {
-  ordenSeleccionadaCierre.value = orden
-  mostrarModalDetalleOrden.value = true
-
-  try {
-    const respuesta = await fetch(`${getApiBaseUrl()}/ordenes/${orden.id}`)
-    if (!respuesta.ok) return
-    const ordenCompleta = await respuesta.json()
-    if (ordenSeleccionadaCierre.value?.id !== orden.id) return
-    ordenSeleccionadaCierre.value = {
-      ...orden,
-      ...ordenCompleta,
-      movimientos: Array.isArray(ordenCompleta?.movimientos)
-        ? ordenCompleta.movimientos
-        : []
-    }
-  } catch {
-    // El resumen del cierre sigue disponible si falla la consulta detallada.
-  }
+const abrirModalDetalleOrden = (orden: any) => {
+  if (!orden?.id) return
+  ordenSeleccionadaCierreId.value = String(orden.id)
 }
 
 const cerrarModalDetalleOrden = () => {
-  mostrarModalDetalleOrden.value = false
-  ordenSeleccionadaCierre.value = null
+  ordenSeleccionadaCierreId.value = ''
 }
 
 const obtenerMontoPendientes = (cierre: any) => {
@@ -5767,6 +5679,11 @@ ion-content.shell-container {
 .pago-pagado {
   color: #16a34a;
 }
+
+.pago-cancelada {
+  color: #dc2626;
+}
+
 .gasto-tipo-preview {
   margin: -4px 0 4px;
   font-size: 0.82rem;

@@ -2,22 +2,30 @@
   <AppShell>
     <div class="tareas-page force-light">
 
-      <section class="stats-grid">
+      <section class="stats-grid" :class="{ 'stats-personales': !esAdmin }">
         <article class="stat-card amarillo">
-          <span>⏳ Pendientes</span>
-          <strong>{{ tareasPendientes.length }}</strong>
+          <span class="stat-icon" aria-hidden="true">◷</span>
+          <div class="stat-copy"><span>Pendientes</span><strong>{{ tareasPendientes.length }}</strong></div>
         </article>
         <article class="stat-card verde">
-          <span>✅ Completadas</span>
-          <strong>{{ tareasCompletadas.length }}</strong>
+          <span class="stat-icon" aria-hidden="true">✓</span>
+          <div class="stat-copy"><span>Completadas</span><strong>{{ tareasCompletadas.length }}</strong></div>
         </article>
         <article class="stat-card azul">
-          <span>📌 Visibles</span>
-          <strong>{{ tareasTotal }}</strong>
+          <span class="stat-icon" aria-hidden="true">▤</span>
+          <div class="stat-copy"><span>{{ esAdmin ? 'Total de tareas' : 'En tu lista' }}</span><strong>{{ tareasTotal }}</strong></div>
         </article>
-        <article class="stat-card morado">
-          <span>👥 Usuarios activos</span>
-          <strong>{{ usuariosActivos.length }}</strong>
+        <article v-if="esAdmin" class="stat-card morado">
+          <span class="stat-icon" aria-hidden="true">♙</span>
+          <div class="stat-copy"><span>Usuarios activos</span><strong>{{ usuariosActivos.length }}</strong></div>
+        </article>
+        <article v-else class="stat-card morado progreso-stat">
+          <span class="stat-icon" aria-hidden="true">↗</span>
+          <div class="stat-copy">
+            <span>Mi avance</span>
+            <strong>{{ progresoTareas }}%</strong>
+            <span class="progreso-riel"><span :style="{ width: `${progresoTareas}%` }"></span></span>
+          </div>
         </article>
       </section>
 
@@ -25,7 +33,7 @@
         <div class="panel-main">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">{{ esAdmin ? 'Administrador' : 'Mis tareas' }}</p>
+              <p class="panel-kicker">{{ esDesarrollador ? 'Desarrollador' : esAdmin ? 'Administrador' : 'Mis tareas' }}</p>
               <h2>{{ esAdmin ? 'Todas las tareas' : 'Asignadas para ti' }}</h2>
             </div>
 
@@ -62,7 +70,9 @@
             <div v-if="esAdmin && modoCrear" class="creator-card">
               <div class="creator-header">
                 <div>
-                  <p class="panel-kicker">🌈 Nueva tarea</p>
+                  <p class="panel-kicker">CREA Y ASIGNA</p>
+                  <h3>Nueva tarea</h3>
+                  <span>Define el trabajo y asígnalo a alguien del equipo.</span>
                 </div>
               </div>
 
@@ -105,61 +115,18 @@
                 <button class="primary-pill" @click="guardarTarea">Crear tarea</button>
               </div>
 
-              <div class="ordenes-tareas-card">
-                <div class="ordenes-tareas-head">
-                  <div>
-                    <p class="panel-kicker">📦 Órdenes para tareas</p>
-                    <h3>{{ totalOrdenesActivas }} órdenes activas</h3>
-                  </div>
-                  <label class="field ordenes-asignar-select">
-                    <span>Asignar estas tareas a</span>
-                    <select v-model="asignarOrdenesAId">
-                      <option v-for="usuario in usuariosActivos" :key="usuario.id" :value="usuario.id">
-                        {{ usuario.nombre }} · {{ etiquetaRol(usuario.rol) }}
-                      </option>
-                    </select>
-                  </label>
-                </div>
-
-                <div v-if="ordenesTareaVista.length === 0" class="ordenes-vacio">
-                  No hay órdenes activas para convertir en tarea.
-                </div>
-
-                <div v-else class="ordenes-check-grid">
-                  <label
-                    v-for="orden in ordenesTareaVista"
-                    :key="orden.id"
-                    class="orden-check-item"
-                    :class="{ bloqueada: ordenYaAsignada(orden.numero) }"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="ordenesMarcadasIds.includes(orden.id)"
-                      :disabled="ordenYaAsignada(orden.numero)"
-                      @change="alternarOrdenMarcada(orden.id)"
-                    />
-                    <span>{{ orden.numero }}</span>
-                  </label>
-                </div>
-
-                <div class="ordenes-acciones">
-                  <button class="ghost-pill" @click="marcarTodasOrdenesVisibles">
-                    Marcar visibles
-                  </button>
-                  <button class="ghost-pill" @click="limpiarOrdenesMarcadas">
-                    Limpiar selección
-                  </button>
-                  <button class="primary-pill" :disabled="!ordenesMarcadasIds.length || guardandoOrdenes" @click="crearTareasDesdeOrdenes">
-                    {{ guardandoOrdenes ? 'Creando...' : `Crear ${ordenesMarcadasIds.length} tareas` }}
-                  </button>
-                </div>
-              </div>
+              <button type="button" class="primary-pill abrir-asignacion-orden" @click="mostrarModalOrdenes = true">
+                Asignar orden como tarea
+              </button>
             </div>
 
             <div class="task-list-panel">
               <div class="task-list-head">
-                <p class="panel-kicker">📋 Tareas asignadas</p>
-                <h3>{{ tareasFiltradas.length }} en lista</h3>
+                <div>
+                  <p class="panel-kicker">{{ esAdmin ? 'SEGUIMIENTO DEL EQUIPO' : 'TU TRABAJO' }}</p>
+                  <h3>{{ esAdmin ? 'Tareas del equipo' : 'Tareas asignadas' }}</h3>
+                </div>
+                <span class="task-count-pill">{{ tareasFiltradas.length }} en lista</span>
               </div>
 
               <div class="task-list">
@@ -172,9 +139,12 @@
                   v-for="tarea in tareasFiltradas"
                   :key="tarea.id"
                   class="task-card"
-                  :class="{ done: tarea.completada }"
+                  :class="[
+                    { done: tarea.completada },
+                    `prioridad-${tarea.prioridad}`
+                  ]"
                 >
-                  <div class="task-emoji">{{ tarea.emoji }}</div>
+                  <div class="task-emoji" aria-hidden="true">{{ tarea.emoji }}</div>
 
                   <div class="task-content">
                     <div class="task-topline">
@@ -183,6 +153,9 @@
                           <h3>{{ tarea.titulo }}</h3>
                           <span class="priority-badge" :class="tarea.prioridad">
                             {{ etiquetaPrioridad(tarea.prioridad) }}
+                          </span>
+                          <span class="task-completion" :class="{ completada: tarea.completada }">
+                            {{ tarea.completada ? 'Completada' : 'Pendiente' }}
                           </span>
                         </div>
                         <p class="task-desc">
@@ -231,12 +204,85 @@
         </div>
       </section>
     </div>
+
+    <ion-modal
+      class="asignar-orden-modal"
+      :is-open="mostrarModalOrdenes"
+      :backdrop-dismiss="!guardandoOrdenes"
+      @didDismiss="cerrarModalOrdenes"
+    >
+      <div class="ordenes-modal-contenido force-light">
+        <header class="ordenes-modal-header">
+          <div>
+            <p class="panel-kicker">📦 Órdenes activas</p>
+            <h2>Asignar orden como tarea</h2>
+            <span>{{ totalOrdenesActivas }} órdenes disponibles</span>
+          </div>
+          <button
+            type="button"
+            class="ordenes-modal-cerrar"
+            aria-label="Cerrar"
+            :disabled="guardandoOrdenes"
+            @click="cerrarModalOrdenes"
+          >×</button>
+        </header>
+
+        <div class="ordenes-modal-asignacion">
+          <label class="field ordenes-asignar-select">
+            <span>Asignar estas tareas a</span>
+            <select v-model="asignarOrdenesAId">
+              <option v-for="usuario in usuariosActivos" :key="usuario.id" :value="usuario.id">
+                {{ usuario.nombre }} · {{ etiquetaRol(usuario.rol) }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <div v-if="ordenesTareaVista.length === 0" class="ordenes-vacio">
+          No hay órdenes activas para convertir en tarea.
+        </div>
+
+        <div v-else class="ordenes-check-grid">
+          <label
+            v-for="orden in ordenesTareaVista"
+            :key="orden.id"
+            class="orden-check-item"
+            :class="{ bloqueada: ordenYaAsignada(orden.numero) }"
+          >
+            <input
+              type="checkbox"
+              :checked="ordenesMarcadasIds.includes(orden.id)"
+              :disabled="ordenYaAsignada(orden.numero)"
+              @change="alternarOrdenMarcada(orden.id)"
+            />
+            <span>{{ orden.numero }}</span>
+          </label>
+        </div>
+
+        <div class="ordenes-acciones">
+          <button type="button" class="ghost-pill" :disabled="guardandoOrdenes" @click="marcarTodasOrdenesVisibles">
+            Marcar visibles
+          </button>
+          <button type="button" class="ghost-pill" :disabled="guardandoOrdenes" @click="limpiarOrdenesMarcadas">
+            Limpiar selección
+          </button>
+          <button
+            type="button"
+            class="primary-pill"
+            :disabled="!ordenesMarcadasIds.length || guardandoOrdenes"
+            @click="crearTareasDesdeOrdenes"
+          >
+            {{ guardandoOrdenes ? 'Creando...' : `Crear ${ordenesMarcadasIds.length} tareas` }}
+          </button>
+        </div>
+      </div>
+    </ion-modal>
   </AppShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { toastController } from '@ionic/vue'
+import { IonModal, toastController } from '@ionic/vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import { useTareas, type PrioridadTarea } from '@/composables/useTareas'
@@ -248,6 +294,7 @@ const irA = (ruta: string) => router.push(ruta).catch(() => {})
 const {
   usuarioActual,
   esAdmin,
+  esDesarrollador,
   tareasVisibles,
   tareasPendientes,
   tareasCompletadas,
@@ -269,6 +316,7 @@ const filtroUsuario = ref('todos')
 const filtroEstado = ref<'todas' | 'pendientes' | 'completadas'>('todas')
 const guardando = ref(false)
 const guardandoOrdenes = ref(false)
+const mostrarModalOrdenes = ref(false)
 const asignarOrdenesAId = ref('')
 const ordenesMarcadasIds = ref<string[]>([])
 
@@ -327,6 +375,12 @@ const tareasFiltradas = computed(() => {
   return lista
 })
 
+const progresoTareas = computed(() =>
+  tareasTotal.value
+    ? Math.round((tareasCompletadas.value.length / tareasTotal.value) * 100)
+    : 0
+)
+
 const resetFormulario = () => {
   formulario.value = {
     titulo: '',
@@ -383,6 +437,11 @@ const limpiarOrdenesMarcadas = () => {
   ordenesMarcadasIds.value = []
 }
 
+const cerrarModalOrdenes = () => {
+  if (guardandoOrdenes.value) return
+  mostrarModalOrdenes.value = false
+}
+
 const marcarTodasOrdenesVisibles = () => {
   const visiblesNoAsignadas = ordenesTareaVista.value
     .filter((orden) => !ordenYaAsignada(orden.numero))
@@ -434,6 +493,7 @@ const crearTareasDesdeOrdenes = async () => {
       : `Se crearon ${creadas} tareas desde órdenes.`
     await mostrarToast(mensaje, 'success')
     limpiarOrdenesMarcadas()
+    mostrarModalOrdenes.value = false
   } catch (error) {
     await mostrarToast(error instanceof Error ? error.message : 'No se pudieron crear tareas desde órdenes.')
   } finally {
@@ -827,31 +887,84 @@ textarea {
   margin-top: 10px;
 }
 
-.ordenes-tareas-card {
+.abrir-asignacion-orden {
   margin-top: 12px;
-  border-radius: 18px;
+}
+
+.asignar-orden-modal {
+  --width: min(760px, calc(100vw - 28px));
+  --height: fit-content;
+  --min-height: 0;
+  --border-radius: 24px;
+}
+
+.asignar-orden-modal::part(content) {
+  height: fit-content;
+  min-height: 0;
+  max-height: 90vh;
   border: 1px solid rgba(18, 58, 102, 0.12);
-  background: linear-gradient(180deg, #fdfefe, #f4f9fd);
-  padding: 12px;
+  border-radius: 24px;
+  background: #ffffff;
+}
+
+.ordenes-modal-contenido {
   display: grid;
-  gap: 10px;
+  max-height: 90vh;
+  gap: 18px;
+  overflow: auto;
+  padding: 24px;
+  background: linear-gradient(180deg, #ffffff, #f7fafd);
 }
 
-.ordenes-tareas-head {
+.ordenes-modal-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  align-items: flex-end;
-  color: #0a1f38;
+  gap: 16px;
 }
 
-.ordenes-tareas-head h3 {
+.ordenes-modal-header .panel-kicker {
+  margin: 0 0 5px;
+  color: #a76508;
+}
+
+.ordenes-modal-header h2 {
   margin: 0;
-  color: #0a1f38;
+  color: #123a66;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.ordenes-modal-header span {
+  display: block;
+  margin-top: 5px;
+  color: #6d829c;
+  font-size: 0.88rem;
+}
+
+.ordenes-modal-cerrar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgba(18, 58, 102, 0.12);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #526a82;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.ordenes-modal-asignacion {
+  padding: 14px;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  border-radius: 16px;
+  background: #ffffff;
 }
 
 .ordenes-asignar-select {
-  min-width: 260px;
+  min-width: 0;
 }
 
 .ordenes-vacio {
@@ -864,7 +977,7 @@ textarea {
 }
 
 .ordenes-check-grid {
-  max-height: 190px;
+  max-height: min(42vh, 360px);
   overflow: auto;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -899,6 +1012,14 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid rgba(18, 58, 102, 0.1);
+}
+
+.ordenes-acciones button:disabled,
+.ordenes-modal-cerrar:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .task-list {
@@ -1107,15 +1228,6 @@ textarea {
     flex-direction: column;
   }
 
-  .ordenes-tareas-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .ordenes-asignar-select {
-    min-width: 100%;
-  }
-
   .ordenes-check-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1130,6 +1242,23 @@ textarea {
   .stat-card {
     padding: 10px 12px;
     gap: 2px;
+  }
+
+  .ordenes-modal-contenido {
+    gap: 14px;
+    padding: 18px 14px;
+  }
+
+  .ordenes-modal-header h2 {
+    font-size: 1.12rem;
+  }
+
+  .ordenes-acciones {
+    justify-content: stretch;
+  }
+
+  .ordenes-acciones button {
+    flex: 1 1 100%;
   }
 
   .stat-card span {
@@ -1199,6 +1328,543 @@ textarea {
 
   .empty-state {
     grid-column: 1 / -1;
+  }
+}
+
+.tareas-page {
+  max-width: 1380px;
+  gap: 20px;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  --stat-color: #1d5ca8;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  min-height: 88px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid rgba(10, 31, 56, 0.09);
+  border-top: 3px solid var(--stat-color);
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 5px 14px rgba(10, 31, 56, 0.045);
+}
+
+.stat-card.amarillo {
+  --stat-color: #d89520;
+  background: #ffffff;
+}
+
+.stat-card.verde {
+  --stat-color: #25845d;
+  background: #ffffff;
+}
+
+.stat-card.azul {
+  --stat-color: #3479b9;
+  background: #ffffff;
+}
+
+.stat-card.morado {
+  --stat-color: #7957b4;
+  background: #ffffff;
+}
+
+.stat-card .stat-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--stat-color) 11%, #ffffff);
+  color: var(--stat-color);
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.stat-card.amarillo .stat-icon {
+  background: #fff4dc;
+  color: #a96b07;
+}
+
+.stat-card.verde .stat-icon {
+  background: #e5f5ec;
+  color: #217a54;
+}
+
+.stat-card.azul .stat-icon {
+  background: #e8f1fb;
+  color: #2c69a3;
+}
+
+.stat-card.morado .stat-icon {
+  background: #f0eafb;
+  color: #714da9;
+}
+
+.stat-card .stat-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.stat-card .stat-copy > span:first-child {
+  color: #718197;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.stat-card .stat-copy strong {
+  color: #173858;
+  font-size: 1.48rem;
+  line-height: 1;
+}
+
+.stat-card .progreso-riel {
+  display: block;
+  width: min(120px, 100%);
+  height: 5px;
+  overflow: hidden;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(113, 70, 181, 0.14);
+}
+
+.stat-card .progreso-riel span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7650bc, #a67be4);
+  transition: width 220ms ease;
+}
+
+.panel-main {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.panel-head {
+  align-items: center;
+  padding: 0 2px;
+}
+
+.panel-head .panel-kicker,
+.task-list-head .panel-kicker,
+.creator-header .panel-kicker {
+  margin: 0 0 5px;
+  color: #8192a6;
+  font-size: 0.67rem;
+  letter-spacing: 0.13em;
+}
+
+.panel-head h2 {
+  color: #123a66;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.soft-btn {
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.8rem;
+}
+
+.filters-row {
+  padding: 13px;
+  border-color: rgba(18, 58, 102, 0.08);
+  border-radius: 16px;
+  background: #f5f8fb;
+}
+
+.filters-row select {
+  min-height: 42px;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.creator-card {
+  padding: 20px;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(79, 179, 224, 0.09), transparent 35%),
+    linear-gradient(180deg, #ffffff, #f7fafd);
+  box-shadow: 0 10px 26px rgba(10, 31, 56, 0.07);
+}
+
+.creator-header {
+  margin-bottom: 16px;
+}
+
+.creator-header h3 {
+  margin: 0;
+  color: #123a66;
+  font-size: 1.12rem;
+  font-weight: 900;
+}
+
+.creator-header span {
+  display: block;
+  margin-top: 4px;
+  color: #76889d;
+  font-size: 0.78rem;
+}
+
+.creator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.creator-card .field {
+  min-width: 0;
+}
+
+.creator-card .field-wide {
+  grid-column: 1 / -1;
+}
+
+.creator-card input,
+.creator-card textarea,
+.creator-card select,
+.assign-select select {
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.creator-card textarea {
+  min-height: 88px;
+}
+
+.creator-actions {
+  margin-top: 16px;
+}
+
+.creator-actions button,
+.abrir-asignacion-orden {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.abrir-asignacion-orden {
+  width: 100%;
+  margin-top: 14px;
+  background: linear-gradient(120deg, #174b71, #287b9a);
+}
+
+.tareas-workspace {
+  grid-template-columns: minmax(360px, 0.92fr) minmax(0, 1.28fr);
+  gap: 18px;
+}
+
+.tareas-workspace .creator-card {
+  position: static;
+}
+
+.task-list-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(18, 58, 102, 0.09);
+  border-radius: 20px;
+  background: #f7f9fc;
+  box-shadow: none;
+}
+
+.task-list-head {
+  margin-bottom: 16px;
+}
+
+.task-list-head h3 {
+  color: #123a66;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.task-count-pill {
+  flex-shrink: 0;
+  padding: 7px 11px;
+  border: 1px solid rgba(18, 58, 102, 0.09);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #567089;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.task-list {
+  gap: 11px;
+}
+
+.task-card {
+  position: relative;
+  overflow: hidden;
+  padding: 15px;
+  border: 1px solid rgba(10, 31, 56, 0.08);
+  border-left: 4px solid #9eb0bf;
+  border-radius: 17px;
+  background: #ffffff;
+  box-shadow: 0 5px 14px rgba(10, 31, 56, 0.045);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(10, 31, 56, 0.09);
+}
+
+.task-card.prioridad-alta {
+  border-left-color: #e25c58;
+}
+
+.task-card.prioridad-media {
+  border-left-color: #e6a434;
+}
+
+.task-card.prioridad-baja {
+  border-left-color: #42a477;
+}
+
+.task-card.done {
+  border-left-color: #42a477;
+  background: linear-gradient(110deg, #f1fbf5, #ffffff 42%);
+}
+
+.task-emoji {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(18, 58, 102, 0.07);
+  border-radius: 15px;
+  background: #f0f5f9;
+}
+
+.task-content {
+  min-width: 0;
+  gap: 10px;
+}
+
+.task-title-row {
+  gap: 7px;
+}
+
+.task-title-row h3 {
+  margin: 0 3px 0 0;
+  color: #173858;
+  font-size: 0.98rem;
+  font-weight: 850;
+}
+
+.priority-badge,
+.task-completion {
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-weight: 850;
+}
+
+.task-completion {
+  background: #fff3d6;
+  color: #95620d;
+}
+
+.task-completion.completada {
+  background: #dcf5e6;
+  color: #168052;
+}
+
+.task-desc {
+  margin-top: 7px;
+  color: #687d92;
+  font-size: 0.84rem;
+}
+
+.task-meta {
+  gap: 7px;
+}
+
+.task-meta span {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #f4f7fa;
+  color: #71849a;
+  font-size: 0.71rem;
+}
+
+.assign-row {
+  margin-top: 2px;
+}
+
+.assign-select {
+  min-width: 0;
+  width: min(100%, 290px);
+}
+
+.assign-select span {
+  font-size: 0.65rem;
+}
+
+.assign-select select {
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+.task-actions {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 130px;
+}
+
+.task-actions button {
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  font-size: 0.75rem;
+}
+
+.status-btn {
+  background: #123a66;
+  box-shadow: 0 4px 10px rgba(18, 58, 102, 0.14);
+}
+
+.status-btn:hover {
+  background: #1b507e;
+}
+
+.status-btn.active {
+  background: #168052;
+}
+
+.delete-btn {
+  background: #fff0ef;
+}
+
+.empty-state {
+  border: 1px dashed rgba(18, 58, 102, 0.18);
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tareas-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .tareas-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-card {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .task-actions {
+    grid-column: 2;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .tareas-page {
+    gap: 14px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat-card {
+    min-height: 72px;
+    gap: 8px;
+    padding: 9px;
+    border-radius: 13px;
+  }
+
+  .stat-card .stat-icon {
+    width: 31px;
+    height: 31px;
+    flex-basis: 31px;
+    border-radius: 10px;
+    font-size: 0.92rem;
+  }
+
+  .stat-card .stat-copy > span:first-child {
+    font-size: 0.56rem;
+  }
+
+  .stat-card .stat-copy strong {
+    font-size: 1.15rem;
+  }
+
+  .panel-head h2 {
+    font-size: 1.18rem;
+  }
+
+  .task-list-panel,
+  .creator-card {
+    padding: 14px;
+    border-radius: 17px;
+  }
+
+  .task-list-head {
+    align-items: flex-start;
+  }
+
+  .task-list-head h3 {
+    font-size: 1.03rem;
+  }
+
+  .task-count-pill {
+    padding: 6px 8px;
+    font-size: 0.64rem;
+  }
+
+  .task-card {
+    grid-template-columns: 36px minmax(0, 1fr);
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .task-emoji {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    font-size: 1.05rem;
+  }
+
+  .task-actions {
+    grid-column: 1 / -1;
+  }
+
+  .task-actions .status-btn,
+  .task-actions .delete-btn {
+    width: auto;
+    flex: 1;
+  }
+
+  .task-meta span {
+    font-size: 0.64rem;
   }
 }
 </style>

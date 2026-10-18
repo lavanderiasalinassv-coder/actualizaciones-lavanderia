@@ -131,7 +131,16 @@ export function useTareas() {
       correo: usuario.correo
     }
   })
-  const esAdmin = computed(() => usuarioActual.value?.rol === 'administrador')
+  const esDesarrollador = computed(() => {
+    const usuario = usuarioActual.value
+    const rol = usuario?.rol.trim().toLowerCase()
+    const nombre = usuario?.nombre.trim().toLowerCase()
+    return rol === 'developer' || rol === 'desarrollador' || nombre === 'desarrollador'
+  })
+  const esAdmin = computed(() => {
+    const rol = usuarioActual.value?.rol.trim().toLowerCase()
+    return rol === 'administrador' || rol === 'admin' || esDesarrollador.value
+  })
 
   const cargarTareas = async () => {
     const solicitud = ++solicitudTareasActual
@@ -202,7 +211,8 @@ export function useTareas() {
     }
 
     const usuario = usuarioActual.value
-    const esAdminActual = usuario?.rol === 'administrador'
+    const rol = usuario?.rol.trim().toLowerCase()
+    const esAdminActual = rol === 'administrador' || rol === 'admin' || esDesarrollador.value
     const asignadaAId = esAdminActual ? normalizarTexto(datos.asignadaAId) : usuario?.id
 
     const asignadaA = obtenerUsuarioEquipo(asignadaAId ?? '')
@@ -305,6 +315,7 @@ export function useTareas() {
   return {
     usuarioActual,
     esAdmin,
+    esDesarrollador,
     tareas,
     tareasVisibles,
     tareasPendientes,

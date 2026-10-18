@@ -360,7 +360,7 @@
 
           <div class="modal-confirmacion-botones">
             <button class="btn-outline" @click="cancelarCambioEstado">Cancelar</button>
-            <button class="btn-principal" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="confirmarCambioEstado">
+            <button class="btn-principal" :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado')" @click="confirmarCambioEstado">
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Confirmar' }}
             </button>
           </div>
@@ -438,7 +438,7 @@
 
           <div class="modal-confirmacion-botones">
             <button class="btn-outline" @click="cerrarModalAnticipo">Cancelar</button>
-            <button class="btn-principal" :disabled="montoAnticipoModal <= 0 || peticionOrdenEnCurso || turnoCerrado" @click="confirmarAnticipoModal">
+            <button class="btn-principal" :disabled="montoAnticipoModal <= 0 || peticionOrdenEnCurso" @click="confirmarAnticipoModal">
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Registrar' }}
             </button>
           </div>
@@ -544,7 +544,7 @@
 
           <div class="modal-confirmacion-botones">
             <button class="btn-outline" @click="cerrarModalCancelarOrden">Volver</button>
-            <button class="btn-principal peligro" :disabled="!razonCancelacion.trim() || cancelandoOrden || peticionOrdenEnCurso || turnoCerrado" @click="confirmarCancelarOrden">
+            <button class="btn-principal peligro" :disabled="!razonCancelacion.trim() || cancelandoOrden || peticionOrdenEnCurso || !turno.abierto" @click="confirmarCancelarOrden">
               {{ cancelandoOrden || peticionOrdenEnCurso ? 'Cancelando...' : 'Cancelar orden' }}
             </button>
           </div>
@@ -1224,6 +1224,10 @@ const claseTextoMovimiento = (texto: string) => {
 
 const abrirModalAnticipo = () => {
   if (esOperador.value) return
+  if (!turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   if (ordenSeleccionada.value?.estado === 'cancelada') return
   montoAnticipoModal.value = 0
   registrarAnticipoAntiguo.value = false
@@ -1237,6 +1241,10 @@ const cerrarModalAnticipo = () => {
 }
 
 const confirmarAnticipoModal = async () => {
+  if (!turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
   if (!ordenSeleccionada.value || ordenSeleccionada.value.estado === 'cancelada' || montoAnticipoModal.value <= 0 || peticionOrdenEnCurso.value) return
   const usarAnticipoAntiguo = esAdministrador.value && registrarAnticipoAntiguo.value
   if (usarAnticipoAntiguo && (!fechaAnticipoAntiguo.value || !turnoIdAnticipoAntiguo.value)) {
@@ -1359,8 +1367,22 @@ const cancelandoOrden = ref(false)
 const enviarNotificacionCancelacion = ref(true)
 const enviarNotificacionRecepcion = ref(true)
 
+const mostrarToastSinTurno = async () => {
+  const toast = await toastController.create({
+    message: 'No hay un turno abierto.',
+    duration: 3000,
+    color: 'warning',
+    position: 'top'
+  })
+  await toast.present()
+}
+
 const abrirModalCancelarOrden = () => {
   if (esOperador.value) return
+  if (!turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   razonCancelacion.value = ''
   enviarNotificacionCancelacion.value = true
   mostrarModalCancelarOrden.value = true
@@ -1371,6 +1393,10 @@ const cerrarModalCancelarOrden = () => {
 }
 
 const confirmarCancelarOrden = async () => {
+  if (!turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
   if (!ordenSeleccionada.value || !razonCancelacion.value.trim() || cancelandoOrden.value || peticionOrdenEnCurso.value) return
 
   const orden = ordenSeleccionada.value
@@ -1794,6 +1820,10 @@ const solicitarCambioEstado = (idOrden: string, estadoDestino: OrdenEstado) => {
   const orden = obtenerOrdenPorId(idOrden)
   if (!orden) return
 
+  if (estadoDestino === 'entregado' && !turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   if (!puedeCambiarEstado(orden.estado, estadoDestino)) return
 
   ordenCambioPendienteId.value = idOrden
@@ -1977,6 +2007,10 @@ const confirmarCambioEstado = async () => {
   const estado = estadoObjetivoCambio.value
 
   if (!orden || !estado || peticionOrdenEnCurso.value) return
+  if (estado === 'entregado' && !turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
   const usarEntregaAntigua = esAdministrador.value && registrarEntregaAntigua.value
   if (usarEntregaAntigua && !turnoIdEntregaAntigua.value) {
     window.alert('Selecciona el turno para la entrega antigua.')

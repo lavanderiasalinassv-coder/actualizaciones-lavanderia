@@ -9,6 +9,7 @@ router.get("/clientes/telefono/:telefono", controller.buscarPorTelefono);
 router.get("/clientes/estadisticas", controller.estadisticas);
 router.get("/clientes/:id", controller.obtenerPorId);
 router.post("/clientes", controller.crear);
+router.put("/clientes/:id/total-ordenes", controller.actualizarTotalOrdenes);
 router.put("/clientes/:id", controller.actualizar);
 router.delete("/clientes/:id", controller.eliminar);
 router.post("/clientes/registrar-orden", controller.registrarOrden);

@@ -1,6 +1,7 @@
 const {
   obtenerTareas,
   obtenerTareaPorId,
+  puedeGestionarTodasLasTareas,
   crearTarea,
   completarTarea,
   reasignarTarea,
@@ -41,7 +42,7 @@ const obtenerUsuarioActual = (req) => {
 const listarTareas = async (req, res) => {
   try {
     const usuarioActual = obtenerUsuarioActual(req);
-    const esAdmin = usuarioActual?.rol === "administrador";
+    const esAdmin = puedeGestionarTodasLasTareas(usuarioActual);
 
     const tareas = await obtenerTareas({
       usuarioId: usuarioActual?.id,

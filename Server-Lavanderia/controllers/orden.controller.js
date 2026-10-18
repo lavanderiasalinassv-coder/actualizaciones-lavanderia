@@ -1,6 +1,7 @@
 const {
   obtenerOrdenes,
   obtenerOrdenPorId,
+  obtenerEstadoOrden,
   actualizarMoraOrden,
   actualizarMorasPendientes,
   recalcularMoraOrden,
@@ -113,6 +114,25 @@ const obtenerOrden = async (req, res) => {
   }
 };
 
+const protegerOrdenCerradaCancelada = async (req, res, next) => {
+  if (req.method === "POST" && req.path.endsWith("/restaurar")) {
+    return next();
+  }
+
+  try {
+    const estado = await obtenerEstadoOrden(req.params.id);
+    if (estado === "Cerrada-Cancelada") {
+      return res.status(409).json({
+        error:
+          "La orden está cerrada-cancelada y solo puede modificarse después de restaurarla.",
+      });
+    }
+    return next();
+  } catch (error) {
+    return manejarError(res, error);
+  }
+};
+
 const recalcularMora = async (req, res) => {
   try {
     const usuario = obtenerUsuarioAuditoria(req);
@@ -175,10 +195,12 @@ const cambiarEstado = async (req, res) => {
     const turnoActual = await obtenerTurno();
     const ordenActual = await obtenerOrdenPorId(req.params.id);
 
-    if (estado === "entregado" && !turnoActual.abierto) {
+    if (
+      (estado === "entregado" || (estado === "cerrada" && turnoId)) &&
+      !turnoActual.abierto
+    ) {
       return res.status(409).json({
-        error:
-          "No se puede marcar una orden como entregada porque no hay un turno abierto. Usa la entrega antigua para registrar un cierre histórico.",
+        error: "No hay un turno de caja abierto.",
       });
     }
 
@@ -331,6 +353,11 @@ const crearAnticipo = async (req, res) => {
 
     const usuario = obtenerUsuarioAuditoria(req);
     const turno = await obtenerTurno();
+    if (!turno.abierto || !turno.id) {
+      return res.status(409).json({
+        error: "No hay un turno de caja abierto.",
+      });
+    }
     const quiereAnticipoAntiguo = Boolean(
       fecha || (turnoId && turnoId !== turno.id),
     );
@@ -345,13 +372,6 @@ const crearAnticipo = async (req, res) => {
           "Selecciona la fecha y el turno para registrar el anticipo antiguo.",
       });
     }
-    if (!turno.abierto && !quiereAnticipoAntiguo) {
-      return res.status(409).json({
-        error:
-          "No hay un turno de caja abierto. Abre un turno para registrar cobros.",
-      });
-    }
-
     const orden = await registrarAnticipo(
       req.params.id,
       Number(monto),
@@ -400,11 +420,18 @@ const crearCargoExtra = async (req, res) => {
 };
 
 const borrarCargoExtra = async (req, res) => {
+  const usuario = obtenerUsuarioAuditoria(req);
+  if (!esAdministrador(usuario)) {
+    return res
+      .status(403)
+      .json({ error: "Solo un administrador puede eliminar cargos extra." });
+  }
+
   try {
     const orden = await eliminarCargoExtra(
       req.params.id,
       req.params.idCargo,
-      obtenerUsuarioAuditoria(req),
+      usuario,
     );
     res.status(200).json(orden);
   } catch (error) {
@@ -708,6 +735,7 @@ module.exports = {
   listarOrdenes,
   actualizarMoraAntesDeOperacion,
   obtenerOrden,
+  protegerOrdenCerradaCancelada,
   recalcularMora,
   crear,
   cambiarEstado,

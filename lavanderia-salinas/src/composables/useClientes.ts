@@ -268,6 +268,22 @@ export const editarCliente = async (id: string, cambios: Partial<Cliente>): Prom
   return actualizado
 }
 
+export const actualizarTotalOrdenesCliente = async (id: string, totalOrdenes: number): Promise<Cliente> => {
+  if (!Number.isSafeInteger(totalOrdenes) || totalOrdenes < 0 || totalOrdenes > 2147483647) {
+    throw new Error('El total de órdenes debe ser un entero entre 0 y 2147483647.')
+  }
+
+  const actualizado = await api<Cliente>(`/clientes/${id}/total-ordenes`, {
+    method: 'PUT',
+    body: JSON.stringify({ totalOrdenes })
+  })
+
+  const indice = clientes.value.findIndex((cliente) => cliente.id === id)
+  if (indice !== -1) clientes.value[indice] = actualizado
+
+  return actualizado
+}
+
 export const eliminarCliente = async (id: string): Promise<void> => {
   await api(`/clientes/${id}`, { method: 'DELETE' })
   clientes.value = clientes.value.filter((c) => c.id !== id)

@@ -45,6 +45,30 @@ const obtenerUsuarioEquipo = async (usuarioId) => {
   return rows.length ? rows[0] : null;
 };
 
+const obtenerIdUsuarioEquipoExistente = async (usuarioId) => {
+  const id = normalizarTexto(usuarioId);
+  if (!id) return null;
+
+  const [rows] = await pool.query(
+    "SELECT id FROM usuarios_equipo WHERE id = ? LIMIT 1",
+    [id],
+  );
+
+  return rows.length ? rows[0].id : null;
+};
+
+const puedeGestionarTodasLasTareas = (usuario) => {
+  const rol = normalizarTexto(usuario?.rol).toLowerCase();
+  const nombre = normalizarTexto(usuario?.nombre).toLowerCase();
+  return (
+    rol === "administrador" ||
+    rol === "admin" ||
+    rol === "developer" ||
+    rol === "desarrollador" ||
+    nombre === "desarrollador"
+  );
+};
+
 /* ───────────────── Lectura ───────────────── */
 
 // Los usuarios normales solo ven las tareas asignadas a su cuenta.
@@ -77,7 +101,7 @@ const crearTarea = async (datos, usuarioActual) => {
     ? datos.prioridad
     : "media";
 
-  const esAdminActual = usuarioActual?.rol === "administrador";
+  const esAdminActual = puedeGestionarTodasLasTareas(usuarioActual);
   const asignadaAId = esAdminActual
     ? normalizarTexto(datos.asignadaAId)
     : usuarioActual?.id;
@@ -91,7 +115,7 @@ const crearTarea = async (datos, usuarioActual) => {
   }
 
   const id = randomUUID();
-  const creadaPorId = usuarioActual?.id ?? null;
+  const creadaPorId = await obtenerIdUsuarioEquipoExistente(usuarioActual?.id);
   const creadaPorNombre = normalizarTexto(usuarioActual?.nombre) || "Sistema";
 
   await pool.query(
@@ -120,7 +144,7 @@ const completarTarea = async (id, completada, nota, usuarioActual) => {
     throw new AppError("No se encontró la tarea.", 404);
   }
 
-  const esAdminActual = usuarioActual?.rol === "administrador";
+  const esAdminActual = puedeGestionarTodasLasTareas(usuarioActual);
   const puedeEditar =
     esAdminActual ||
     !usuarioActual?.id ||
@@ -148,6 +172,10 @@ const completarTarea = async (id, completada, nota, usuarioActual) => {
       : bloqueNota;
   }
 
+  const completadaPorId = completada
+    ? await obtenerIdUsuarioEquipoExistente(usuarioActual?.id)
+    : null;
+
   await pool.query(
     `UPDATE tareas SET
       completada = ?,
@@ -159,7 +187,7 @@ const completarTarea = async (id, completada, nota, usuarioActual) => {
     [
       completada ? 1 : 0,
       completada ? new Date() : null,
-      completada ? (usuarioActual?.id ?? null) : null,
+      completadaPorId,
       completada ? normalizarTexto(usuarioActual?.nombre) || null : null,
       descripcionActualizada,
       id,
@@ -170,7 +198,7 @@ const completarTarea = async (id, completada, nota, usuarioActual) => {
 };
 
 const reasignarTarea = async (id, asignadaAId, usuarioActual) => {
-  if (usuarioActual?.rol !== "administrador") {
+  if (!puedeGestionarTodasLasTareas(usuarioActual)) {
     throw new AppError("Solo el administrador puede reasignar tareas.", 403);
   }
 
@@ -196,7 +224,7 @@ const reasignarTarea = async (id, asignadaAId, usuarioActual) => {
 };
 
 const eliminarTarea = async (id, usuarioActual) => {
-  if (usuarioActual?.rol !== "administrador") {
+  if (!puedeGestionarTodasLasTareas(usuarioActual)) {
     throw new AppError("Solo el administrador puede eliminar tareas.", 403);
   }
 
@@ -208,7 +236,7 @@ const eliminarTarea = async (id, usuarioActual) => {
 };
 
 const limpiarCompletadas = async (usuarioActual) => {
-  if (usuarioActual?.rol !== "administrador") {
+  if (!puedeGestionarTodasLasTareas(usuarioActual)) {
     throw new AppError(
       "Solo el administrador puede limpiar tareas completadas.",
       403,
@@ -222,6 +250,7 @@ const limpiarCompletadas = async (usuarioActual) => {
 
 module.exports = {
   obtenerTareas,
+  puedeGestionarTodasLasTareas,
   obtenerTareaPorId,
   crearTarea,
   completarTarea,

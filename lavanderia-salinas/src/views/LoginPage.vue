@@ -688,6 +688,7 @@ const verificarCodigo2FA = async () => {
     localStorage.setItem('codigo', usuario.codigo)
     await guardarUsuarioConfiable(codigoAcceso2FA.value, usuario)
     recargarSesion()
+    await registrarIngreso(usuario)
 
     const toast = await toastController.create({
       message: `¡Bienvenid@ ${usuario.nombre}!`,

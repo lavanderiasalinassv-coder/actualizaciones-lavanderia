@@ -8,76 +8,163 @@
         </div>
       </div>
       <div class="ordenes-resumen">
-        <span class="resumen-chip">{{ ordenesFiltradas.length }} Ordenes</span>
-        <span v-if="cargando" class="loading-indicator">Cargando...</span>
+        <div class="ordenes-resumen-titulo">
+          <h1>
+            {{ estadoActivo === 'todos' ? 'Todas las órdenes'
+              : estadoActivo === 'intervencion' ? 'Requieren intervención'
+              : textoEstado(estadoActivo) }}
+          </h1>
+          <div class="ordenes-resumen-acciones">
+            <div class="ayuda-alertas-ordenes">
+              <button
+                type="button"
+                class="ayuda-alertas-boton"
+                :class="{ activo: ayudaAlertasAbierta }"
+                :aria-expanded="ayudaAlertasAbierta"
+                aria-label="Ayuda sobre alertas e información de órdenes"
+                @click="ayudaAlertasAbierta = !ayudaAlertasAbierta; explicacionIndicadorAbierta = false"
+              >
+                <ion-icon :icon="helpCircleOutline" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <button
+          v-if="!soloDetalleId && (ordenesQueRequierenIntervencion.length || entregasTardias.length)"
+          type="button"
+          class="ordenes-indicador-alerta"
+          :class="{ 'ordenes-indicador-intervencion': ordenesQueRequierenIntervencion.length > 0 }"
+          :aria-label="
+            ordenesQueRequierenIntervencion.length
+              ? `Ver a qué se refiere la alerta de intervención de ${ordenesQueRequierenIntervencion.length} órdenes`
+              : `Ver a qué se refiere el número ${entregasTardias.length}`
+          "
+          :title="
+            ordenesQueRequierenIntervencion.length
+              ? 'Ver a qué se refiere la alerta de intervención'
+              : 'Ver a qué se refiere el número de entregas tardías'
+          "
+          @click="abrirExplicacionIndicador"
+        >
+          <ion-icon v-if="ordenesQueRequierenIntervencion.length" :icon="warningOutline" />
+          <span v-else>{{ entregasTardias.length > 99 ? '99+' : entregasTardias.length }}</span>
+        </button>
+      </div>
+
+      <div v-if="totalPaginas > 1" class="paginacion-ordenes" aria-label="Paginación de órdenes">
+        <button
+          type="button"
+          class="paginacion-btn"
+          :disabled="paginaActual === 1"
+          @click="paginaAnterior"
+        >
+          Anterior
+        </button>
+        <span>Página {{ paginaActual }} de {{ totalPaginas }}</span>
+        <button
+          type="button"
+          class="paginacion-btn"
+          :disabled="paginaActual === totalPaginas"
+          @click="paginaSiguiente"
+        >
+          Siguiente
+        </button>
       </div>
 
       <section class="controles-superiores">
-        <div class="search-bar">
-          <ion-icon :icon="searchOutline" />
-          <input
-            v-model="busqueda"
-            type="text"
-            placeholder="Buscar por nombre, telefono o orden ID..."
-          />
-        </div>
-
-        <div class="chip-row">
-          <button
-            v-for="filtro in filtrosEstadoVisibles"
-            :key="filtro.value"
-            class="filtro-chip"
-            :class="{ active: estadoActivo === filtro.value }"
-            :style="estadoActivo === filtro.value ? { background: filtro.color, borderColor: filtro.color, color: filtro.textOn } : {}"
-            @click="estadoActivo = filtro.value"
-          >
-            <span class="dot" :style="{ background: estadoActivo === filtro.value ? filtro.textOn : filtro.color }"></span>
-            {{ filtro.label }}
-          </button>
-
-          <div class="chip-row chip-row-ordenamiento">
-            <span class="ordenamiento-label">Ordenar por</span>
+        <div class="ordenes-filtros-panel">
+          <div class="ordenes-filtros-cabecera">
+            <div>
+              <strong>Buscar y filtrar órdenes</strong>
+            </div>
           </div>
 
-          <div class="filtros-fecha">
-            <label class="ordenamiento-label" for="filtro-fecha-creacion">Creación</label>
+          <div class="search-bar" role="search">
+            <ion-icon :icon="searchOutline" aria-hidden="true" />
             <input
-              id="filtro-fecha-creacion"
-              :value="fechaCreacionFiltro"
-              type="date"
-              class="fecha-filtro-input"
-              @input="onFechaCreacionInput"
+              v-model="busqueda"
+              type="search"
+              aria-label="Buscar órdenes"
+              placeholder="Buscar por cliente, teléfono o número de orden..."
             />
-
-            <label class="ordenamiento-label" for="filtro-fecha-entrega">Entrega</label>
-            <input
-              id="filtro-fecha-entrega"
-              :value="fechaEntregaFiltro"
-              type="date"
-              class="fecha-filtro-input"
-              @input="onFechaEntregaInput"
-            />
-
             <button
-              v-if="fechaCreacionFiltro || fechaEntregaFiltro"
+              v-if="busqueda"
               type="button"
-              class="filtro-chip filtro-chip-secundario filtro-chip-limpiar"
-              @click="limpiarFiltroFecha"
+              class="limpiar-busqueda"
+              aria-label="Limpiar búsqueda"
+              @click="busqueda = ''"
             >
-              Restablecer
+              <ion-icon :icon="closeOutline" />
             </button>
           </div>
 
-          <button
-            v-if="esAdministrador"
-            type="button"
-            class="btn-eliminar-dia"
-            title="Eliminar órdenes de un día"
-            aria-label="Eliminar órdenes de un día"
-            @click="abrirModalEliminarDia"
-          >
-            <ion-icon :icon="trashOutline" />
-          </button>
+          <div class="ordenes-conteo">
+            <span class="resumen-chip">{{ ordenesFiltradas.length }} órdenes</span>
+          </div>
+
+          <div class="ordenes-filtros-seccion">
+            <span class="ordenes-filtros-etiqueta">Estado</span>
+            <div class="chip-row">
+              <button
+                v-for="filtro in filtrosEstadoVisibles"
+                :key="filtro.value"
+                class="filtro-chip"
+                :class="{ active: estadoActivo === filtro.value }"
+                :style="estadoActivo === filtro.value ? { background: filtro.color, borderColor: filtro.color, color: filtro.textOn } : {}"
+                @click="estadoActivo = filtro.value"
+              >
+                <span class="dot" :style="{ background: estadoActivo === filtro.value ? filtro.textOn : filtro.color }"></span>
+                {{ filtro.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="ordenes-filtros-pie">
+            <div class="filtros-fecha">
+              <label class="fecha-filtro-campo" for="filtro-fecha-creacion">
+                <span>Creación</span>
+                <input
+                  id="filtro-fecha-creacion"
+                  :value="fechaCreacionFiltro"
+                  type="date"
+                  class="fecha-filtro-input"
+                  @input="onFechaCreacionInput"
+                />
+              </label>
+
+              <label class="fecha-filtro-campo" for="filtro-fecha-entrega">
+                <span>Entrega</span>
+                <input
+                  id="filtro-fecha-entrega"
+                  :value="fechaEntregaFiltro"
+                  type="date"
+                  class="fecha-filtro-input"
+                  @input="onFechaEntregaInput"
+                />
+              </label>
+
+              <button
+                v-if="fechaCreacionFiltro || fechaEntregaFiltro"
+                type="button"
+                class="filtro-chip filtro-chip-secundario filtro-chip-limpiar"
+                @click="limpiarFiltroFecha"
+              >
+                Limpiar fechas
+              </button>
+            </div>
+
+            <button
+              v-if="esAdministrador"
+              type="button"
+              class="btn-eliminar-dia"
+              title="Eliminar órdenes de un día"
+              aria-label="Eliminar órdenes de un día"
+              @click="abrirModalEliminarDia"
+            >
+              <ion-icon :icon="trashOutline" />
+              <span>Eliminar por día</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -168,69 +255,46 @@
       </ion-modal>
 
       <section class="contenido-principal">
-        <div class="grid-header">
-          <span
-            class="grid-header-badge"
-              :style="estadoActivo !== 'todos' && estadoActivo !== 'intervencion'
-              ? { background: estadoColores[estadoActivo].bg, color: estadoColores[estadoActivo].textStrong }
-              : { background: 'rgba(18,58,102,0.1)', color: '#123a66' }"
-          >
-            <ion-icon
-              :icon="estadoActivo === 'pendiente' ? timeOutline
-                : estadoActivo === 'en_proceso' ? refreshOutline
-                : estadoActivo === 'listo' ? checkmarkDoneOutline
-                : estadoActivo === 'entregado' ? bagCheckOutline
-                : estadoActivo === 'cancelada' ? banOutline
-                : estadoActivo === 'intervencion' ? warningOutline
-                : receiptOutline"
-            />
-          </span>
-          <div class="grid-header-titulo">
-            <strong>
-              {{ estadoActivo === 'todos' ? 'Todas las órdenes'
-                : estadoActivo === 'intervencion' ? 'Requieren intervención'
-                : textoEstado(estadoActivo) }}
-            </strong>
-            <div class="ayuda-alertas-ordenes">
-              <button
-                type="button"
-                class="ayuda-alertas-boton"
-                :class="{ activo: ayudaAlertasAbierta }"
-                :aria-expanded="ayudaAlertasAbierta"
-                aria-label="Ayuda sobre alertas e información de órdenes"
-                @click="ayudaAlertasAbierta = !ayudaAlertasAbierta"
-              >
-                <ion-icon :icon="helpCircleOutline" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-          <span class="grid-header-count">{{ ordenesFiltradas.length }}</span>
-        </div>
         <ion-modal
           :is-open="ayudaAlertasAbierta"
           :backdrop-dismiss="true"
           class="modal-ayuda-alertas"
-          @didDismiss="ayudaAlertasAbierta = false"
+          @didDismiss="cerrarAyudaAlertas"
         >
           <div class="ayuda-modal-contenido force-light" role="dialog" aria-labelledby="titulo-ayuda-alertas">
             <header class="ayuda-modal-header">
               <div>
-                <p class="ayuda-modal-etiqueta">Guía de órdenes</p>
-                <h2 id="titulo-ayuda-alertas">Alertas e información importante</h2>
+                <p class="ayuda-modal-etiqueta">{{ explicacionIndicadorAbierta ? 'Indicador de órdenes' : 'Guía de órdenes' }}</p>
+                <h2 id="titulo-ayuda-alertas">
+                  {{ explicacionIndicadorAbierta ? '¿Qué significa este indicador?' : 'Alertas e información importante' }}
+                </h2>
               </div>
               <button
                 type="button"
                 class="ayuda-modal-cerrar"
                 aria-label="Cerrar ayuda"
-                @click="ayudaAlertasAbierta = false"
+                @click="cerrarAyudaAlertas"
               >
                 <ion-icon :icon="closeOutline" />
               </button>
             </header>
             <div class="ayuda-modal-secciones">
-              <div class="ayuda-alerta-item">
-                <span class="ayuda-alerta-color amarillo" aria-hidden="true" />
-                <p><strong>Brillo amarillo:</strong> ya pasó la hora prometida de entrega. Es una alerta de retraso; todavía puede estar dentro de los 2 días de gracia.</p>
+              <div v-if="explicacionIndicadorAbierta && ordenesQueRequierenIntervencion.length" class="ayuda-alerta-item">
+                <ion-icon :icon="warningOutline" aria-hidden="true" />
+                <p>
+                  El indicador rojo señala {{ ordenesQueRequierenIntervencion.length }} orden{{ ordenesQueRequierenIntervencion.length === 1 ? '' : 'es' }} que requiere{{ ordenesQueRequierenIntervencion.length === 1 ? '' : 'n' }} intervención. Se revisan por posibles inconsistencias de pago, anticipos o entregas al cierre de caja.
+                </p>
+              </div>
+              <div v-else-if="explicacionIndicadorAbierta && entregasTardias.length" class="ayuda-alerta-item">
+                <span class="ayuda-alerta-color rojo" aria-hidden="true" />
+                <p>
+                  El número {{ entregasTardias.length }} corresponde a las entregas pendientes cuya fecha prometida tiene más de 2 días calendario de atraso. No incluye órdenes entregadas, cerradas ni canceladas.
+                </p>
+              </div>
+              <template v-else>
+                <div class="ayuda-alerta-item">
+                <span class="ayuda-alerta-color naranja" aria-hidden="true" />
+                <p><strong>Brillo naranja:</strong> ya pasó la hora prometida de entrega. Es una alerta de retraso; todavía puede estar dentro de los 2 días de gracia.</p>
               </div>
               <div class="ayuda-alerta-item">
                 <span class="ayuda-alerta-color rojo" aria-hidden="true" />
@@ -240,65 +304,16 @@
                 <ion-icon :icon="warningOutline" aria-hidden="true" />
                 <p><strong>Requiere intervención:</strong> revisa la orden porque puede tener un pago incompleto al cerrarse, una entrega que no aparece en el cierre o un anticipo que no aparece en el cierre.</p>
               </div>
+              </template>
             </div>
-            <p class="ayuda-alertas-nota">Las órdenes entregadas, cerradas o canceladas no muestran alertas de vencimiento. Selecciona «Requieren intervención» para revisar esas órdenes.</p>
+            <p v-if="!explicacionIndicadorAbierta" class="ayuda-alertas-nota">Las órdenes entregadas, cerradas o canceladas no muestran alertas de vencimiento. Selecciona «Requieren intervención» para revisar esas órdenes.</p>
             <div class="ayuda-modal-acciones">
-              <button type="button" class="btn-principal" @click="ayudaAlertasAbierta = false">Cerrar</button>
+              <button type="button" class="btn-principal" @click="cerrarAyudaAlertas">Cerrar</button>
             </div>
           </div>
         </ion-modal>
 
-        <div v-if="totalPaginas > 1" class="paginacion-ordenes" aria-label="Paginación de órdenes">
-          <button
-            type="button"
-            class="paginacion-btn"
-            :disabled="paginaActual === 1"
-            @click="paginaAnterior"
-          >
-            Anterior
-          </button>
-          <span>Página {{ paginaActual }} de {{ totalPaginas }}</span>
-          <button
-            type="button"
-            class="paginacion-btn"
-            :disabled="paginaActual === totalPaginas"
-            @click="paginaSiguiente"
-          >
-            Siguiente
-          </button>
-        </div>
-
-        <div class="ordenes-tablero-layout">
-          <aside class="cola-ordenes">
-            <div class="cola-ordenes-header">
-              <div>
-                <p class="cola-ordenes-etiqueta">Orden de llegada</p>
-                <strong>Cola de trabajo</strong>
-              </div>
-              <span class="cola-ordenes-count">{{ ordenesLlegada.length }}</span>
-            </div>
-
-            <div class="cola-ordenes-lista">
-              <label
-                v-for="(orden, index) in ordenesLlegada"
-                :key="orden.id"
-                class="cola-orden-item"
-                :class="clasesAlertaEntrega(orden)"
-              >
-                <span class="cola-orden-posicion">{{ index + 1 }}</span>
-                <span class="cola-orden-info">
-                  <strong>{{ orden.numero }}</strong>
-                  <small>{{ orden.nombreCliente }}</small>
-                </span>
-              </label>
-
-              <p v-if="ordenesLlegada.length === 0" class="cola-orden-vacia">
-                No hay órdenes activas.
-              </p>
-            </div>
-          </aside>
-
-          <div class="cards-grid">
+        <div class="cards-grid">
             <button
               v-for="orden in ordenesPagina"
               :key="orden.id"
@@ -336,38 +351,36 @@
             </div>
 
             <p class="cliente">{{ orden.nombreCliente }}</p>
-            <p class="detalles">{{ resumenServicios(orden.items) }}</p>
             <p class="prendas">🧦 {{ Number(orden.cantidadPrendas || 0) }} prenda{{ Number(orden.cantidadPrendas || 0) === 1 ? '' : 's' }}</p>
             <p class="entrega">Entrega: {{ textoEntrega(orden) }}</p>
 
             <div class="card-bottom">
               <div class="precios-info">
-                <span v-if="puedeVerMontos && orden.estadoPago !== 'pagado'" class="total-label">Total de la orden</span>
+                <span v-if="puedeVerMontos" class="total-label">
+                  {{ orden.estadoPago === 'pagado' ? 'Total pagado' : orden.estadoPago === 'anticipo' ? 'Saldo pendiente' : montoMoraOrden(orden) > 0 ? 'Total con mora' : 'Total a pagar' }}
+                </span>
 
                 <strong
                   v-if="puedeVerMontos"
                   class="total"
-                  :class="{ 'total-pagada': orden.estadoPago === 'pagado' }"
                   :style="{ color: estadoColores[orden.estado].textStrong }"
                 >
-                  {{ orden.estadoPago === 'pagado'
-                    ? '✓ Orden pagada'
-                    : `$${totalFinalOrden(orden).toFixed(2)}` }}
+                  ${{ totalFinalOrden(orden).toFixed(2) }}
                 </strong>
-                <span
-                  v-if="montoMoraOrden(orden) > 0"
-                  class="total-mora-desglose"
-                >
-                  Precio ${{ Math.max(0, orden.total - montoMoraOrden(orden)).toFixed(2) }}
-                  + mora ${{ montoMoraOrden(orden).toFixed(2) }}
-                </span>
               </div>
 
-              <span v-if="puedeVerMontos && orden.estado !== 'cancelada'" class="pill pago" :class="`pago-${orden.estadoPago}`">
-                <ion-icon v-if="iconoEstadoPago(orden.estadoPago)" :icon="iconoEstadoPago(orden.estadoPago)" />
-                <span v-if="orden.estadoPago === 'anticipo'">💵</span>
+              <span v-if="puedeVerMontos && orden.estado !== 'cancelada'" class="pill pago pago-card" :class="`pago-${orden.estadoPago}`">
+                <ion-icon :icon="orden.estadoPago === 'anticipo' ? cardOutline : iconoEstadoPago(orden.estadoPago) || timeOutline" />
                 {{ textoEstadoPago(orden.estadoPago) }}
               </span>
+              <div
+                v-if="puedeVerMontos && montoMoraOrden(orden) > 0"
+                class="card-mora-resumen"
+                :aria-label="`Esta orden incluye mora por ${montoMoraOrden(orden).toFixed(2)} dólares`"
+              >
+                <span aria-hidden="true">⚠️</span>
+                <span>Esta orden incluye mora por <strong>${{ montoMoraOrden(orden).toFixed(2) }}</strong></span>
+              </div>
             </div>
 
             </button>
@@ -381,9 +394,27 @@
             <div v-else-if="!cargando && ordenesFiltradas.length === 0" class="grid-vacio">
               Sin ordenes{{ estadoActivo !== 'todos' ? ' en este estado' : '' }}
             </div>
-          </div>
         </div>
 
+        <div v-if="totalPaginas > 1" class="paginacion-ordenes paginacion-ordenes-inferior" aria-label="Paginación inferior de órdenes">
+          <button
+            type="button"
+            class="paginacion-btn"
+            :disabled="paginaActual === 1"
+            @click="paginaAnterior"
+          >
+            Anterior
+          </button>
+          <span>Página {{ paginaActual }} de {{ totalPaginas }}</span>
+          <button
+            type="button"
+            class="paginacion-btn"
+            :disabled="paginaActual === totalPaginas"
+            @click="paginaSiguiente"
+          >
+            Siguiente
+          </button>
+        </div>
       </section>
 
       <ion-modal :is-open="detalleAbierto" class="modal-ordenes" @didDismiss="cerrarDetalle">
@@ -416,6 +447,9 @@
                 <h2>Detalle de orden</h2>
                 <p v-if="ordenSeleccionada?.estado === 'cerrada'" class="orden-cerrada-header">
                   {{ textoCierreOrden(ordenSeleccionada) }}
+                </p>
+                <p v-else-if="ordenCanceladaCerrada" class="orden-cerrada-header">
+                  Orden cancelada y archivada al cierre del turno.
                 </p>
               </div>
             </div>
@@ -460,7 +494,7 @@
                 <ion-icon :icon="shirtOutline" />
               </button>
               <button
-                v-if="esAdministrador && !esOperador"
+                v-if="esAdministrador && !esOperador && !ordenCanceladaCerrada"
                 class="btn-icono peligro"
                 :disabled="peticionOrdenEnCurso || eliminandoOrdenIndividual"
                 title="Eliminar orden"
@@ -476,76 +510,77 @@
 
           <div v-if="ordenSeleccionada" class="modal-body">
             <div class="modal-columna acciones-columna">
+              <button
+                v-if="mostrarRestaurarCerrada && (ordenSeleccionada.estado === 'cerrada' || ordenCanceladaCerrada)"
+                type="button"
+                class="restaurar-orden-boton"
+                :disabled="restaurandoOrdenCerrada"
+                @click="restaurarOrdenCerrada"
+              >
+                <ion-icon :icon="refreshOutline" />
+                <span>{{ restaurandoOrdenCerrada ? 'Restaurando...' : 'Restaurar orden' }}</span>
+              </button>
+              <fieldset :disabled="ordenCanceladaCerrada" class="orden-detalle-campos">
               <p class="columna-titulo">⚙️ Opciones de modificacion</p>
 
               <section class="estado-deslizador">
-                <div class="detalle-bloque-head">
+                <div class="estado-barra-header">
                   <div>
-                    <p class="label">📍 Estado</p>
+                    <p class="label">📍 Progreso de la orden</p>
+                    <span class="estado-barra-ayuda">Selecciona una etapa para actualizarla</span>
                   </div>
+                  <span
+                    class="estado-actual-badge"
+                    :style="{
+                      '--estado-cuadrito-color': ordenCerradaEstable ? '#6b7280' : estadoColores[ordenSeleccionada.estado].dot,
+                      '--estado-cuadrito-fondo': ordenCerradaEstable ? 'rgba(107, 114, 128, 0.16)' : estadoColores[ordenSeleccionada.estado].bg,
+                      '--estado-cuadrito-texto': ordenCerradaEstable ? '#4b5563' : estadoColores[ordenSeleccionada.estado].text
+                    }"
+                  >{{ ordenCanceladaCerrada ? 'Cerrada-Cancelada' : ordenCerradaEstable ? 'Cerrada' : textoEstado(ordenSeleccionada.estado) }}</span>
                 </div>
 
                 <div
-                  class="estado-progreso-barra"
-                  :class="{ 'estado-progreso-cerrada': ordenCerradaEstable }"
-                  :style="{ '--estado-progreso-color': colorBarraProgresoEstado }"
+                  class="estado-pasos"
+                  :class="{ 'estado-pasos-cerrados': ordenCerradaEstable }"
+                  :style="{ '--estado-progreso-color': colorBarraProgresoEstado, '--estado-progreso-ancho': progresoBarraEstadoPct + '%' }"
                 >
-                  <div class="estado-progreso-fila">
-                    <div class="estado-progreso-track">
-                      <div
-                        class="estado-progreso-track-fill"
-                        :style="{ width: progresoBarraEstadoPct + '%' }"
-                      ></div>
-                    </div>
-                    <div
-                      v-for="(estado, idx) in estadosCambio"
-                      :key="estado.value"
-                      class="estado-progreso-punto"
-                      :class="{ actual: idx === indiceEstadoActualBarra }"
-                    >
-                      <span
-                        v-if="idx === indiceEstadoActualBarra"
-                        class="estado-progreso-etiqueta"
-                        :style="{ background: estadoColores[ordenSeleccionada.estado].bg, color: estadoColores[ordenSeleccionada.estado].text }"
-                      >{{ textoEstado(ordenSeleccionada.estado) }}</span>
-                      <span
-                        class="estado-progreso-punto-dot"
-                        :class="{ completado: idx < indiceEstadoActualBarra, actual: idx === indiceEstadoActualBarra }"
-                      ></span>
-                    </div>
+                  <div class="estado-pasos-track" aria-hidden="true">
+                    <span class="estado-pasos-track-fill"></span>
                   </div>
-                </div>
-
-                <div v-if="ordenSeleccionada.estado !== 'cerrada'" class="estado-cuadritos">
                   <button
-                    v-for="estado in estadosCambioVisibles"
+                    v-for="(estado, idx) in estadosCambio"
                     :key="estado.value"
                     type="button"
-                    class="estado-cuadrito"
-                    :class="{ actual: ordenSeleccionada.estado === estado.value }"
+                    class="estado-paso"
+                    :class="{
+                      actual: !ordenCerradaEstable && idx === indiceEstadoActualBarra,
+                      completado: idx < indiceEstadoActualBarra || ordenCerradaEstable
+                    }"
                     :style="{
                       '--estado-cuadrito-color': estadoColores[estado.value].dot,
                       '--estado-cuadrito-fondo': estadoColores[estado.value].bg,
-                      '--estado-cuadrito-texto': estadoColores[estado.value].text
+                      '--estado-cuadrito-texto': estadoColores[estado.value].text,
+                      '--estado-paso-color': estadoColores[estado.value].dot
                     }"
-                    :disabled="peticionOrdenEnCurso || ordenSeleccionada.estado === estado.value || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || turnoCerrado"
-                    :title="ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
+                    :aria-current="!ordenCerradaEstable && idx === indiceEstadoActualBarra ? 'step' : undefined"
+                    :disabled="ordenCerradaEstable || peticionOrdenEnCurso || ordenSeleccionada.estado === estado.value || !estadosCambioVisibles.some((visible) => visible.value === estado.value) || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || (turnoCerrado && estado.value !== 'entregado')"
+                    :title="ordenCerradaEstable ? 'Orden cerrada' : ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) && estadosCambioVisibles.some((visible) => visible.value === estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
                     @click="solicitarCambioEstado(ordenSeleccionada.id, estado.value, 'detalle')"
                   >
-                    <span class="estado-cuadrito-emoji" aria-hidden="true">{{ estado.emoji }}</span>
-                    <span>{{ estado.label }}</span>
-                    <span
-                      v-if="ordenSeleccionada.estado === estado.value"
-                      class="estado-cuadrito-progreso"
-                      :class="{ completa: estado.value === 'entregado' }"
-                      :style="{ '--estado-progreso-color': estadoColores[ordenSeleccionada.estado].dot }"
-                      aria-label="Estado actual"
-                    ></span>
+                    <span class="estado-paso-indicador" aria-hidden="true">
+                      <ion-icon
+                        :icon="estado.value !== 'pendiente' && (idx < indiceEstadoActualBarra || ordenCerradaEstable) ? checkmarkCircleOutline : estado.icono"
+                      />
+                    </span>
+                    <span class="estado-paso-titulo">{{ estado.label }}</span>
+                    <span v-if="!ordenCerradaEstable && idx === indiceEstadoActualBarra" class="estado-paso-nota">Actual</span>
+                    <span v-else-if="idx < indiceEstadoActualBarra || ordenCerradaEstable" class="estado-paso-nota">Completado</span>
+                    <span v-else class="estado-paso-nota">Pendiente</span>
                   </button>
                 </div>
 
                 <button
-                  v-if="ordenSeleccionada.estado !== 'cerrada' && esAdministrador && ordenSeleccionada.estado !== 'cancelada'"
+                  v-if="ordenSeleccionada.estado !== 'cerrada' && ordenSeleccionada.estado !== 'Cerrada-Cancelada' && esAdministrador && ordenSeleccionada.estado !== 'cancelada'"
                   type="button"
                   class="cancelar-orden-boton"
                   @click="abrirModalCancelarOrden"
@@ -556,19 +591,8 @@
 
               </section>
 
-              <button
-                v-if="mostrarRestaurarCerrada && ordenSeleccionada.estado === 'cerrada'"
-                type="button"
-                class="restaurar-orden-boton"
-                :disabled="restaurandoOrdenCerrada"
-                @click="restaurarOrdenCerrada"
-              >
-                <ion-icon :icon="refreshOutline" />
-                <span>{{ restaurandoOrdenCerrada ? 'Restaurando...' : 'Restaurar orden cerrada' }}</span>
-              </button>
-
               <p v-if="ordenSeleccionada.turnoHuerfano" class="anticipo-error-badge turno-huerfano-badge">
-                ⚠️ La entrega no aparece en el cierre asignado (ID: {{ ordenSeleccionada.turnoId }}).
+                ⚠️ La entrega no aparece en el cierre de {{ etiquetaCajaTurno(ordenSeleccionada.turnoId) }}.
               </p>
 
               <section class="detalle-bloque">
@@ -627,7 +651,7 @@
                     </div>
                     <div class="linea-derecha">
                       <strong v-if="puedeVerMontos">${{ (item.precio * item.cantidad).toFixed(2) }}</strong>
-                      <button v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada'" type="button" class="btn-quitar-mini" title="Quitar producto" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalQuitarItem(item)">
+                      <button v-if="esAdministrador && !['cerrada', 'Cerrada-Cancelada'].includes(ordenSeleccionada.estado)" type="button" class="btn-quitar-mini" title="Quitar producto" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalQuitarItem(item)">
                         <ion-icon :icon="trashOutline" />
                       </button>
                     </div>
@@ -650,11 +674,11 @@
                   <article v-for="cargo in ordenSeleccionada.cargosExtra" :key="cargo.id" class="servicio-linea">
                     <div>
                       <strong>{{ textoCargoExtra(cargo.descripcion) }}</strong>
-                      <span>{{ formatearFechaHora(cargo.fecha) }}</span>
+                      <span>{{ formatearFechaHoraModal(cargo.fecha) }}</span>
                     </div>
                     <div class="linea-derecha">
                       <strong v-if="puedeVerMontos">${{ cargo.monto.toFixed(2) }}</strong>
-                      <button v-if="ordenSeleccionada.estado !== 'cerrada'" type="button" class="btn-quitar-mini" title="Eliminar cargo" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="eliminarCargoExtraSeleccionado(cargo.id)">
+                      <button v-if="esAdministrador && ordenSeleccionada.estado !== 'cerrada' && ordenSeleccionada.estado !== 'Cerrada-Cancelada'" type="button" class="btn-quitar-mini" title="Eliminar cargo" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="eliminarCargoExtraSeleccionado(cargo.id)">
                         <ion-icon :icon="trashOutline" />
                       </button>
                     </div>
@@ -675,7 +699,7 @@
                   <article class="servicio-linea">
                     <div>
                       <strong>Descuento aplicado</strong>
-                      <span>{{ formatearFechaHora(ordenSeleccionada.updatedAt) }}</span>
+                      <span>{{ formatearFechaHoraModal(ordenSeleccionada.updatedAt) }}</span>
                     </div>
                     <div class="linea-derecha">
                       <strong v-if="puedeVerMontos">-${{ ordenSeleccionada.descuento.toFixed(2) }}</strong>
@@ -727,9 +751,11 @@
                   ⚠️ {{ errorNota }}
                 </p>
               </section>
+              </fieldset>
             </div>
 
             <div class="modal-columna info-columna">
+              <fieldset :disabled="ordenCanceladaCerrada" class="orden-detalle-campos">
               <p class="columna-titulo">{{ esOperador ? '📋 Información de la orden' : '💰 Informacion de la orden y dinero' }}</p>
 
               <section class="detalle-bloque cliente-box">
@@ -805,7 +831,19 @@
 
                 <div class="mini-card">
                   <p class="label">📅 Fecha de entrega</p>
-                  <input v-model="fechaEntregaBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
+                  <div class="selector-fecha-orden">
+                    <span class="fecha-orden-input fecha-orden-visual" aria-hidden="true">
+                      <span>{{ textoFechaEditable(fechaEntregaBorrador) }}</span>
+                      <ion-icon :icon="calendarOutline" />
+                    </span>
+                    <input
+                      v-model="fechaEntregaBorrador"
+                      type="date"
+                      class="fecha-orden-picker"
+                      aria-label="Fecha de entrega"
+                      :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'"
+                    />
+                  </div>
                   <input v-model="horaEntregaBorrador" type="time" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
                   <span v-if="ordenSeleccionada.moraDiasCobrados > 0">Mora acumulada: ${{ (ordenSeleccionada.moraDiasCobrados * 0.5).toFixed(2) }} ({{ ordenSeleccionada.moraDiasCobrados }} días)</span>
                   <span
@@ -833,7 +871,19 @@
 
                 <div class="mini-card">
                   <p class="label">🗓️ Fecha de creacion</p>
-                  <input v-model="fechaCreacionBorrador" type="date" class="fecha-orden-input" :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'" />
+                  <div class="selector-fecha-orden">
+                    <span class="fecha-orden-input fecha-orden-visual" aria-hidden="true">
+                      <span>{{ textoFechaEditable(fechaCreacionBorrador) }}</span>
+                      <ion-icon :icon="calendarOutline" />
+                    </span>
+                    <input
+                      v-model="fechaCreacionBorrador"
+                      type="date"
+                      class="fecha-orden-picker"
+                      aria-label="Fecha de creación"
+                      :disabled="!esAdministrador || ordenSeleccionada.estado === 'cerrada'"
+                    />
+                  </div>
                   <span>🕒 Hora: {{ formatearHora(ordenSeleccionada.createdAt) }}</span>
                 </div>
               </section>
@@ -952,7 +1002,7 @@
                   <button
                     v-if="ordenSeleccionada.estado !== 'cancelada'"
                     class="link extra"
-                    :disabled="peticionOrdenEnCurso || turnoCerrado"
+                    :disabled="peticionOrdenEnCurso"
                     @click="abrirModalAnticipo"
                   >
                     + Registrar anticipo
@@ -1007,8 +1057,8 @@
                   <article v-for="(anticipo, indice) in ordenSeleccionada.anticipos" :key="anticipo.id" class="servicio-linea" :class="{ 'anticipo-huerfano': anticipo.cierreHuerfano }">
                     <div>
                       <strong>💵 {{ textoTipoCobro(ordenSeleccionada, indice) }}</strong>
-                      <span>{{ formatearFechaHora(anticipo.fecha) }}</span>
-                      <span v-if="anticipo.cierreHuerfano" class="anticipo-error-badge">⚠️ El anticipo no aparece en el cierre asignado (ID: {{ anticipo.turnoId }})</span>
+                      <span>{{ formatearFechaHoraModal(anticipo.fecha) }}</span>
+                      <span v-if="anticipo.cierreHuerfano" class="anticipo-error-badge">⚠️ El anticipo no aparece en el cierre de {{ etiquetaCajaTurno(anticipo.turnoId) }}</span>
                     </div>
                     <div class="linea-derecha">
                       <strong>${{ anticipo.monto.toFixed(2) }}</strong>
@@ -1039,18 +1089,20 @@
                     v-for="mov in movimientosOrdenSeleccionada"
                     :key="mov.id"
                     class="movimiento"
-                    :class="claseMovimiento(mov.texto)"
-                    :style="estiloColorMovimiento(mov.texto)"
+                    :class="mov.esIntervencion ? 'movimiento-rojo movimiento-intervencion' : claseMovimiento(mov.texto)"
+                    :style="mov.esIntervencion ? {} : estiloColorMovimiento(mov.texto)"
                   >
-                    <div class="movimiento-bullet" :class="claseMovimientoBullet(mov.texto)">+</div>
+                    <div class="movimiento-bullet" :class="mov.esIntervencion ? 'movimiento-rojo' : claseMovimientoBullet(mov.texto)">+</div>
                     <div>
-                      <strong :class="claseTextoMovimiento(mov.texto)">{{ textoMovimientoVisible(mov.texto) }}</strong>
+                      <strong :class="mov.esIntervencion ? 'movimiento-texto-rojo' : claseTextoMovimiento(mov.texto)">{{ textoMovimientoVisible(mov.texto) }}</strong>
                       <span>👤 Usuario a cargo: {{ mov.usuarioNombre || 'Sistema' }}</span> <br>
-                      <span>🕒 Fecha: {{ formatearFechaHora(mov.fecha) }}</span>
+                      <span v-if="mov.esIntervencion">⚠️ Estado actual de la orden</span>
+                      <span v-else>🕒 Fecha: {{ formatearFechaHoraModal(mov.fecha) }}</span>
                     </div>
                   </article>
                 </div>
               </section>
+              </fieldset>
             </div>
           </div>
         </div>
@@ -1061,12 +1113,15 @@
           <div class="modal-restaurar-icono">
             <ion-icon :icon="refreshOutline" />
           </div>
-          <p class="modal-confirmacion-titulo">Restaurar orden cerrada</p>
+          <p class="modal-confirmacion-titulo">Restaurar orden</p>
           <p class="modal-confirmacion-subtitulo">
             La orden {{ ordenSeleccionada?.numero ?? '' }} volverá a estado pendiente para asignarla a una caja válida.
           </p>
 
-          <div class="restaurar-resumen">
+          <p v-if="ordenCanceladaCerrada" class="modal-confirmacion-subtitulo">
+            Los pagos eliminados al cancelar no se recuperarán; los insumos de la orden volverán a descontarse del inventario.
+          </p>
+          <div v-else class="restaurar-resumen">
             <div class="restaurar-resumen-item restaurar-resumen-eliminar">
               <ion-icon :icon="trashOutline" />
               <div>
@@ -1203,7 +1258,7 @@
             <button class="btn-outline" @click="cancelarCambioEstado">Cancelar</button>
             <button
               class="btn-principal"
-              :disabled="peticionOrdenEnCurso || turnoCerrado || (estadoObjetivoCambio === 'entregado' && !turno.abierto && !registrarEntregaAntigua) || (estadoObjetivoCambio === 'entregado' && registrarEntregaAntigua && !turnoIdEntregaAntigua)"
+              :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado')"
               @click="confirmarCambioEstado"
             >
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Confirmar' }}
@@ -1327,7 +1382,7 @@
 
           <div class="modal-confirmacion-botones">
             <button class="btn-outline" @click="cerrarModalAnticipo">Cancelar</button>
-            <button class="btn-principal" :disabled="montoAnticipoModal <= 0 || peticionOrdenEnCurso || turnoCerrado" @click="confirmarAnticipoModal">
+            <button class="btn-principal" :disabled="montoAnticipoModal <= 0 || peticionOrdenEnCurso" @click="confirmarAnticipoModal">
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Registrar' }}
             </button>
           </div>
@@ -1450,7 +1505,7 @@
 
         <div class="modal-confirmacion-botones">
           <button class="btn-outline" @click="cerrarModalCancelarOrden">Volver</button>
-          <button class="btn-principal peligro" :disabled="!razonCancelacion.trim() || cancelandoOrden || peticionOrdenEnCurso || turnoCerrado" @click="confirmarCancelarOrden">
+          <button class="btn-principal peligro" :disabled="cancelandoOrden || peticionOrdenEnCurso || !turno.abierto" @click="confirmarCancelarOrden">
             {{ cancelandoOrden || peticionOrdenEnCurso ? 'Cancelando...' : 'Cancelar orden' }}
           </button>
         </div>
@@ -1607,12 +1662,13 @@ import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { IonIcon, IonModal, IonSpinner, onIonViewWillEnter, toastController } from '@ionic/vue'
 import {
   useOrdenes,
+  ordenRequiereIntervencion,
   type Orden,
   type OrdenEstado,
   type OrdenItem,
   type EstadoPago
 } from '@/composables/useOrdenes'
-import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, fechaISOaCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
+import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, fechaISOaCentroamerica, formatearFechaCentroamerica, formatearFechaCentroamericaMesCorto } from '@/composables/useFechas'
 import { useCatalogo } from '@/composables/Usecatalogo'
 import { useClientes } from '@/composables/useClientes'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
@@ -1645,6 +1701,7 @@ import {
   printOutline,
   shirtOutline,
   starOutline,
+  calendarOutline,
 } from 'ionicons/icons'
 const route = useRoute()
 const router = useRouter()
@@ -1740,6 +1797,7 @@ const {
 const busqueda = ref('')
 const estadoActivo = ref<'todos' | 'intervencion' | OrdenEstado>('todos')
 const ayudaAlertasAbierta = ref(false)
+const explicacionIndicadorAbierta = ref(false)
 const ahoraTablero = ref(Date.now())
 let relojTableroIntervalo: number | undefined
 const mostrarModalEliminarDia = ref(false)
@@ -1843,10 +1901,10 @@ const columnas = [
 const estadosOrden: OrdenEstado[] = ['pendiente', 'en_proceso', 'listo', 'entregado']
 
 const estadosCambio = [
-  { value: 'pendiente' as const, label: 'Pendiente', emoji: '🕒' },
-  { value: 'en_proceso' as const, label: 'En proceso', emoji: '⚙️' },
-  { value: 'listo' as const, label: 'Listo', emoji: '✅' },
-  { value: 'entregado' as const, label: 'Entregado', emoji: '📦' }
+  { value: 'pendiente' as const, label: 'Pendiente', icono: timeOutline },
+  { value: 'en_proceso' as const, label: 'En proceso', icono: refreshOutline },
+  { value: 'listo' as const, label: 'Listo', icono: checkmarkDoneOutline },
+  { value: 'entregado' as const, label: 'Entregado', icono: bagCheckOutline }
 ]
 
 const estadosCambioVisibles = computed(() =>
@@ -1857,7 +1915,10 @@ const estadosCambioVisibles = computed(() =>
 
 // Una orden cerrada ya completó todo el flujo: la barra queda fija en gris,
 // 100% llena y sin el destello del último punto.
-const ordenCerradaEstable = computed(() => ordenSeleccionada.value?.estado === 'cerrada')
+const ordenCanceladaCerrada = computed(() => ordenSeleccionada.value?.estado === 'Cerrada-Cancelada')
+const ordenCerradaEstable = computed(() =>
+  ordenSeleccionada.value?.estado === 'cerrada' || ordenCanceladaCerrada.value
+)
 
 const colorBarraProgresoEstado = computed(() => {
   if (ordenCerradaEstable.value) return '#9aabbd'
@@ -2169,16 +2230,7 @@ const ordenPerteneceATurnoActivo = (orden: Orden) => {
 const turnoCerrado = computed(() => !turno.abierto && !esAdministrador.value)
 
 function requiereIntervencion(orden?: Pick<Orden, 'estado' | 'anticipos' | 'turnoHuerfano' | 'estadoPago'> | null) {
-  if (!orden) return false
-
-  const ordenCerrada = orden.estado === 'cerrada' || orden.estado === 'Cerrada-Cancelada'
-  const pagoInconsistente = ordenCerrada && orden.estadoPago !== 'pagado'
-
-  return (
-    pagoInconsistente ||
-    orden.turnoHuerfano === true ||
-    tieneAnticiposHuerfanos(orden)
-  )
+  return ordenRequiereIntervencion(orden)
 }
 
 function motivoIntervencion(orden?: Pick<Orden, 'estado' | 'anticipos' | 'turnoHuerfano' | 'estadoPago'> | null) {
@@ -2218,6 +2270,34 @@ const cerrarModalMotivoIntervencion = () => {
 const ordenesQueRequierenIntervencion = computed(() =>
   esAdministrador.value ? ordenes.value.filter((orden) => requiereIntervencion(orden)) : []
 )
+
+const entregasTardias = computed(() => {
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  const hoyEnMilisegundos = Date.parse(`${hoy}T00:00:00Z`)
+  const estadosFinales = new Set<OrdenEstado>(['entregado', 'cerrada', 'cancelada', 'Cerrada-Cancelada'])
+  const ordenesVisibles = esAdministrador.value
+    ? ordenes.value
+    : turno.abierto
+      ? ordenes.value.filter((orden) => !orden.turnoId || orden.turnoId === turno.id)
+      : []
+
+  return ordenesVisibles.filter((orden) => {
+    if (!orden.fechaEntrega || estadosFinales.has(orden.estado)) return false
+    const fechaEntrega = Date.parse(`${orden.fechaEntrega.slice(0, 10)}T00:00:00Z`)
+    return Number.isFinite(fechaEntrega) &&
+      Math.floor((hoyEnMilisegundos - fechaEntrega) / 86400000) > 2
+  })
+})
+
+const abrirExplicacionIndicador = () => {
+  explicacionIndicadorAbierta.value = true
+  ayudaAlertasAbierta.value = true
+}
+
+const cerrarAyudaAlertas = () => {
+  ayudaAlertasAbierta.value = false
+  explicacionIndicadorAbierta.value = false
+}
 
 const cerrarModalIntervencion = () => {
   mostrarModalIntervencion.value = false
@@ -2337,20 +2417,6 @@ watch(totalPaginas, (total) => {
   if (paginaActual.value > total) paginaActual.value = total
 })
 
-const ordenesLlegada = computed(() =>
-  ordenes.value
-    .filter((orden) => orden.estado === 'pendiente')
-    .sort((a, b) => {
-      const fechaA = new Date(a.createdAt).getTime()
-      const fechaB = new Date(b.createdAt).getTime()
-      const fechaValidaA = !Number.isNaN(fechaA)
-      const fechaValidaB = !Number.isNaN(fechaB)
-
-      if (fechaValidaA && fechaValidaB && fechaA !== fechaB) return fechaA - fechaB
-      return a.secuencia - b.secuencia
-    })
-)
-
 const MAX_FOTOS_ORDEN = 6
 
 const mostrarModalAnticipo = ref(false)
@@ -2386,6 +2452,12 @@ const turnosParaAnticipoAntiguo = computed(() => {
 
   return lista
 })
+
+const etiquetaCajaTurno = (turnoId?: string | null) => {
+  if (!turnoId) return 'una caja identificada'
+  const cierre = historialCierres.value.find((item) => item.turnoId === turnoId)
+  return cierre ? `Caja #${cierre.numeroCaja}` : 'la caja asignada'
+}
 
 const textoCierreOrden = (orden?: Pick<Orden, 'turnoId' | 'entregadoAt'> | null) => {
   if (orden?.entregadoAt) {
@@ -2504,6 +2576,10 @@ const claseTextoMovimiento = (texto: string) => {
 
 const abrirModalAnticipo = () => {
   if (esOperador.value) return
+  if (!turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   if (ordenSeleccionada.value?.estado === 'cancelada') return
 
   montoAnticipoModal.value = 0
@@ -2519,6 +2595,10 @@ const cerrarModalAnticipo = () => {
 }
 
 const confirmarAnticipoModal = async () => {
+  if (!turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
   if (!ordenSeleccionada.value || ordenSeleccionada.value.estado === 'cancelada' || montoAnticipoModal.value <= 0 || peticionOrdenEnCurso.value) return
 
   const orden = ordenSeleccionada.value
@@ -2812,8 +2892,22 @@ const cancelandoOrden = ref(false)
 const enviarNotificacionCancelacion = ref(true)
 const enviarNotificacionRecepcion = ref(true)
 
+const mostrarToastSinTurno = async () => {
+  const toast = await toastController.create({
+    message: 'No hay un turno abierto.',
+    duration: 3000,
+    color: 'warning',
+    position: 'top'
+  })
+  await toast.present()
+}
+
 const abrirModalCancelarOrden = () => {
   if (esOperador.value) return
+  if (!turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   razonCancelacion.value = ''
   enviarNotificacionCancelacion.value = true
   mostrarModalCancelarOrden.value = true
@@ -2824,7 +2918,15 @@ const cerrarModalCancelarOrden = () => {
 }
 
 const confirmarCancelarOrden = async () => {
-  if (!ordenSeleccionada.value || !razonCancelacion.value.trim() || cancelandoOrden.value || peticionOrdenEnCurso.value) return
+  if (!turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
+  if (!razonCancelacion.value.trim()) {
+    window.alert('Es necesario indicar una razón por la cual se cancela la orden.')
+    return
+  }
+  if (!ordenSeleccionada.value || cancelandoOrden.value || peticionOrdenEnCurso.value) return
 
   const orden = ordenSeleccionada.value
   cancelandoOrden.value = true
@@ -2934,13 +3036,33 @@ const ordenSeleccionada = computed(() =>
 )
 
 const movimientosOrdenSeleccionada = computed(() => {
+  const orden = ordenSeleccionada.value
+  if (!orden) return []
+
+  const movimientos = orden.movimientos.map((movimiento) => ({
+    ...movimiento,
+    esIntervencion: false
+  }))
+
+  if (requiereIntervencion(orden)) {
+    movimientos.push({
+      id: `intervencion-${orden.id}`,
+      texto: `Orden requiere intervención: ${motivoIntervencion(orden)}`,
+      fecha: orden.updatedAt,
+      usuarioId: null,
+      usuarioNombre: 'Sistema',
+      esIntervencion: true
+    })
+  }
+
   const prioridadMovimiento = (texto: string) => {
     const normalizado = texto.toLocaleLowerCase()
     if (normalizado.includes('estado cambiado a entregado') || normalizado.includes('entrega antigua')) return 0
     if (normalizado.includes('pago actualizado a pagado') || normalizado.includes('se registró el pago final')) return 1
     return 2
   }
-  return [...(ordenSeleccionada.value?.movimientos ?? [])].sort((a, b) => {
+  return movimientos.sort((a, b) => {
+    if (a.esIntervencion !== b.esIntervencion) return a.esIntervencion ? -1 : 1
     const diferenciaFecha = Date.parse(b.fecha) - Date.parse(a.fecha)
     if (Number.isFinite(diferenciaFecha) && diferenciaFecha !== 0) return diferenciaFecha
     return prioridadMovimiento(a.texto) - prioridadMovimiento(b.texto)
@@ -3294,7 +3416,7 @@ const cerrarDetalle = () => {
 
 const restaurarOrdenCerrada = async () => {
   const orden = ordenSeleccionada.value
-  if (!esAdministrador.value || !orden || orden.estado !== 'cerrada' || restaurandoOrdenCerrada.value) return
+  if (!esAdministrador.value || !orden || (orden.estado !== 'cerrada' && orden.estado !== 'Cerrada-Cancelada') || restaurandoOrdenCerrada.value) return
 
   mostrarModalRestaurar.value = true
 }
@@ -3306,14 +3428,19 @@ const cerrarModalRestaurar = () => {
 
 const confirmarRestaurarOrden = async () => {
   const orden = ordenSeleccionada.value
-  if (!esAdministrador.value || !orden || orden.estado !== 'cerrada' || restaurandoOrdenCerrada.value) return
+  if (!esAdministrador.value || !orden || (orden.estado !== 'cerrada' && orden.estado !== 'Cerrada-Cancelada') || restaurandoOrdenCerrada.value) return
 
+  const esCanceladaCerrada = orden.estado === 'Cerrada-Cancelada'
   restaurandoOrdenCerrada.value = true
   try {
     const restaurada = await restaurarOrden(orden.id)
     if (!restaurada) throw new Error('No se pudo restaurar la orden.')
     mostrarModalRestaurar.value = false
-    window.alert('Orden restaurada a pendiente. El pago del turno de entrega se eliminó y los anticipos de otros turnos se conservaron.')
+    window.alert(
+      esCanceladaCerrada
+        ? 'Orden restaurada a pendiente. Los pagos eliminados al cancelar no se recuperaron.'
+        : 'Orden restaurada a pendiente. El pago del turno de entrega se eliminó y los anticipos de otros turnos se conservaron.'
+    )
     cerrarDetalle()
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'No se pudo restaurar la orden.')
@@ -3678,8 +3805,6 @@ const generarHtmlReporteOrden = (orden: Orden) => {
   `
 }
 
-const resumenServicios = (items: OrdenItem[]) => items.map((item) => item.nombre).join(', ')
-
 const textoEntrega = (orden: Orden) => {
   if (!orden.fechaEntrega) return 'Sin fecha'
   const fecha = new Date(`${orden.fechaEntrega}T00:00:00`)
@@ -3740,6 +3865,19 @@ const formatearFechaHora = (valor: string) =>
     hour: '2-digit',
     minute: '2-digit'
   })
+
+const formatearFechaHoraModal = (valor: string) =>
+  formatearFechaCentroamericaMesCorto(valor, {
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+const textoFechaEditable = (valor: string) =>
+  valor
+    ? formatearFechaCentroamericaMesCorto(valor, { day: '2-digit', year: 'numeric' })
+    : 'Selecciona una fecha'
 
 const iniciarArrastreOrden = (id: string) => {
   arrastrandoOrdenId.value = id
@@ -3806,6 +3944,10 @@ const solicitarCambioEstado = (
   const orden = obtenerOrdenPorId(idOrden)
   if (!orden) return
 
+  if (estadoDestino === 'entregado' && !turno.abierto) {
+    void mostrarToastSinTurno()
+    return
+  }
   if (!puedeCambiarEstado(orden.estado, estadoDestino)) return
 
   ordenCambioPendienteId.value = idOrden
@@ -4070,6 +4212,10 @@ const confirmarCambioEstado = async () => {
   const estado = estadoObjetivoCambio.value
 
   if (!orden || !estado || peticionOrdenEnCurso.value) return
+  if (estado === 'entregado' && !turno.abierto) {
+    await mostrarToastSinTurno()
+    return
+  }
   const usarEntregaAntigua = esAdministrador.value && registrarEntregaAntigua.value
   if (usarEntregaAntigua && !turnoIdEntregaAntigua.value) {
     window.alert('Selecciona el turno para la entrega antigua.')
@@ -4225,10 +4371,18 @@ onBeforeUnmount(() => {
 }
 
 .ordenes-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  align-items: start;
+  column-gap: 18px;
+  row-gap: 16px;
   min-height: calc(100% + 220px);
+}
+
+.ordenes-page > ion-modal {
+  grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 .ordenes-page.modo-solo-detalle > :not(ion-modal) {
@@ -4257,7 +4411,96 @@ onBeforeUnmount(() => {
 }
 
 .ordenes-resumen {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.ordenes-resumen-titulo {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.ordenes-resumen h1 {
+  min-width: 0;
+  margin: 0;
+  color: #0a1f38;
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.ordenes-resumen-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 24px;
+}
+
+.ordenes-indicador-alerta {
+  appearance: none;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-self: start;
+  justify-self: end;
+  min-width: 34px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #b91c1c;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(127, 29, 29, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.ordenes-indicador-alerta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(127, 29, 29, 0.2);
+}
+
+.ordenes-indicador-alerta:focus-visible {
+  outline: 2px solid #b91c1c;
+  outline-offset: 2px;
+}
+
+.ordenes-indicador-alerta ion-icon {
+  font-size: 17px;
+}
+
+.ordenes-indicador-intervencion {
+  min-width: 30px;
+  width: 30px;
+  padding: 0;
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.ordenes-conteo {
+  display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -4278,81 +4521,182 @@ onBeforeUnmount(() => {
 .controles-superiores {
   display: flex;
   flex-direction: column;
+  grid-column: 1;
+  grid-row: 3;
+  position: sticky;
+  top: 16px;
+  align-self: start;
   gap: 10px;
+  min-width: 0;
+}
+
+.ordenes-filtros-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fbfd 100%);
+  box-shadow: 0 6px 18px rgba(10, 31, 56, 0.05);
+}
+
+.ordenes-filtros-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ordenes-filtros-cabecera > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ordenes-filtros-cabecera strong {
+  color: #123a66;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.ordenes-filtros-cabecera > div > span {
+  color: #718198;
+  font-size: 0.68rem;
 }
 
 .search-bar {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 40px;
+  box-sizing: border-box;
+  background: #f8fafc;
+  border: 1px solid #dce5ed;
+  border-radius: 12px;
+  padding: 7px 10px;
+  color: #648098;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.search-bar:focus-within {
+  border-color: #66c2b8;
   background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.1);
-  border-radius: 14px;
-  padding: 11px 16px;
-  color: #4a627e;
-  box-shadow: 0 2px 10px rgba(10, 31, 56, 0.04);
+  box-shadow: 0 0 0 3px rgba(102, 194, 184, 0.15);
 }
 
 .search-bar input {
   border: none;
   outline: none;
   flex: 1;
-  font-size: 0.92rem;
+  min-width: 0;
+  font-size: 0.82rem;
   background: transparent;
   color: #0a1f38;
 }
 
+.search-bar input::placeholder {
+  color: #92a1b1;
+}
+
+.search-bar input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.limpiar-busqueda {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e9eff4;
+  color: #536b80;
+  cursor: pointer;
+}
+
+.limpiar-busqueda:hover {
+  background: #dce6ed;
+}
+
+.ordenes-filtros-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ordenes-filtros-etiqueta {
+  color: #6e8194;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .chip-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
-.chip-row-ordenamiento {
-  align-items: center;
+.ordenes-filtros-pie {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(18, 58, 102, 0.09);
 }
 
 .filtros-fecha {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-left: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
 }
 
-.ordenamiento-label {
-  font-size: 0.8rem;
-  color: #4a627e;
+.fecha-filtro-campo {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  color: #657a8e;
+  font-size: 0.66rem;
   font-weight: 700;
-  margin-right: 2px;
 }
 
 .filtro-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(10, 31, 56, 0.1);
+  padding: 6px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(10, 31, 56, 0.11);
   background: #ffffff;
   color: #123a66;
   cursor: pointer;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 750;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
 
 .fecha-filtro-input {
-  border: 1px solid rgba(10, 31, 56, 0.12);
-  border-radius: 10px;
-  background: #ffffff;
+  min-height: 32px;
+  width: 145px;
+  max-width: 68%;
+  box-sizing: border-box;
+  border: 1px solid #dce5ed;
+  border-radius: 9px;
+  background: #f8fafc;
   color: #0a1f38;
-  padding: 7px 10px;
+  padding: 6px 9px;
   font-size: 0.82rem;
 }
 
 .filtro-chip-secundario {
-  padding: 7px 12px;
-  font-size: 0.82rem;
+  padding: 6px 9px;
+  font-size: 0.72rem;
 }
 
 .filtro-chip-limpiar {
@@ -4373,13 +4717,15 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  margin-left: auto;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 9px;
   border: 1px solid rgba(220, 38, 38, 0.24);
-  border-radius: 10px;
+  border-radius: 9px;
   background: #fff7f7;
   color: #b91c1c;
+  font-size: 0.72rem;
+  font-weight: 750;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
@@ -4410,6 +4756,48 @@ onBeforeUnmount(() => {
   height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .ordenes-filtros-panel {
+    gap: 13px;
+    padding: 14px;
+    border-radius: 15px;
+  }
+
+  .ordenes-filtros-cabecera strong {
+    font-size: 0.9rem;
+  }
+
+  .ordenes-filtros-cabecera > div > span {
+    font-size: 0.7rem;
+  }
+
+  .ordenes-filtros-pie {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filtros-fecha {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .fecha-filtro-campo,
+  .fecha-filtro-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filtro-chip-limpiar {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .btn-eliminar-dia {
+    justify-content: center;
+  }
 }
 
 /* ---------- Estilos para detalles de método de pago ---------- */
@@ -4527,37 +4915,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  grid-column: 2;
+  grid-row: 3;
+  container-name: ordenes-grid;
+  container-type: inline-size;
+  min-width: 0;
   min-height: 0;
   flex: 1;
-}
-
-.grid-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.grid-header-titulo {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-  min-width: 0;
-}
-
-.grid-header-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.grid-header strong {
-  font-size: 1.08rem;
-  color: #0a1f38;
 }
 
 .ayuda-alertas-ordenes {
@@ -4698,9 +5062,9 @@ ion-modal.modal-ayuda-alertas::part(content) {
   border-radius: 50%;
 }
 
-.ayuda-alerta-color.amarillo {
-  background: #eab308;
-  box-shadow: 0 0 7px rgba(234, 179, 8, 0.65);
+.ayuda-alerta-color.naranja {
+  background: #f97316;
+  box-shadow: 0 0 7px rgba(249, 115, 22, 0.65);
 }
 
 .ayuda-alerta-color.rojo {
@@ -4719,156 +5083,6 @@ ion-modal.modal-ayuda-alertas::part(content) {
   color: #657b90;
 }
 
-.grid-header-count {
-  margin-left: auto;
-  padding: 5px 13px;
-  border-radius: 999px;
-  background: rgba(10, 31, 56, 0.06);
-  color: #5c7289;
-  font-weight: 800;
-  font-size: 0.82rem;
-}
-
-.ordenes-tablero-layout {
-  display: grid;
-  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-  min-width: 0;
-}
-
-.cola-ordenes {
-  position: sticky;
-  top: 0;
-  min-width: 0;
-  max-height: min(620px, calc(100vh - 180px));
-  padding: 12px;
-  border: 1px solid rgba(18, 58, 102, 0.1);
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(10, 31, 56, 0.05);
-}
-
-.cola-ordenes-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(10, 31, 56, 0.08);
-}
-
-.cola-ordenes-etiqueta {
-  margin: 0 0 3px;
-  color: #6f8399;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.cola-ordenes-header strong {
-  color: #0a1f38;
-  font-size: 0.95rem;
-}
-
-.cola-ordenes-count {
-  display: grid;
-  place-items: center;
-  min-width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #e8f7f4;
-  color: #126e68;
-  font-size: 0.76rem;
-  font-weight: 900;
-}
-
-.cola-ordenes-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: calc(min(620px, 100vh - 180px) - 62px);
-  padding-top: 8px;
-  overflow-y: auto;
-}
-
-.cola-orden-item {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  padding: 8px 6px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.cola-orden-item:hover {
-  border-color: rgba(22, 139, 131, 0.2);
-  background: #f1fbfa;
-}
-
-.cola-orden-item.alerta-entrega {
-  border-color: rgba(234, 179, 8, 0.7);
-  animation: cola-vencida-amarilla 1.4s ease-in-out infinite;
-}
-
-.cola-orden-item.alerta-mora {
-  border-color: rgba(220, 38, 38, 0.65);
-  animation: cola-vencida-roja 1.4s ease-in-out infinite;
-}
-
-@keyframes cola-vencida-amarilla {
-  0%, 100% { box-shadow: inset 0 0 0 rgba(234, 179, 8, 0); }
-  50% { box-shadow: inset 0 0 10px rgba(234, 179, 8, 0.35); }
-}
-
-@keyframes cola-vencida-roja {
-  0%, 100% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
-  50% { box-shadow: inset 0 0 10px rgba(220, 38, 38, 0.32); }
-}
-
-.cola-orden-posicion {
-  color: #6f8399;
-  font-size: 0.78rem;
-  font-weight: 900;
-  text-align: center;
-}
-
-.cola-orden-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 2px;
-}
-
-.cola-orden-info strong,
-.cola-orden-info small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cola-orden-info strong {
-  color: #123a66;
-  font-size: 0.78rem;
-}
-
-.cola-orden-info small {
-  color: #6f8399;
-  font-size: 0.72rem;
-}
-
-.cola-orden-vacia {
-  margin: 12px 4px;
-  color: #9fb4c9;
-  font-size: 0.78rem;
-  text-align: center;
-}
-
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4876,12 +5090,23 @@ ion-modal.modal-ayuda-alertas::part(content) {
   align-items: start;
 }
 
+@media (min-width: 901px) {
+  @container ordenes-grid (max-width: 1120px) {
+    .cards-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+}
+
 .paginacion-ordenes {
   display: flex;
   align-items: center;
   justify-content: center;
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
   gap: 14px;
-  margin-top: 18px;
+  margin: 0;
   color: #5c7289;
   font-size: 0.82rem;
   font-weight: 800;
@@ -4913,7 +5138,7 @@ ion-modal.modal-ayuda-alertas::part(content) {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
   height: 230px;
   box-sizing: border-box;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -4931,8 +5156,8 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 .orden-card.alerta-entrega::before {
-  border-color: #eab308;
-  animation: destello-vencida-amarillo 1.4s ease-in-out infinite;
+  border-color: #f97316;
+  animation: destello-vencida-naranja 1.4s ease-in-out infinite;
 }
 
 .orden-card.alerta-mora::before {
@@ -4940,9 +5165,9 @@ ion-modal.modal-ayuda-alertas::part(content) {
   animation: destello-vencida-rojo 1.4s ease-in-out infinite;
 }
 
-@keyframes destello-vencida-amarillo {
-  0%, 100% { opacity: 0.25; box-shadow: inset 0 0 0 rgba(234, 179, 8, 0), 0 0 0 rgba(234, 179, 8, 0); }
-  50% { opacity: 1; box-shadow: inset 0 0 10px rgba(234, 179, 8, 0.3), 0 0 14px rgba(234, 179, 8, 0.65); }
+@keyframes destello-vencida-naranja {
+  0%, 100% { opacity: 0.25; box-shadow: inset 0 0 0 rgba(249, 115, 22, 0), 0 0 0 rgba(249, 115, 22, 0); }
+  50% { opacity: 1; box-shadow: inset 0 0 10px rgba(249, 115, 22, 0.3), 0 0 14px rgba(249, 115, 22, 0.65); }
 }
 
 @keyframes destello-vencida-rojo {
@@ -5093,14 +5318,6 @@ ion-modal.modal-ayuda-alertas::part(content) {
   gap: 2px;
 }
 
-.total-mora-desglose {
-  display: block;
-  color: #a16207;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
 .saldo-pendiente {
   font-size: 0.65rem;
   font-weight: 700;
@@ -5124,20 +5341,12 @@ ion-modal.modal-ayuda-alertas::part(content) {
   text-overflow: ellipsis;
 }
 
-.detalles,
 .entrega,
 .prendas {
   margin: 0;
   color: #6f8399;
   font-size: 0.84rem;
   line-height: 1.35;
-}
-
-.detalles {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
 }
 
 .entrega {
@@ -5149,7 +5358,127 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 .card-bottom {
-  margin-top: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-end;
+  gap: 5px 10px;
+  margin-top: 3px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(18, 58, 102, 0.09);
+}
+
+.precios-info {
+  min-width: 0;
+  gap: 3px;
+}
+
+.total-label {
+  color: #718198;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.pago-card {
+  flex: 0 0 auto;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid currentColor;
+  border-color: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(10, 31, 56, 0.06);
+}
+
+.pago-card ion-icon {
+  font-size: 14px;
+}
+
+.pago-porCobrar.pago-card {
+  border-color: rgba(249, 115, 22, 0.3);
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  color: #c2410c;
+}
+
+.pago-anticipo.pago-card {
+  border-color: rgba(18, 58, 102, 0.18);
+  background: linear-gradient(135deg, #eef5ff, #e1edfc);
+  color: #204c78;
+}
+
+.pago-pagado.pago-card {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: linear-gradient(135deg, #effcf3, #dcf7e5);
+  color: #16713a;
+}
+
+.card-bottom .total {
+  display: block;
+  color: #183b5b;
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.card-bottom .total-pagada {
+  color: #183b5b !important;
+}
+
+.card-mora-resumen {
+  display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 1px;
+  padding: 6px 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.card-mora-resumen > span:first-child {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+}
+
+.card-mora-resumen strong {
+  color: #c2410c;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 380px) {
+  .card-bottom {
+    align-items: flex-start;
+  }
+
+  .pago-card {
+    padding: 5px 8px;
+    font-size: 0.64rem;
+  }
+
+  .card-bottom .total {
+    font-size: 1.08rem;
+  }
+
+  .card-mora-resumen {
+    gap: 5px;
+    padding: 5px 7px;
+    font-size: 0.63rem;
+  }
+
+  .card-mora-resumen strong {
+    font-size: 0.67rem;
+  }
 }
 
 .total {
@@ -5186,8 +5515,8 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 .pago-porCobrar {
-  background: rgba(232, 163, 23, 0.18);
-  color: #8a5a09;
+  background: rgba(249, 115, 22, 0.14);
+  color: #c2410c;
 }
 
 .pago-anticipo {
@@ -5263,8 +5592,6 @@ ion-modal.modal-ayuda-alertas::part(content) {
 
 @media (prefers-reduced-motion: reduce) {
   .modal-detalle::before,
-  .cola-orden-item.alerta-entrega,
-  .cola-orden-item.alerta-mora,
   .orden-card.alerta-entrega::before,
   .orden-card.alerta-mora::before {
     animation: none;
@@ -5273,7 +5600,6 @@ ion-modal.modal-ayuda-alertas::part(content) {
 
 .modal-detalle .detalle-bloque,
 .modal-detalle .mini-card,
-.modal-detalle .estado-cuadrito:not(.actual):not(:disabled),
 .modal-detalle .foto-vacia,
 .modal-detalle .servicio-linea {
   background: #ffffff;
@@ -5282,9 +5608,10 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 .modal-detalle .estado-deslizador {
-  background: linear-gradient(180deg, #ffffff 0%, #f9fcfd 100%);
-  border-color: rgba(10, 31, 56, 0.12);
-  box-shadow: 0 2px 8px rgba(10, 31, 56, 0.08);
+  padding: 17px;
+  border-color: rgba(27, 61, 93, 0.12);
+  background: linear-gradient(145deg, #ffffff 0%, #f7fafc 100%);
+  box-shadow: 0 8px 22px rgba(17, 43, 70, 0.08);
 }
 
 .modal-detalle .fecha-orden-input,
@@ -5479,6 +5806,17 @@ ion-modal.modal-ayuda-alertas::part(content) {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.orden-detalle-campos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .columna-titulo {
@@ -5682,220 +6020,206 @@ ion-modal.modal-ayuda-alertas::part(content) {
   flex-wrap: wrap;
 }
 
-.estado-progreso-barra {
-  margin: 4px 2px 14px;
-}
-
-.estado-progreso-fila {
-  position: relative;
+.estado-barra-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  height: 40px;
-  padding: 0 1px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.estado-progreso-punto {
+.estado-barra-header .label {
+  margin: 0;
+}
+
+.estado-barra-ayuda {
+  display: block;
+  margin-top: 4px;
+  color: #718198;
+  font-size: 0.76rem;
+}
+
+.estado-actual-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--estado-cuadrito-color) 28%, #ffffff);
+  border-radius: 999px;
+  background: var(--estado-cuadrito-fondo);
+  color: var(--estado-cuadrito-texto);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.estado-actual-badge::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--estado-cuadrito-color);
+  content: '';
+}
+
+.estado-pasos {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px 0 2px;
+}
+
+.estado-pasos-track {
+  position: absolute;
+  top: 24px;
+  right: 12.5%;
+  left: 12.5%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4eaf0;
+}
+
+.estado-pasos-track-fill {
+  display: block;
+  width: var(--estado-progreso-ancho);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--estado-progreso-color);
+  transition: width 0.35s ease;
+}
+
+.estado-pasos-cerrados .estado-pasos-track-fill {
+  background: #9aa6b2;
+}
+
+.estado-paso {
   position: relative;
   z-index: 1;
   display: flex;
-  flex: 1;
-  height: 100%;
-  align-items: flex-end;
-  justify-content: center;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #8997a7;
+  font: inherit;
+  text-align: center;
+  cursor: default;
+  transition: color 0.18s ease, transform 0.18s ease;
 }
 
-.estado-progreso-etiqueta {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  z-index: 2;
-  max-width: 100%;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--estado-progreso-color) 28%, #ffffff);
-  border-radius: 999px;
-  font-size: 0.64rem;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
-  transform: translateX(-50%);
+.estado-paso:not(:disabled) {
+  cursor: pointer;
 }
 
-.estado-progreso-track {
-  position: absolute;
-  left: 7px;
-  right: 7px;
-  bottom: 5px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(18, 58, 102, 0.12);
-  overflow: hidden;
-  z-index: 0;
+.estado-paso:not(:disabled):hover {
+  transform: translateY(-2px);
+  color: var(--estado-cuadrito-texto);
 }
 
-.estado-progreso-track-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background-color: var(--estado-progreso-color, #66c2b8);
-  transition: width 0.4s ease;
+.estado-paso:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--estado-cuadrito-color) 35%, #ffffff);
+  outline-offset: 2px;
 }
 
-.estado-progreso-punto-dot {
+.estado-paso-indicador {
   position: relative;
-  z-index: 1;
-  width: 11px;
-  height: 11px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 2px solid #d8e0e8;
   border-radius: 50%;
   background: #ffffff;
-  border: 2px solid rgba(18, 58, 102, 0.22);
-  transition: background 0.3s ease, border-color 0.3s ease, width 0.3s ease, height 0.3s ease;
+  color: #8695a5;
+  font-size: 1rem;
+  box-shadow: 0 0 0 5px #ffffff;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.estado-progreso-punto-dot.completado {
-  background: var(--estado-progreso-color);
-  border-color: var(--estado-progreso-color);
+.estado-paso-indicador ion-icon {
+  font-size: 1.1rem;
 }
 
-.estado-progreso-punto-dot.actual {
-  width: 14px;
-  height: 14px;
-  background: var(--estado-progreso-color);
-  border-color: var(--estado-progreso-color);
-  color: var(--estado-progreso-color);
-  box-shadow: 0 0 0 3px #ffffff;
-}
-
-.estado-progreso-punto-dot.actual::before,
-.estado-progreso-punto-dot.actual::after {
-  content: '';
+.estado-paso.actual .estado-paso-indicador::before,
+.estado-paso.actual .estado-paso-indicador::after {
   position: absolute;
-  inset: 0;
+  inset: -2px;
+  border: 2px solid var(--estado-cuadrito-color);
   border-radius: 50%;
-  background: currentColor;
-  z-index: -1;
-  animation: estado-progreso-onda 2.4s ease-out infinite;
+  content: '';
+  pointer-events: none;
+  animation: estado-paso-onda 2.2s ease-out infinite;
 }
 
-.estado-progreso-punto-dot.actual::after {
-  animation-delay: 1.2s;
+.estado-paso.actual .estado-paso-indicador::after {
+  animation-delay: 1.1s;
 }
 
-@keyframes estado-progreso-onda {
+@keyframes estado-paso-onda {
   0% {
     transform: scale(1);
     opacity: 0.55;
   }
   100% {
-    transform: scale(3.2);
+    transform: scale(1.8);
     opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .estado-progreso-punto-dot.actual::before,
-  .estado-progreso-punto-dot.actual::after {
-    animation: none;
+  .estado-paso.actual .estado-paso-indicador::before,
+  .estado-paso.actual .estado-paso-indicador::after {
+    display: none;
   }
 }
 
-/* Orden cerrada: barra fija en gris, sin destello en el punto final. */
-.estado-progreso-cerrada .estado-progreso-punto-dot.actual::before,
-.estado-progreso-cerrada .estado-progreso-punto-dot.actual::after {
-  content: none;
-  animation: none;
+.estado-paso.completado {
+  color: var(--estado-paso-color);
 }
 
-.estado-cuadritos {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+.estado-paso.completado .estado-paso-indicador {
+  border-color: color-mix(in srgb, var(--estado-paso-color) 60%, #ffffff);
+  background: color-mix(in srgb, var(--estado-paso-color) 12%, #ffffff);
+  color: var(--estado-paso-color);
+  font-weight: 900;
 }
 
-.estado-cuadrito {
-  min-width: 0;
-  min-height: 82px;
-  border: 1px solid rgba(18, 58, 102, 0.14);
-  border-radius: 12px;
-  padding: 9px 6px;
-  background: #ffffff;
-  color: #123a66;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-align: center;
-  cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.estado-cuadrito:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: #66c2b8;
-  background: rgba(102, 194, 184, 0.08);
-}
-
-.estado-cuadrito.actual,
-.estado-cuadrito:disabled {
-  border-color: #cbd5df;
-  background: #e5e7eb;
-  color: #6b7280;
-  cursor: default;
-  opacity: 1;
-}
-
-.estado-cuadrito.actual {
-  border-color: var(--estado-cuadrito-color);
-  background: var(--estado-cuadrito-fondo);
+.estado-paso.actual {
   color: var(--estado-cuadrito-texto);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--estado-cuadrito-color) 28%, transparent);
 }
 
-.estado-cuadrito-emoji {
-  font-size: 1.45rem;
-  line-height: 1;
-  filter: grayscale(0.1);
+.estado-paso.actual .estado-paso-indicador {
+  border-color: var(--estado-cuadrito-color);
+  background: var(--estado-cuadrito-color);
+  color: #ffffff;
+  box-shadow: 0 0 0 5px #ffffff, 0 4px 12px color-mix(in srgb, var(--estado-cuadrito-color) 30%, transparent);
 }
 
-.estado-cuadrito.actual .estado-cuadrito-emoji {
-  filter: none;
-  opacity: 1;
-}
-
-.estado-cuadrito-progreso {
-  position: relative;
-  display: block;
-  width: 52px;
+.estado-paso-titulo {
   max-width: 100%;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--estado-progreso-color) 18%, #ffffff);
+  color: #344b63;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
-.estado-cuadrito-progreso::after {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 35%;
-  border-radius: inherit;
-  background: var(--estado-progreso-color);
-  content: '';
-  animation: estado-progreso 1.2s ease-in-out infinite;
+.estado-paso-nota {
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.estado-cuadrito-progreso.completa::after {
-  width: 100%;
-  transform: none;
-  animation: none;
-  box-shadow: 0 0 7px var(--estado-progreso-color);
+.estado-paso.actual .estado-paso-nota {
+  color: var(--estado-cuadrito-texto);
 }
 
-@keyframes estado-progreso {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(285%); }
+.estado-paso.completado .estado-paso-nota {
+  color: #64748b;
 }
 
 .cancelar-orden-boton {
@@ -6029,8 +6353,21 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 @media (max-width: 480px) {
-  .estado-cuadritos {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .estado-pasos {
+    gap: 0;
+  }
+
+  .estado-paso-indicador {
+    width: 36px;
+    height: 36px;
+  }
+
+  .estado-paso-titulo {
+    font-size: 0.66rem;
+  }
+
+  .estado-paso-nota {
+    font-size: 0.58rem;
   }
 }
 
@@ -6077,6 +6414,40 @@ ion-modal.modal-ayuda-alertas::part(content) {
   font: inherit;
   font-weight: 700;
   outline: none;
+}
+
+.selector-fecha-orden {
+  position: relative;
+}
+
+.fecha-orden-visual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fecha-orden-picker {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.fecha-orden-picker:disabled {
+  cursor: not-allowed;
+}
+
+.selector-fecha-orden:focus-within .fecha-orden-visual {
+  border-color: #168b83;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(22, 139, 131, 0.13);
 }
 
 .fecha-orden-input:focus {
@@ -6587,6 +6958,11 @@ ion-modal.modal-ayuda-alertas::part(content) {
   background: var(--estado-mov-bg, transparent);
 }
 
+.movimiento-intervencion {
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background: rgba(220, 38, 38, 0.1);
+}
+
 .movimiento-estado {
   --bullet-color: var(--estado-mov-color);
 }
@@ -6813,12 +7189,38 @@ ion-modal.modal-ayuda-alertas::part(content) {
 }
 
 @media (max-width: 900px) {
-  .ordenes-tablero-layout {
-    grid-template-columns: 1fr;
+  .ordenes-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
 
-  .cola-ordenes {
-    display: none;
+  .ordenes-page > ion-modal {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .ordenes-resumen,
+  .controles-superiores,
+  .paginacion-ordenes,
+  .contenido-principal {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .paginacion-ordenes {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .controles-superiores {
+    position: static;
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .ordenes-filtros-panel {
+    width: 100%;
   }
 
   .card-top-identidad {
@@ -6909,7 +7311,9 @@ ion-modal.modal-ayuda-alertas::part(content) {
   .motivo-intervencion-header span {
     display: none;
   }
+}
 
+@media (min-width: 901px) {
   .motivo-intervencion-header ion-icon {
     font-size: 1.05rem;
   }

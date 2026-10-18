@@ -208,6 +208,7 @@ const fueCanceladaEnTurno = (
   finTurno: Date
 ) => {
   if (orden.estado !== 'cancelada') return false
+  if (orden.turnoId === turnoId) return true
 
   const canceladaAt = new Date(orden.updatedAt)
   const canceladaValida = !Number.isNaN(canceladaAt.getTime())
@@ -246,7 +247,7 @@ const eliminarCierre = async (id: string) => {
 }
 export function useHistorialCierres() {
   const { turno, cerrarTurno } = useTurno()
-  const { ordenes, cargarOrdenes, cambiarEstado } = useOrdenes()
+  const { ordenes, cargarOrdenes } = useOrdenes()
   const { movimientos, registrarCierre, limpiarMovimientosDelTurno } = useCajaMovimientos()
 
   const cierresDelTurnoActual = computed(() =>
@@ -257,13 +258,22 @@ export function useHistorialCierres() {
     historialCierres.value.find((cierre) => cierre.id === id) ?? null
 
   const registrarCierreTurno = async (saldoCierre: number, notas?: string, fecha?: string, usuarioRol?: string) => {
-    if (cierreEnCurso || !turno.abierto || !turno.id) return null
+    if (cierreEnCurso) return null
+    if (!turno.abierto || !turno.id) {
+      throw new Error('No hay un turno de caja abierto para cerrar.')
+    }
     cierreEnCurso = true
 
     try {
       // ReportesPage ya carga el historial al abrirse. Evita repetir aquí
       // esa consulta, que puede tardar hasta 30 s y no es necesaria para cerrar.
-      if (historialCierres.value.some((cierre) => cierre.turnoId === turno.id)) return null
+      const cierreExistente = historialCierres.value.find((cierre) => cierre.turnoId === turno.id)
+      if (cierreExistente) {
+        await cerrarTurno(cierreExistente.saldoCierre, fecha, usuarioRol)
+        void cargarOrdenes()
+        await limpiarMovimientosDelTurno(turno.id)
+        return cierreExistente
+      }
       const saldoFinal = redondear(saldoCierre)
     const cierreMovimiento = saldoFinal > 0
       ? await registrarCierre({
@@ -409,17 +419,6 @@ export function useHistorialCierres() {
       cierreGuardado,
       ...historialCierres.value.filter((cierre) => cierre.id !== cierreGuardado.id && cierre.turnoId !== turnoCerradoId)
     ]
-
-    // Las órdenes canceladas se archivan al cierre para que no se arrastren al siguiente turno.
-    await Promise.all(
-      canceladasTurno.map(async (orden) => {
-        try {
-          await cambiarEstado(orden.id, 'Cerrada-Cancelada')
-        } catch {
-          // Si una orden no puede archivarse, no bloquea el cierre completo.
-        }
-      })
-    )
 
     await cerrarTurno(saldoFinal, fecha, usuarioRol)
     // La orden ya se cerró en el servidor. Actualiza la lista en segundo

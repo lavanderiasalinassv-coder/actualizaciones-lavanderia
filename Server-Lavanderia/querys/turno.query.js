@@ -107,37 +107,52 @@ const abrirTurno = async ({ usuario, apertura, notas, fecha }) => {
 };
 
 const cerrarTurno = async (saldoCierre, fecha) => {
-  const actual = await obtenerTurno();
-  if (!actual.abierto) {
-    return actual;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.query(
+      "SELECT * FROM turno_caja_actual WHERE id = 1 FOR UPDATE",
+    );
+    if (!row) throw new AppError("No se pudo cargar el turno de caja.", 500);
+
+    const actual = mapTurno(row);
+    if (!actual.abierto) {
+      await conn.commit();
+      return actual;
+    }
+
+    const saldoNum =
+      typeof saldoCierre === "number" && Number.isFinite(saldoCierre)
+        ? Number(saldoCierre.toFixed(2))
+        : actual.saldoCierre;
+
+    // Al cerrar el turno, archiva las órdenes entregadas y las canceladas en él.
+    await conn.execute(
+      `UPDATE ordenes
+       SET estado = 'cerrada', updated_at = NOW()
+       WHERE turno_id = ? AND estado = 'entregado'`,
+      [actual.id],
+    );
+    await conn.execute(
+      `UPDATE ordenes
+       SET estado = 'Cerrada-Cancelada', updated_at = NOW()
+       WHERE turno_id = ? AND estado = 'cancelada'`,
+      [actual.id],
+    );
+
+    const cerradoAtValor = construirFechaHora(fecha);
+    await conn.execute(
+      "UPDATE turno_caja_actual SET abierto = 0, saldo_cierre = ?, cerrado_at = COALESCE(?, NOW()) WHERE id = 1",
+      [saldoNum, cerradoAtValor],
+    );
+    await conn.commit();
+    return obtenerTurno();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
-
-  const saldoNum =
-    typeof saldoCierre === "number" && Number.isFinite(saldoCierre)
-      ? Number(saldoCierre.toFixed(2))
-      : actual.saldoCierre;
-
-  // Solo cerrar órdenes realmente entregadas. Si ya tienen pago o anticipo,
-  // el dinero queda en la contabilidad del turno, pero la orden sigue abierta
-  // hasta que se entregue.
-  await pool.query(
-    `UPDATE ordenes 
-     SET estado = 'cerrada', 
-         updated_at = NOW() 
-     WHERE turno_id = ? 
-       AND estado = 'entregado'
-       AND estado != 'cancelada'`,
-    [actual.id],
-  );
-
-  const cerradoAtValor = construirFechaHora(fecha);
-
-  await pool.query(
-    "UPDATE turno_caja_actual SET abierto = 0, saldo_cierre = ?, cerrado_at = COALESCE(?, NOW()) WHERE id = 1",
-    [saldoNum, cerradoAtValor],
-  );
-
-  return obtenerTurno();
 };
 
 const actualizarNotas = async (notas) => {

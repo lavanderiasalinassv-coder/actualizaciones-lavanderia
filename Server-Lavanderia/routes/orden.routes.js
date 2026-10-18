@@ -4,6 +4,7 @@ const controller = require("../controllers/orden.controller");
 
 router.get("/", controller.listarOrdenes);
 router.get("/:id", controller.actualizarMoraAntesDeOperacion, controller.obtenerOrden);
+router.use("/:id", controller.protegerOrdenCerradaCancelada);
 router.post("/", controller.crear);
 
 router.post("/:id/recalcular-mora", controller.recalcularMora);

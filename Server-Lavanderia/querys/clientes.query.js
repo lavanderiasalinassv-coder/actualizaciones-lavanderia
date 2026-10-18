@@ -119,6 +119,24 @@ const actualizarCliente = async (id, cambios) => {
   return await obtenerClientePorId(id);
 };
 
+const actualizarTotalOrdenesCliente = async (id, totalOrdenes) => {
+  if (!Number.isSafeInteger(totalOrdenes) || totalOrdenes < 0 || totalOrdenes > 2147483647) {
+    throw new AppError("El total de órdenes debe ser un entero entre 0 y 2147483647.", 400);
+  }
+
+  const actual = await obtenerClientePorId(id);
+  if (!actual) {
+    throw new AppError("No se encontró el cliente.", 404);
+  }
+
+  await pool.query(
+    "UPDATE clientes SET total_ordenes = ? WHERE id = ?",
+    [totalOrdenes, id]
+  );
+
+  return await obtenerClientePorId(id);
+};
+
 const eliminarCliente = async (id) => {
   const [result] = await pool.query(
     "DELETE FROM clientes WHERE id = ?",
@@ -186,6 +204,7 @@ module.exports = {
   buscarClientePorTelefono,
   crearCliente,
   actualizarCliente,
+  actualizarTotalOrdenesCliente,
   eliminarCliente,
   registrarOrdenCliente,
   buscarClientes,

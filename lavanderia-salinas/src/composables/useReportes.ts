@@ -79,6 +79,14 @@ const esVentaDelTurno = (orden: Orden, turnoId: string) =>
   orden.estado !== 'Cerrada-Cancelada' &&
   tieneCobroEnTurno(orden, turnoId)
 
+const parsearFechaHoraCentroamerica = (valor: string | null) => {
+  if (!valor) return null
+
+  const coincidencia = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(valor)
+  const fecha = new Date(coincidencia ? `${coincidencia[1]}T${coincidencia[2]}-06:00` : valor)
+  return Number.isNaN(fecha.getTime()) ? null : fecha
+}
+
 export function useReportes() {
   const { ordenes } = useOrdenes()
   const { turno } = useTurno()
@@ -207,24 +215,22 @@ const ventasDeContadoHoy = computed(() =>
   const ordenesCanceladas = computed(() => {
     if (!turno.abierto || !turno.id) return []
 
-    const inicioTurno = turno.horaInicio ? new Date(turno.horaInicio) : null
-    const inicioValido = inicioTurno && !Number.isNaN(inicioTurno.getTime())
+    const inicioTurno = parsearFechaHoraCentroamerica(turno.horaInicio)
 
     return ordenes.value.filter((orden) => {
       if (orden.estado !== 'cancelada') return false
 
-      const canceladaAt = new Date(orden.updatedAt)
-      const canceladaValida = !Number.isNaN(canceladaAt.getTime())
-      if (inicioValido && canceladaValida) {
-        return canceladaAt >= inicioTurno
-      }
-
-      // Fallback para datos antiguos sin timestamp confiable.
-      return orden.turnoId === turno.id
+      const canceladaAt = parsearFechaHoraCentroamerica(orden.updatedAt)
+      return Boolean(
+        (inicioTurno && canceladaAt && canceladaAt >= inicioTurno) ||
+        orden.turnoId === turno.id
+      )
     })
   })
 
-  const canceladasTotalPerdido = computed(() => ordenesCanceladas.value.reduce((acc, o) => acc + o.total, 0))
+  const canceladasTotalPerdido = computed(() =>
+    ordenesCanceladas.value.reduce((acc, orden) => acc + Number(orden.total || 0), 0)
+  )
 
   /* ───────────────── Rango seleccionado (7/14/30 días) ───────────────── */
 

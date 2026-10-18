@@ -23,8 +23,8 @@
           <ion-icon :icon="pricetagOutline" /> Nueva categoría
         </button>
         <div class="acciones-derecha">
-          <span v-if="itemsFiltrados.length" class="conteo-texto">
-            {{ itemsFiltrados.length }} {{ tabActivo === 'articulos' ? 'artículo(s)' : 'servicio(s)' }}
+          <span v-if="itemsVisibles.length" class="conteo-texto">
+            {{ itemsVisibles.length }} {{ tabActivo === 'articulos' ? 'artículo(s)' : 'servicio(s)' }}
           </span>
           <button
             class="btn-fantasma-chip"
@@ -39,17 +39,28 @@
       </div>
 
       <!-- ══════════════ Buscador ══════════════ -->
-      <div v-if="items.length && (tabActivo === 'servicios' || categoriaActivaId)" class="search-bar">
+      <div v-if="tabActivo === 'todo' || tabActivo === 'servicios' || categoriaActivaId" class="search-bar" role="search">
         <ion-icon :icon="searchOutline" />
         <input
           v-model="busqueda"
           type="text"
-          :placeholder="tabActivo === 'articulos' ? 'Buscar artículo...' : 'Buscar servicio...'"
+          aria-label="Buscar servicios o categorías"
+          placeholder="Buscar servicios o categorías..."
         />
+        <button
+          v-if="busqueda"
+          class="search-clear"
+          type="button"
+          aria-label="Limpiar búsqueda"
+          title="Limpiar búsqueda"
+          @click="busqueda = ''"
+        >
+          <ion-icon :icon="closeOutline" />
+        </button>
       </div>
 
       <!-- ══════════════ Banner configuración ══════════════ -->
-      <div v-if="!cargando && !error && servicios.length === 0 && (tabActivo === 'servicios' || categoriaActivaId)" class="banner-configura">
+      <div v-if="!cargando && !error && servicios.length === 0 && !busqueda.trim() && (tabActivo === 'servicios' || categoriaActivaId)" class="banner-configura">
         <div class="banner-icon"><ion-icon :icon="sparklesOutline" /></div>
         <div>
           <p class="banner-titulo">Configura tus Servicios</p>
@@ -72,7 +83,7 @@
       </div>
 
       <!-- ══════════════ Estado vacío ══════════════ -->
-      <div v-if="!cargando && !error && !categoriaActivaId && categorias.length === 0" class="estado-vacio-box">
+      <div v-if="!cargando && !error && !categoriaActivaId && categorias.length === 0 && !busqueda.trim()" class="estado-vacio-box">
         <div class="estado-vacio-icon-wrap">
           <ion-icon :icon="cubeOutline" class="estado-vacio-icon" />
         </div>
@@ -89,7 +100,7 @@
       </div>
 
       <!-- ══════════════ Tarjetas informativas (solo si no hay nada aún) ══════════════ -->
-      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0" class="info-cards-row">
+      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0 && !busqueda.trim()" class="info-cards-row">
         <div class="info-card">
           <div class="info-card-icon icon-navy"><ion-icon :icon="cubeOutline" /></div>
           <p class="info-card-titulo">Normal</p>
@@ -109,7 +120,7 @@
         </div>
       </div>
 
-      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0" class="tips-box">
+      <div v-if="!cargando && !error && !categoriaActivaId && items.length === 0 && !busqueda.trim()" class="tips-box">
         <p class="tips-titulo"><ion-icon :icon="sparklesOutline" /> Consejos para empezar</p>
         <ol class="tips-lista">
           <li>Crea categorías para organizar tus servicios (Lavado, Planchado, Tintorería)</li>
@@ -119,40 +130,71 @@
       </div>
 
       <!-- ══════════════ Listado agrupado por categoría ══════════════ -->
-      <div v-if="tabActivo === 'todo' && !categoriaActivaId && categorias.length" class="categorias-cards">
-        <article
-          v-for="categoria in categoriasOrdenadas"
-          :key="categoria.id"
-          class="categoria-card"
-          role="button"
-          tabindex="0"
-          @click="abrirCategoria(categoria.id)"
-          @keydown.enter="abrirCategoria(categoria.id)"
-        >
-          <span class="categoria-card-acento" :style="{ background: categoria.color }"></span>
-          <span class="categoria-card-icono" :style="{ color: categoria.color, background: `${categoria.color}20` }"><ion-icon :icon="obtenerIconoPorNombre(categoria.nombre)" /></span>
-          <span class="categoria-card-nombre">{{ categoria.nombre }}</span>
-          <span class="categoria-card-conteo">{{ contarItemsCategoria(categoria.id) }} {{ contarItemsCategoria(categoria.id) === 1 ? 'elemento' : 'elementos' }}</span>
-          <button class="categoria-card-editar" type="button" title="Editar categoría" :aria-label="`Editar categoría ${categoria.nombre}`" @click.stop="abrirModalCategoria(categoria)">
-            <ion-icon :icon="createOutline" />
+      <div v-if="tabActivo === 'todo' && !categoriaActivaId && categoriasFiltradas.length">
+        <h3 v-if="busqueda.trim()" class="resultados-busqueda-titulo">Categorías</h3>
+        <div class="categorias-cards">
+          <article
+            v-for="categoria in categoriasFiltradas"
+            :key="categoria.id"
+            class="categoria-card"
+            role="button"
+            tabindex="0"
+            @click="abrirCategoria(categoria.id)"
+            @keydown.enter="abrirCategoria(categoria.id)"
+          >
+            <span class="categoria-card-acento" :style="{ background: categoria.color }"></span>
+            <span class="categoria-card-icono" :style="{ color: categoria.color, background: `${categoria.color}20` }"><ion-icon :icon="obtenerIconoPorNombre(categoria.nombre)" /></span>
+            <span class="categoria-card-nombre">{{ categoria.nombre }}</span>
+            <span class="categoria-card-conteo">{{ contarItemsCategoria(categoria.id) }} {{ contarItemsCategoria(categoria.id) === 1 ? 'elemento' : 'elementos' }}</span>
+            <button class="categoria-card-editar" type="button" title="Editar categoría" :aria-label="`Editar categoría ${categoria.nombre}`" @click.stop="abrirModalCategoria(categoria)">
+              <ion-icon :icon="createOutline" />
+            </button>
+            <ion-icon :icon="chevronForwardOutline" class="categoria-card-flecha" />
+          </article>
+          <button v-if="!busqueda.trim()" class="categoria-card categoria-card-nueva" type="button" @click="abrirModalNuevaCategoria">
+            <span class="categoria-card-icono"><ion-icon :icon="addOutline" /></span>
+            <span class="categoria-card-nombre">Nueva categoría</span>
+            <span class="categoria-card-conteo">Organiza tu catálogo</span>
           </button>
-          <ion-icon :icon="chevronForwardOutline" class="categoria-card-flecha" />
-        </article>
-        <button class="categoria-card categoria-card-nueva" type="button" @click="abrirModalNuevaCategoria">
-          <span class="categoria-card-icono"><ion-icon :icon="addOutline" /></span>
-          <span class="categoria-card-nombre">Nueva categoría</span>
-          <span class="categoria-card-conteo">Organiza tu catálogo</span>
+        </div>
+      </div>
+
+      <h3
+        v-if="tabActivo === 'todo' && !categoriaActivaId && busqueda.trim() && serviciosEncontrados.length"
+        class="resultados-busqueda-titulo"
+      >
+        Servicios encontrados
+      </h3>
+      <div
+        v-if="tabActivo === 'todo' && !categoriaActivaId && busqueda.trim() && categoriasFiltradas.length === 0 && serviciosEncontrados.length === 0"
+        class="estado-vacio-box"
+      >
+        <div class="estado-vacio-icon-wrap"><ion-icon :icon="searchOutline" class="estado-vacio-icon" /></div>
+        <p class="estado-vacio-titulo">No encontramos servicios o categorías</p>
+        <p class="estado-vacio-texto">Prueba con otro nombre o limpia la búsqueda.</p>
+        <button class="btn-primario-grande" type="button" @click="busqueda = ''">
+          <ion-icon :icon="closeOutline" /> Limpiar búsqueda
         </button>
       </div>
 
       <div v-if="!cargando && !error && (tabActivo === 'servicios' || categoriaActivaId) && itemsFiltrados.length === 0" class="estado-vacio-box">
         <div class="estado-vacio-icon-wrap"><ion-icon :icon="cubeOutline" class="estado-vacio-icon" /></div>
-        <p class="estado-vacio-titulo">Esta categoría está vacía</p>
-        <p class="estado-vacio-texto">Agrega un servicio para comenzar</p>
-        <button class="btn-primario-grande" @click="abrirModalNuevo"><ion-icon :icon="addOutline" /> Nuevo servicio</button>
+        <p class="estado-vacio-titulo">{{ busqueda ? 'No encontramos servicios' : 'Esta categoría está vacía' }}</p>
+        <p class="estado-vacio-texto">
+          {{ busqueda ? 'Prueba con otro nombre o limpia la búsqueda.' : 'Agrega un servicio para comenzar' }}
+        </p>
+        <button v-if="!busqueda" class="btn-primario-grande" @click="abrirModalNuevo">
+          <ion-icon :icon="addOutline" /> Nuevo servicio
+        </button>
+        <button v-else class="btn-primario-grande" @click="busqueda = ''">
+          <ion-icon :icon="closeOutline" /> Limpiar búsqueda
+        </button>
       </div>
 
-      <div v-if="(tabActivo === 'servicios' || categoriaActivaId) && itemsFiltrados.length" class="listado-categorias">
+      <div
+        v-if="(tabActivo === 'servicios' || categoriaActivaId || (tabActivo === 'todo' && busqueda.trim())) && gruposFiltrados.length"
+        class="listado-categorias"
+      >
         <div v-for="grupo in gruposFiltrados" :key="grupo.categoriaId ?? 'sin-categoria'" class="grupo-categoria">
           <div class="grupo-header">
             <span class="grupo-dot" :style="{ background: grupo.color }"></span>
@@ -564,7 +606,6 @@ const seleccionarServicios = () => {
 const abrirCategoria = (id: string) => {
   categoriaActivaId.value = id
   tabActivo.value = 'todo'
-  busqueda.value = ''
 }
 
 const contarItemsCategoria = (id: string) => items.value.filter((item) => item.categoriaId === id).length
@@ -575,14 +616,37 @@ const itemsPorTab = computed(() => {
   return items.value
 })
 
+const serviciosEncontrados = computed(() => {
+  const q = normalizarTexto(busqueda.value.trim())
+  if (!q) return []
+
+  return servicios.value.filter((servicio) => {
+    const categoria = categorias.value.find((cat) => cat.id === servicio.categoriaId)
+    return normalizarTexto(servicio.nombre).includes(q) ||
+      normalizarTexto(categoria?.nombre ?? 'Sin categoría').includes(q)
+  })
+})
+
 const itemsFiltrados = computed(() => {
-  const q = busqueda.value.trim().toLowerCase()
+  const q = normalizarTexto(busqueda.value.trim())
   const itemsDeCategoria = categoriaActivaId.value
     ? itemsPorTab.value.filter((item) => item.categoriaId === categoriaActivaId.value)
     : itemsPorTab.value
   if (!q) return itemsDeCategoria
-  return itemsDeCategoria.filter((i) => i.nombre.toLowerCase().includes(q))
+  return itemsDeCategoria.filter((item) => {
+    const categoria = categorias.value.find((cat) => cat.id === item.categoriaId)
+    return normalizarTexto(item.nombre).includes(q) || normalizarTexto(categoria?.nombre ?? 'Sin categoría').includes(q)
+  })
 })
+
+const itemsVisibles = computed(() =>
+  tabActivo.value === 'todo' && !categoriaActivaId.value && busqueda.value.trim()
+    ? serviciosEncontrados.value
+    : itemsFiltrados.value
+)
+
+const normalizarTexto = (texto: string) =>
+  texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const compararTexto = (a: string, b: string) => a.localeCompare(b, 'es', { sensitivity: 'base' })
 
@@ -590,13 +654,25 @@ const categoriasOrdenadas = computed(() =>
   [...categorias.value].sort((a, b) => compararTexto(a.nombre, b.nombre))
 )
 
+const categoriasFiltradas = computed(() => {
+  const q = normalizarTexto(busqueda.value.trim())
+  if (!q) return categoriasOrdenadas.value
+
+  return categoriasOrdenadas.value.filter((categoria) =>
+    normalizarTexto(categoria.nombre).includes(q) ||
+    servicios.value.some((servicio) =>
+      servicio.categoriaId === categoria.id && normalizarTexto(servicio.nombre).includes(q)
+    )
+  )
+})
+
 const gruposFiltrados = computed(() => {
   const mapa = new Map<
     string,
     { categoriaId: string | null; nombre: string; color: string; items: ItemCatalogo[] }
   >()
 
-  for (const item of itemsFiltrados.value) {
+  for (const item of itemsVisibles.value) {
     const cat = categorias.value.find((c) => c.id === item.categoriaId)
     const clave = item.categoriaId ?? 'sin-categoria'
 
@@ -1375,21 +1451,55 @@ const quitarEtiqueta = (id: string) => {
 .search-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.10);
-  border-radius: 14px;
-  padding: 11px 16px;
-  color: #4a627e;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 15px;
+  border: 1px solid #dce7f0;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #ffffff, #f8fbfe);
+  color: #4a7598;
+  box-shadow: 0 5px 16px rgba(10, 31, 56, 0.045);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.search-bar:focus-within {
+  border-color: #61a7d0;
+  box-shadow: 0 0 0 3px rgba(79, 179, 224, 0.14), 0 7px 20px rgba(10, 31, 56, 0.06);
 }
 
 .search-bar input {
+  min-width: 0;
+  height: 50px;
   border: none;
   outline: none;
   flex: 1;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   background: transparent;
   color: #0a1f38;
+}
+
+.search-bar input::placeholder {
+  color: #8799aa;
+}
+
+.search-clear {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  background: #edf4f9;
+  color: #58738b;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.search-clear:hover {
+  background: #e1edf6;
+  color: #123a66;
 }
 
 /* ── Banner configuración ── */
@@ -1586,6 +1696,13 @@ const quitarEtiqueta = (id: string) => {
 }
 
 /* ── Listado por categoría ── */
+.resultados-busqueda-titulo {
+  margin: 20px 0 12px;
+  color: #0a1f38;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
 .categorias-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

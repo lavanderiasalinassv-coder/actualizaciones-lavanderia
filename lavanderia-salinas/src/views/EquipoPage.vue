@@ -10,9 +10,15 @@
 
       <div class="usuarios-grid" v-if="usuarios.length">
         <div v-for="usuario in usuarios" :key="usuario.id" class="usuario-card">
-          <div class="avatar-grid">
-            <img v-if="usuario.imagenPerfil" :src="usuario.imagenPerfil" :alt="`Foto de ${usuario.nombre}`" />
-            <ion-icon v-else :icon="personCircleOutline" />
+          <div class="usuario-card-header">
+            <div class="avatar-grid">
+              <img v-if="usuario.imagenPerfil" :src="usuario.imagenPerfil" :alt="`Foto de ${usuario.nombre}`" />
+              <ion-icon v-else :icon="personCircleOutline" />
+            </div>
+            <span class="estado-usuario" :class="{ inactivo: !usuario.activo }">
+              <span class="estado-punto" />
+              {{ usuario.activo ? 'Activo' : 'Inactivo' }}
+            </span>
           </div>
 
           <div class="usuario-topline">
@@ -27,15 +33,18 @@
             </div>
             <div class="info-row">
               <ion-icon :icon="calendarOutline" />
-              <span>Miembro desde {{ formatearFechaMiembro(usuario) }}</span>
+              <span>
+                <small>MIEMBRO DESDE</small>
+                <strong>{{ formatearFechaMiembro(usuario) }}</strong>
+              </span>
             </div>
           </div>
 
           <div class="usuario-actions">
-            <ion-button fill="clear" class="btn-icon" @click="editarUsuario(usuario)">
+            <ion-button fill="clear" class="btn-icon" aria-label="Editar usuario" title="Editar usuario" @click="editarUsuario(usuario)">
               <ion-icon :icon="createOutline" />
             </ion-button>
-            <ion-button fill="clear" class="btn-icon danger" @click="confirmarEliminar(usuario)">
+            <ion-button fill="clear" class="btn-icon danger" aria-label="Eliminar usuario" title="Eliminar usuario" @click="confirmarEliminar(usuario)">
               <ion-icon :icon="trashOutline" />
             </ion-button>
           </div>
@@ -52,11 +61,16 @@
     <ion-modal :is-open="mostrarFormulario" class="modal-equipo" @didDismiss="cerrarFormulario">
       <div class="modal-content">
         <div class="modal-header">
-          <div>
-            <p class="eyebrow">{{ modoEdicion ? 'Editar usuario' : 'Nuevo usuario' }}</p>
-            <h2>{{ modoEdicion ? 'Actualizar perfil' : 'Agregar a tu equipo' }}</h2>
+          <div class="modal-heading">
+            <div class="modal-heading-icon">
+              <ion-icon :icon="modoEdicion ? createOutline : personAddOutline" />
+            </div>
+            <div>
+              <p class="eyebrow">{{ modoEdicion ? 'Editar usuario' : 'Nuevo usuario' }}</p>
+              <h2>{{ modoEdicion ? 'Actualizar perfil' : 'Agregar a tu equipo' }}</h2>
+            </div>
           </div>
-          <button class="modal-close" @click="cerrarFormulario">
+          <button class="modal-close" aria-label="Cerrar formulario" @click="cerrarFormulario">
             <ion-icon :icon="closeOutline" />
           </button>
         </div>
@@ -407,40 +421,58 @@ h3 {
 
 .usuarios-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  column-gap: 16px;
-  row-gap: 40px;
-  margin-top: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
 }
 
 .usuario-card {
   position: relative;
-  overflow: visible;
-  background: #ffffff;
-  border: 1px solid rgba(10, 31, 56, 0.08);
+  overflow: hidden;
+  min-width: 0;
+  background: linear-gradient(160deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e4ebf2;
   border-radius: 20px;
-  padding: 48px 16px 18px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 10px 18px rgba(10, 31, 56, 0.04);
+  gap: 14px;
+  box-shadow: 0 8px 22px rgba(10, 31, 56, 0.055);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.usuario-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, #123a66, #4fb3e0);
+}
+
+.usuario-card:hover {
+  transform: translateY(-3px);
+  border-color: #c7d9e8;
+  box-shadow: 0 14px 30px rgba(10, 31, 56, 0.11);
+}
+
+.usuario-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .avatar-grid {
-  position: absolute;
-  top: -31px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 62px;
-  height: 62px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #e7f2fb 0%, #d4ebff 100%);
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #e4f3ff, #cce8fb);
   display: grid;
   place-items: center;
   color: #123a66;
-  font-size: 2rem;
-  border: 4px solid #ffffff;
-  box-shadow: 0 8px 18px rgba(10, 31, 56, 0.16);
+  font-size: 1.9rem;
+  box-shadow: inset 0 0 0 1px rgba(18, 58, 102, 0.06);
   overflow: hidden;
 }
 
@@ -452,18 +484,30 @@ h3 {
 
 .usuario-topline {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.usuario-topline h3 {
+  max-width: 100%;
+  overflow: hidden;
+  color: #173858;
+  font-size: 1.05rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badge-role {
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 
 .badge-role.administrador {
@@ -481,51 +525,106 @@ h3 {
   color: #1d4ed8;
 }
 
+.badge-role.operador {
+  background: rgba(22, 128, 82, 0.11);
+  color: #16734a;
+}
+
+.estado-usuario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid #d5f0df;
+  border-radius: 999px;
+  background: #effaf3;
+  color: #18784a;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.estado-usuario.inactivo {
+  border-color: #e5e9ee;
+  background: #f3f5f7;
+  color: #68798a;
+}
+
+.estado-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .usuario-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #edf1f5;
+  border-bottom: 1px solid #edf1f5;
 }
 
 .info-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 9px;
   color: #4a627e;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   min-width: 0;
-  word-break: break-word;
 }
 
 .info-row ion-icon {
-  font-size: 1rem;
-  color: #123a66;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 0.95rem;
+  color: #4383b5;
 }
 
 .info-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.info-row small {
+  color: #8797a8;
+  font-size: 0.56rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+}
+
+.info-row strong {
+  color: #405a73;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 .usuario-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
   margin-top: auto;
 }
 
 .btn-icon {
-  --color: #123a66;
+  --color: #45627d;
+  --background: #f1f6fa;
   --padding-start: 8px;
   --padding-end: 8px;
   --padding-top: 8px;
   --padding-bottom: 8px;
+  --border-radius: 10px;
+  margin: 0;
 }
 
 .btn-icon.danger {
   --color: #b91c1c;
+  --background: #fff1f1;
 }
 
 .empty-state {
@@ -571,10 +670,10 @@ h3 {
 
 .modal-content {
   background: #ffffff;
-  padding: 20px 18px 18px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   max-height: 88vh;
   overflow: hidden;
 }
@@ -590,6 +689,9 @@ h3 {
   height: fit-content;
   min-height: 0;
   max-height: 90vh;
+  overflow: hidden;
+  border: 1px solid rgba(18, 58, 102, 0.1);
+  box-shadow: 0 24px 70px rgba(10, 31, 56, 0.25);
 }
 
 .modal-body-scroll {
@@ -601,17 +703,67 @@ h3 {
 
 .modal-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid #e4edf5;
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(79, 179, 224, 0.14), transparent 45%),
+    linear-gradient(135deg, #f7fbff, #eef6fc);
+}
+
+.modal-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.modal-heading-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #123a66, #327cad);
+  color: #ffffff;
+  font-size: 1.35rem;
+  box-shadow: 0 7px 14px rgba(18, 58, 102, 0.2);
+}
+
+.modal-header .eyebrow {
+  margin-bottom: 4px;
+  color: #4683af;
+  font-size: 0.64rem;
+}
+
+.modal-header h2 {
+  color: #173858;
+  font-size: clamp(1.15rem, 3vw, 1.4rem);
+  line-height: 1.2;
 }
 
 .modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
   border: none;
-  background: none;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.8);
   color: #7c8fa6;
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.modal-close:hover {
+  color: #123a66;
+  background: #ffffff;
 }
 
 .form-grid {
@@ -623,29 +775,39 @@ h3 {
 label {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: #4a627e;
+  gap: 7px;
+  font-size: 0.72rem;
+  font-weight: 850;
+  color: #45627d;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.055em;
 }
 
 input,
 select {
-  border: 1.5px solid rgba(10, 31, 56, 0.12);
-  background: #f8fbff;
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 0.96rem;
-  color: #0a1f38;
+  width: 100%;
+  border: 1px solid #dce6ef;
+  background: #f8fbfe;
+  border-radius: 11px;
+  padding: 12px 13px;
+  font-size: 0.9rem;
+  color: #173858;
   font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 input:focus,
 select:focus {
-  outline: 2px solid rgba(18, 58, 102, 0.16);
-  border-color: rgba(18, 58, 102, 0.25);
+  outline: none;
+  border-color: #58a4d0;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(79, 179, 224, 0.16);
+}
+
+input::placeholder {
+  color: #9aabba;
 }
 
 .error-message {
@@ -663,8 +825,9 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #f7faff;
-  border-radius: 12px;
+  border: 1px solid #e4edf5;
+  background: linear-gradient(135deg, #f8fbfe, #f2f8fc);
+  border-radius: 13px;
   padding: 12px 14px;
 }
 
@@ -679,15 +842,17 @@ select:focus {
 .modal-actions {
   display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 0;
   position: sticky;
   bottom: 0;
   background: #ffffff;
-  padding-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
 }
 
 .modal-actions ion-button {
   flex: 1;
+  min-height: 42px;
 }
 
 @media (max-width: 560px) {
@@ -706,41 +871,49 @@ select:focus {
 
   .usuarios-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 10px;
-    row-gap: 34px;
-    margin-top: 12px;
+    gap: 12px;
+    margin-top: 8px;
   }
 
   .usuario-card {
-    padding: 14px 12px;
+    padding: 14px 12px 12px;
     border-radius: 16px;
-    gap: 10px;
+    gap: 11px;
   }
 
   .avatar-grid {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
-    font-size: 1.6rem;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    font-size: 1.45rem;
   }
 
   .usuario-topline {
     gap: 6px;
-    flex-wrap: wrap;
   }
 
   .usuario-topline h3 {
-    font-size: 0.9rem;
+    font-size: 0.86rem;
   }
 
   .badge-role {
-    padding: 4px 8px;
-    font-size: 0.62rem;
+    padding: 4px 7px;
+    font-size: 0.56rem;
+  }
+
+  .estado-usuario {
+    gap: 4px;
+    padding: 5px 7px;
+    font-size: 0.59rem;
   }
 
   .info-row {
-    font-size: 0.76rem;
+    font-size: 0.68rem;
     gap: 6px;
+  }
+
+  .info-row strong {
+    font-size: 0.66rem;
   }
 
   .usuario-actions {
@@ -749,6 +922,27 @@ select:focus {
 
   .usuario-actions .btn-icon {
     flex: 1;
+  }
+
+  .modal-content {
+    padding: 15px;
+    gap: 14px;
+  }
+
+  .modal-header {
+    padding: 13px;
+    border-radius: 14px;
+  }
+
+  .modal-heading {
+    gap: 10px;
+  }
+
+  .modal-heading-icon {
+    width: 39px;
+    height: 39px;
+    border-radius: 12px;
+    font-size: 1.2rem;
   }
 }
 </style>

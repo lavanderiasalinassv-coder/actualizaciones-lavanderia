@@ -239,79 +239,85 @@
                 'promo-dorada': promocionEsDorada(promo)
               }"
             >
-              <div class="promo-header">
-                <div class="promo-titulo">
-                  <span class="promo-ticket-label">{{ promo.generarQr ? 'Cupón de descuento' : 'Promoción especial' }}</span>
-                  <h3>{{ promo.nombre }}</h3>
-                  <span v-if="promocionExpirada(promo)" class="badge-expirada">No vigente · Promoción expirada</span>
-                  <span v-else-if="promocionEstaVigente(promo)" class="badge-vigente">✦ Vigente</span>
-                  <span v-else class="badge-inactiva">No vigente</span>
-                  <span v-if="promo.generarQr" class="badge-qr">Cupón de descuento</span>
-                </div>
-                <div class="promo-acciones">
-                  <button
-                    v-if="promo.generarQr"
-                    type="button"
-                    class="btn-compartir"
-                    :aria-label="`Ir a compartir el cupón ${promo.nombre}`"
-                    title="Ir a compartir cupón"
-                    @click="irACompartirCupon(promo.id)"
-                  >
-                    <ion-icon :icon="shareSocialOutline" />
-                  </button>
-                  <button class="btn-editar" @click="editarPromocion(promo)">
-                    <ion-icon :icon="pencilOutline" />
-                  </button>
-                  <button class="btn-eliminar" @click="confirmarEliminarPromocion(promo.id)">
-                    <ion-icon :icon="trashOutline" />
-                  </button>
-                </div>
-              </div>
-
-              <p v-if="promo.descripcion" class="promo-desc">{{ promo.descripcion }}</p>
-
-              <div class="promo-detalles">
-                <div class="detalle-item detalle-descuento">
-                  <span class="label">Descuento:</span>
-                  <span class="chip-descuento">{{ formatearValorPromocion(promo) }}</span>
-                </div>
-
-                <div class="detalle-item">
-                  <span class="label">Aplica a:</span>
-                  <span class="valor">
-                    {{ promo.generarQr
-                      ? 'Con QR'
-                      : promo.tipoClienteAplica === 'todos'
-                        ? 'Todos'
-                        : promo.tipoClienteAplica === 'registrados'
-                          ? 'Clientes Registrados'
-                          : `Recurrentes${promo.minOrdenes ? ` (${promo.minOrdenes}+ órdenes)` : ''}` }}
-                  </span>
-                </div>
-
-                <div v-if="promo.generarQr" class="detalle-item">
-                  <span class="label">Límite por cliente:</span>
-                  <span class="valor">{{ formatearLimiteUsos(promo.maxUsosPorCliente) }}</span>
-                </div>
-
-                <div class="detalle-item">
-                  <span class="label">Vigencia:</span>
-                  <span class="valor">{{ formatearFecha(promo.fechaInicio) }} - {{ formatearFecha(promo.fechaFin) }}</span>
-                </div>
-
-                <div v-if="promo.diasEspecificos.length > 0" class="detalle-item">
-                  <span class="label">Días Aplicables:</span>
-                  <div class="dias-muestra">
-                    <span
-                      v-for="dia in promo.diasEspecificos"
-                      :key="dia"
-                      class="badge-dia"
+              <div class="promo-ticket-principal">
+                <div class="promo-header">
+                  <div class="promo-titulo">
+                    <span class="promo-ticket-label">{{ promo.generarQr ? 'Cupón de descuento' : 'Promoción especial' }}</span>
+                    <h3>{{ promo.nombre }}</h3>
+                    <span v-if="promocionExpirada(promo)" class="badge-expirada">No vigente · Promoción expirada</span>
+                    <span v-else-if="promocionEstaVigente(promo)" class="badge-vigente">✦ Vigente</span>
+                    <span v-else class="badge-inactiva">No vigente</span>
+                    <span v-if="promo.generarQr" class="badge-qr">Cupón de descuento</span>
+                  </div>
+                  <div class="promo-acciones">
+                    <button
+                      v-if="promo.generarQr"
+                      type="button"
+                      class="btn-compartir"
+                      :aria-label="`Ir a compartir el cupón ${promo.nombre}`"
+                      title="Ir a compartir cupón"
+                      @click="irACompartirCupon(promo.id)"
                     >
-                      {{ capitalizarDia(dia).substring(0, 3) }}
+                      <ion-icon :icon="shareSocialOutline" />
+                    </button>
+                    <button class="btn-editar" @click="editarPromocion(promo)">
+                      <ion-icon :icon="pencilOutline" />
+                    </button>
+                    <button class="btn-eliminar" @click="confirmarEliminarPromocion(promo.id)">
+                      <ion-icon :icon="trashOutline" />
+                    </button>
+                  </div>
+                </div>
+
+                <p v-if="promo.descripcion" class="promo-desc">{{ promo.descripcion }}</p>
+
+                <div class="promo-detalles">
+                  <div class="detalle-item">
+                    <span class="label">Aplica a:</span>
+                    <span class="valor">
+                      {{ promo.generarQr
+                        ? 'Con QR'
+                        : promo.tipoClienteAplica === 'todos'
+                          ? 'Todos'
+                          : promo.tipoClienteAplica === 'registrados'
+                            ? 'Clientes Registrados'
+                            : `Recurrentes${promo.minOrdenes ? ` (${promo.minOrdenes}+ órdenes)` : ''}` }}
                     </span>
+                  </div>
+
+                  <div v-if="promo.generarQr" class="detalle-item">
+                    <span class="label">Límite por cliente:</span>
+                    <span class="valor">{{ formatearLimiteUsos(promo.maxUsosPorCliente) }}</span>
+                  </div>
+
+                  <div class="detalle-item">
+                    <span class="label">Vigencia:</span>
+                    <span class="valor">{{ formatearFecha(promo.fechaInicio) }} - {{ formatearFecha(promo.fechaFin) }}</span>
+                  </div>
+
+                  <div v-if="promo.diasEspecificos.length > 0" class="detalle-item detalle-dias">
+                    <span class="label">Días:</span>
+                    <div class="dias-muestra">
+                      <span
+                        v-for="dia in promo.diasEspecificos"
+                        :key="dia"
+                        class="badge-dia"
+                      >
+                        {{ capitalizarDia(dia).substring(0, 3) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <aside class="promo-ticket-talon" aria-label="Beneficio del ticket">
+                <span class="talon-etiqueta">BENEFICIO</span>
+                <span class="talon-subtitulo">Tu descuento</span>
+                <strong class="chip-descuento">{{ formatearValorPromocion(promo) }}</strong>
+                <span class="talon-codigo" aria-hidden="true"></span>
+                <span class="talon-folio">PROMO · {{ promo.generarQr ? 'QR' : 'ESPECIAL' }}</span>
+                <span v-if="promo.generarQr" class="talon-qr">CUPÓN QR</span>
+              </aside>
             </div>
           </div>
         </div>
@@ -988,41 +994,49 @@ const diasSeleccionadosTexto = computed(() => {
 
 .promo-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
   gap: 18px;
 }
 
 .promo-card {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 145px;
+  align-items: stretch;
   overflow: hidden;
-  padding: 18px 18px 16px 28px;
+  min-width: 0;
+  padding: 0;
   border: 1px solid #c8dce7;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #ffffff 0%, #f0f8fb 100%);
-  box-shadow: 0 5px 16px rgba(10, 48, 76, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, #ffffff 0%, #f3f9fc 100%);
+  box-shadow: 0 8px 22px rgba(10, 48, 76, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .promo-card::before {
   position: absolute;
+  z-index: 2;
   top: 12px;
+  right: 144px;
   bottom: 12px;
-  left: 13px;
-  border-left: 2px dashed #a8c5d2;
+  border-left: 2px dashed rgba(255, 255, 255, 0.72);
   content: '';
 }
 
 .promo-card::after {
   position: absolute;
   inset: 0 auto 0 0;
+  z-index: 1;
   width: 5px;
   background: linear-gradient(180deg, #123a66, #397e9f 55%, #168e83);
   content: '';
 }
 
 .promo-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 9px 22px rgba(10, 48, 76, 0.13);
+  transform: translateY(-3px);
+  border-color: #9bbdcd;
+  box-shadow: 0 14px 28px rgba(10, 48, 76, 0.16);
 }
 
 .promo-card.promo-inactiva {
@@ -1058,6 +1072,100 @@ const diasSeleccionadosTexto = computed(() => {
   color: #8f3333;
 }
 
+.promo-ticket-principal {
+  min-width: 0;
+  padding: 20px 21px 18px 27px;
+}
+
+.promo-ticket-talon {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 12px;
+  background: linear-gradient(160deg, #123a66 0%, #174b71 58%, #087f79 100%);
+  color: #ffffff;
+  text-align: center;
+}
+
+.promo-card.promo-inactiva .promo-ticket-talon {
+  background: linear-gradient(160deg, #667782, #8a989f);
+}
+
+.promo-card.promo-expirada .promo-ticket-talon {
+  background: linear-gradient(160deg, #8f3333, #c83d3d);
+}
+
+.promo-card.promo-verde-magenta:not(.promo-expirada) .promo-ticket-talon {
+  background: linear-gradient(160deg, #146b45, #a40b68 58%, #087653);
+}
+
+.promo-card.promo-dorada:not(.promo-expirada) .promo-ticket-talon {
+  background: linear-gradient(160deg, #805000, #b78617 58%, #754700);
+}
+
+.talon-etiqueta {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.talon-subtitulo {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.promo-ticket-talon .chip-descuento {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none;
+  color: #ffffff !important;
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.talon-codigo {
+  width: 100%;
+  height: 24px;
+  margin-top: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    #ffffff 0 2px,
+    transparent 2px 4px,
+    #ffffff 4px 5px,
+    transparent 5px 8px,
+    #ffffff 8px 11px,
+    transparent 11px 13px
+  );
+  opacity: 0.88;
+}
+
+.talon-folio {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.talon-qr {
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 0.55rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
 .promo-card.promo-verde-magenta:not(.promo-expirada) {
   border-color: #d7b2cf;
   background: linear-gradient(130deg, #eff9f2 0%, #fff 48%, #fcf0f8 100%);
@@ -1081,7 +1189,7 @@ const diasSeleccionadosTexto = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .promo-titulo {
@@ -1101,10 +1209,24 @@ const diasSeleccionadosTexto = computed(() => {
 }
 
 .promo-ticket-label {
-  color: #397e9f;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(57, 126, 159, 0.18);
+  border-radius: 4px;
+  background: rgba(57, 126, 159, 0.08);
+  color: #286580;
   font-size: 0.67rem;
   font-weight: 850;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.promo-ticket-label::before {
+  color: #c08a21;
+  content: '✦';
+  font-size: 0.75rem;
 }
 
 .badge-vigente,
@@ -1209,23 +1331,26 @@ const diasSeleccionadosTexto = computed(() => {
 }
 
 .promo-desc {
-  color: #7c8fa6;
+  padding: 0 0 13px;
+  border-bottom: 1px dashed #c8dce7;
+  color: #61778e;
   font-size: 0.85rem;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   line-height: 1.4;
 }
 
 .promo-detalles {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 3px;
 }
 
 .detalle-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 9px 2px;
   border-bottom: 1px solid rgba(10, 31, 56, 0.06);
 }
 
@@ -1243,29 +1368,15 @@ const diasSeleccionadosTexto = computed(() => {
   color: #0a1f38;
   font-size: 0.88rem;
   font-weight: 700;
-}
-
-.detalle-descuento {
-  margin: 4px 0 2px;
-  padding: 12px;
-  border: 1px dashed #9bbdcd;
-  border-radius: 8px;
-  background: #eaf6fa;
-}
-
-.detalle-descuento .label {
-  color: #315b72;
-  font-size: 0.73rem;
-  font-weight: 850;
-  text-transform: uppercase;
+  text-align: right;
 }
 
 .chip-descuento {
   display: inline-block;
-  padding: 7px 14px;
+  padding: 7px 13px;
   border-radius: 6px;
   font-weight: 900;
-  font-size: 1.08rem;
+  font-size: 1.05rem;
   color: #ffffff;
   background: linear-gradient(110deg, #123a66, #397e9f 68%, #168e83);
   border: 1px solid rgba(18, 58, 102, 0.2);
@@ -1352,6 +1463,39 @@ const diasSeleccionadosTexto = computed(() => {
 
   .filtros-estado {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .promo-card {
+    grid-template-columns: minmax(0, 1fr) 108px;
+  }
+
+  .promo-card::before {
+    right: 107px;
+  }
+
+  .promo-ticket-principal {
+    padding: 16px 13px 15px 18px;
+  }
+
+  .promo-ticket-talon {
+    gap: 7px;
+    padding: 14px 8px;
+  }
+
+  .promo-header {
+    gap: 6px;
+  }
+
+  .promo-acciones {
+    gap: 3px;
+  }
+
+  .btn-editar,
+  .btn-eliminar {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>

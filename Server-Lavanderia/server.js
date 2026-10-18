@@ -431,6 +431,15 @@ async function migratePrecisionInventario() {
 async function migrateEstadoListo() {
   try {
     console.log('Verificando migración de estado "listo"...');
+    const estadosOrden = [
+      "pendiente",
+      "en_proceso",
+      "listo",
+      "entregado",
+      "cancelada",
+      "cerrada",
+      "Cerrada-Cancelada",
+    ];
 
     const [columns] = await pool.execute(
       "SHOW COLUMNS FROM ordenes WHERE Field = 'estado'",
@@ -438,8 +447,14 @@ async function migrateEstadoListo() {
 
     if (columns.length > 0) {
       const tipo = columns[0].Type;
-      if (tipo.includes("listo")) {
-        console.log('✓ El estado "listo" ya existe en la tabla.');
+      const estadosExistentes =
+        String(tipo)
+          .match(/'([^']+)'/g)
+          ?.map((valor) => valor.slice(1, -1)) ?? [];
+      if (
+        estadosOrden.every((estado) => estadosExistentes.includes(estado))
+      ) {
+        console.log("✓ Los estados de órdenes ya existen en la tabla.");
         return;
       }
     }
@@ -500,11 +515,11 @@ async function migrateEstadoListo() {
 
     await pool.execute(`
       ALTER TABLE ordenes
-      MODIFY COLUMN estado ENUM('pendiente', 'en_proceso', 'listo', 'entregado', 'cancelada') NOT NULL DEFAULT 'pendiente'
+      MODIFY COLUMN estado ENUM('pendiente', 'en_proceso', 'listo', 'entregado', 'cancelada', 'cerrada', 'Cerrada-Cancelada') NOT NULL DEFAULT 'pendiente'
     `);
 
-    console.log('✓ Estado "listo" agregado.');
-    console.log('✅ Migración de estado "listo" completada.');
+    console.log("✓ Estados activos e históricos de órdenes actualizados.");
+    console.log("✅ Migración de estados de órdenes completada.");
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
       console.log('✓ El estado "listo" ya existe (se ignoró duplicación).');
@@ -521,11 +536,11 @@ async function migrateEstadoListo() {
 
         await pool.execute(`
           ALTER TABLE ordenes
-          MODIFY COLUMN estado ENUM('pendiente', 'en_proceso', 'listo', 'entregado', 'cancelada') NOT NULL DEFAULT 'pendiente'
+          MODIFY COLUMN estado ENUM('pendiente', 'en_proceso', 'listo', 'entregado', 'cancelada', 'cerrada', 'Cerrada-Cancelada') NOT NULL DEFAULT 'pendiente'
         `);
-        console.log('✓ Estado "listo" agregado (método alternativo).');
+        console.log("✓ Estados de órdenes actualizados (método alternativo).");
         console.log(
-          '✅ Migración de estado "listo" completada (método alternativo).',
+          "✅ Migración de estados de órdenes completada (método alternativo).",
         );
       } catch (altError) {
         console.error("Error en método alternativo:", altError.message);

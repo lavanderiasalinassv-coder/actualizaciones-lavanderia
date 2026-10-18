@@ -127,6 +127,18 @@ export interface Orden {
   moraDetenida: boolean
 }
 
+export const ordenRequiereIntervencion = (
+  orden?: Pick<Orden, 'estado' | 'anticipos' | 'turnoHuerfano' | 'estadoPago'> | null
+) => {
+  if (!orden) return false
+
+  const ordenCerrada = orden.estado === 'cerrada' || orden.estado === 'Cerrada-Cancelada'
+  const pagoInconsistente = ordenCerrada && orden.estadoPago !== 'pagado'
+  const anticiposHuerfanos = orden.anticipos?.some((anticipo) => anticipo.cierreHuerfano === true) === true
+
+  return pagoInconsistente || orden.turnoHuerfano === true || anticiposHuerfanos
+}
+
 const ordenes = ref<Orden[]>([])
 
 const formatearNumero = (numero: number) => `#${String(numero).padStart(5, '0')}`

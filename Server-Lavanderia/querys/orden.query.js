@@ -1258,6 +1258,15 @@ const obtenerOrdenPorId = async (id) => {
   return orden;
 };
 
+const obtenerEstadoOrden = async (id) => {
+  const [[orden]] = await pool.query(
+    "SELECT estado FROM ordenes WHERE id = ?",
+    [id],
+  );
+  if (!orden) throw new AppError("Orden no encontrada.", 404);
+  return orden.estado;
+};
+
 const detenerMoraOrden = async (id, usuario = "Sistema") => {
   const conn = await pool.getConnection();
   try {
@@ -2519,6 +2528,12 @@ const eliminarItemDeOrden = async (
       [id],
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
+    if (["cerrada", "Cerrada-Cancelada"].includes(orden.estado)) {
+      throw new AppError(
+        "No se pueden eliminar servicios de una orden cerrada.",
+        409,
+      );
+    }
 
     const [[item]] = await conn.query(
       "SELECT * FROM orden_items WHERE orden_id = ? AND producto_id = ?",
@@ -2605,20 +2620,33 @@ const cancelarOrden = async (id, motivo, usuario = "Sistema") => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const [[turno]] = await conn.query(
+      "SELECT turno_id, abierto FROM turno_caja_actual WHERE id = 1 FOR UPDATE",
+    );
+    if (!turno?.abierto || !turno.turno_id) {
+      throw new AppError(
+        "No se puede cancelar una orden sin un turno de caja abierto.",
+        409,
+      );
+    }
+
     const [[orden]] = await conn.query(
       "SELECT id, estado FROM ordenes WHERE id = ? FOR UPDATE",
       [id],
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
-    if (orden.estado === "cancelada") {
+    if (["cancelada", "Cerrada-Cancelada"].includes(orden.estado)) {
       throw new AppError("La orden ya está cancelada.", 400);
+    }
+    if (orden.estado === "cerrada") {
+      throw new AppError("No se puede cancelar una orden cerrada.", 409);
     }
 
     await revertirInventarioOrden(conn, id);
     await conn.execute("DELETE FROM orden_anticipos WHERE orden_id = ?", [id]);
     await conn.execute(
-      "UPDATE ordenes SET estado = 'cancelada', estado_pago = 'porCobrar', monto_recibido = 0, cambio = 0, motivo_cancelacion = ? WHERE id = ?",
-      [motivoLimpio, id],
+      "UPDATE ordenes SET estado = 'cancelada', estado_pago = 'porCobrar', monto_recibido = 0, cambio = 0, motivo_cancelacion = ?, turno_id = ? WHERE id = ?",
+      [motivoLimpio, turno.turno_id, id],
     );
     await registrarMovimientoConn(
       conn,
@@ -2717,10 +2745,12 @@ const limpiarOrdenDeCierres = async (conn, orden) => {
       (toNumber(resumen.saldoCierre) - saldoEsperado).toFixed(2),
     );
     if (ordenResumen) {
-      resumen.conteos.ordenes = Math.max(
-        0,
-        Number(resumen.conteos.ordenes || 0) - 1,
-      );
+      if (!esCanceladaCerrada) {
+        resumen.conteos.ordenes = Math.max(
+          0,
+          Number(resumen.conteos.ordenes || 0) - 1,
+        );
+      }
     }
 
     await conn.execute("UPDATE cierres_caja SET resumen = ? WHERE id = ?", [
@@ -3054,12 +3084,16 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
       [id],
     );
     if (!orden) throw new AppError("Orden no encontrada.", 404);
-    if (orden.estado !== "cerrada") {
-      throw new AppError("Solo se pueden restaurar órdenes cerradas.", 400);
+    const esCanceladaCerrada = orden.estado === "Cerrada-Cancelada";
+    if (orden.estado !== "cerrada" && !esCanceladaCerrada) {
+      throw new AppError(
+        "Solo se pueden restaurar órdenes cerradas o cerradas-canceladas.",
+        400,
+      );
     }
 
     let pagosDelCierre = [];
-    if (orden.turno_id) {
+    if (orden.turno_id && !esCanceladaCerrada) {
       const [pagos] = await conn.query(
         "SELECT id, monto FROM orden_anticipos WHERE orden_id = ? AND turno_id = ? FOR UPDATE",
         [id, orden.turno_id],
@@ -3138,17 +3172,34 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
           indiceOrdenCierre >= 0 ? resumen.ordenes[indiceOrdenCierre] : null;
 
         if (ordenResumenCierre) {
-          const cobradoRemovido = Number(
-            ordenResumenCierre.cobradoEnTurno ??
-              (ordenResumenCierre.estadoPago === "pagado"
-                ? ordenResumenCierre.total
-                : ordenResumenCierre.montoRecibido) ??
-              0,
-          );
+          const cobradoRemovido = esCanceladaCerrada
+            ? 0
+            : Number(
+                ordenResumenCierre.cobradoEnTurno ??
+                  (ordenResumenCierre.estadoPago === "pagado"
+                    ? ordenResumenCierre.total
+                    : ordenResumenCierre.montoRecibido) ??
+                  0,
+              );
           const cobradoActual = toNumber(resumen.totales.cobrado);
           const cobrado = Number(
             Math.max(0, cobradoActual - cobradoRemovido).toFixed(2),
           );
+          if (esCanceladaCerrada) {
+            resumen.totales.cancelaciones = Math.max(
+              0,
+              Number(
+                (
+                  toNumber(resumen.totales.cancelaciones) -
+                  toNumber(ordenResumenCierre.total ?? orden.total)
+                ).toFixed(2),
+              ),
+            );
+            resumen.conteos.canceladas = Math.max(
+              0,
+              Number(resumen.conteos.canceladas || 0) - 1,
+            );
+          }
           const recaudado = Number(
             (
               cobrado -
@@ -3195,18 +3246,23 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
       }
     }
 
+    if (esCanceladaCerrada) {
+      await descontarInventarioOrden(conn, id);
+    }
+
     // Restaurar la orden y conservar solo pagos que pertenecen a otros turnos.
     const pad = (valor) => String(valor).padStart(2, "0");
     const ahora = new Date();
     const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
 
     await conn.execute(
-      "UPDATE ordenes SET estado = ?, estado_pago = ?, monto_recibido = ?, cambio = ?, turno_id = ?, updated_at = ? WHERE id = ?",
+      "UPDATE ordenes SET estado = ?, estado_pago = ?, monto_recibido = ?, cambio = ?, motivo_cancelacion = CASE WHEN ? THEN NULL ELSE motivo_cancelacion END, turno_id = ?, updated_at = ? WHERE id = ?",
       [
         "pendiente",
         estadoPagoRestante,
         montoRecibidoRestante,
         cambioRestante,
+        esCanceladaCerrada,
         ultimoCobroRestante?.turno_id || "",
         fechaLocalMySQL,
         id,
@@ -3217,7 +3273,9 @@ const restaurarOrden = async (id, usuario = "Sistema") => {
     await registrarMovimientoConn(
       conn,
       id,
-      `Orden restaurada de cerrada a pendiente (se eliminaron $${montoPagosRemovidos.toFixed(2)} de pagos del cierre)`,
+      esCanceladaCerrada
+        ? "Orden restaurada de cerrada-cancelada a pendiente (se revirtió la cancelación)."
+        : `Orden restaurada de cerrada a pendiente (se eliminaron $${montoPagosRemovidos.toFixed(2)} de pagos del cierre)`,
       usuario,
     );
 
@@ -3373,6 +3431,7 @@ module.exports = {
   obtenerOrdenes,
   obtenerOrdenesPorTerminos,
   obtenerOrdenPorId,
+  obtenerEstadoOrden,
   actualizarMoraOrden,
   actualizarMorasPendientes,
   recalcularMoraOrden,

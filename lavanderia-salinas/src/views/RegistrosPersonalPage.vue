@@ -14,9 +14,9 @@
 
       <section class="resumen-grid" aria-label="Resumen de actividad">
         <article class="resumen-card"><span>Sesiones activas</span><strong>{{ sesionesActivas }}</strong><small>Sin desconexión registrada</small></article>
-        <article class="resumen-card"><span>Ingresos</span><strong>{{ sesiones.conteos.ingreso }}</strong><small>Ingresos registrados</small></article>
+        <article class="resumen-card"><span>Sesiones iniciadas</span><strong>{{ sesiones.conteos.ingreso }}</strong><small>Conexiones registradas</small></article>
         <article class="resumen-card"><span>Órdenes eliminadas</span><strong>{{ ordenes.total }}</strong><small>El historial conserva los datos originales</small></article>
-        <article class="resumen-card"><span>Personal registrado</span><strong>{{ sesiones.total }}</strong><small>Ingresos y desconexiones</small></article>
+        <article class="resumen-card"><span>Sesiones registradas</span><strong>{{ sesiones.total }}</strong><small>Activas y terminadas</small></article>
       </section>
 
       <section class="columnas-historial">
@@ -25,10 +25,47 @@
           <div class="filtros-registros">
             <label>Desde<input v-model="sesiones.desde" type="date" /></label><label>Hasta<input v-model="sesiones.hasta" type="date" /></label>
             <label>Usuario<select v-model="sesiones.usuario"><option value="todos">Todos</option><option v-for="n in usuariosSesion" :key="n" :value="n">{{ n }}</option></select></label>
-            <label>Actividad<select v-model="sesiones.tipo"><option value="todos">Todas</option><option value="ingreso">Ingreso</option><option value="desconexion">Desconexión</option></select></label>
+            <label>Estado<select v-model="sesiones.tipo"><option value="todos">Todas</option><option value="ingreso">En línea</option><option value="desconexion">Sesión terminada</option></select></label>
           </div>
           <p v-if="sesiones.error" class="error-message">{{ sesiones.error }}</p><div v-if="sesiones.cargando && !sesiones.registros.length" class="estado-vacio">Cargando…</div><div v-else-if="!sesiones.total" class="estado-vacio">No hay sesiones con estos filtros.</div>
-          <div v-else class="tabla-scroll tabla-sesiones-scroll"><table class="tabla-sesiones"><thead><tr><th>Evento</th><th>Usuario</th><th>Duración</th><th>Fecha y hora</th></tr></thead><tbody><tr v-for="r in sesiones.registros" :key="r.id"><td><span class="actividad-chip" :class="'tipo-' + r.tipo"><ion-icon :icon="iconoActividad(r.tipo)" />{{ etiquetaActividad(r.tipo) }}</span></td><td><strong>{{ r.usuarioNombre }}</strong><small v-if="r.usuarioRol">{{ r.usuarioRol }}</small></td><td class="fecha-celda">{{ duracionSesion(r) }}</td><td class="fecha-celda">{{ formatearFecha(r.fecha) }}</td></tr></tbody></table></div>
+          <div v-else class="sesiones-lista">
+            <article v-for="r in sesiones.registros" :key="r.sessionId || r.id" class="sesion-card" :class="{ 'sesion-activa': Boolean(r.sesionActiva) }">
+              <div class="sesion-card-principal">
+                <div class="sesion-identidad">
+                  <span class="sesion-avatar">
+                    <img v-if="r.imagenPerfil" :src="r.imagenPerfil" :alt="`Foto de ${r.usuarioNombre}`" />
+                    <ion-icon v-else :icon="personCircleOutline" />
+                  </span>
+                  <div class="sesion-usuario">
+                    <strong>{{ r.usuarioNombre }}</strong>
+                    <small v-if="r.usuarioRol">{{ r.usuarioRol }}</small>
+                  </div>
+                </div>
+                <span class="sesion-estado" :class="{ activa: Boolean(r.sesionActiva) }">
+                  <span class="sesion-estado-punto" />
+                  {{ r.sesionActiva ? 'En línea' : 'Sesión terminada' }}
+                </span>
+              </div>
+              <div class="sesion-card-detalles">
+                <div class="sesion-hora">
+                  <span>INICIO DE SESIÓN</span>
+                  <strong>{{ formatearFecha(r.fecha) }}</strong>
+                </div>
+                <div v-if="!r.sesionActiva" class="sesion-hora">
+                  <span>DESCONEXIÓN</span>
+                  <strong>{{ formatearFecha(r.fechaDesconexion || '') }}</strong>
+                </div>
+                <div class="sesion-duracion" :class="{ cronometro: Boolean(r.sesionActiva) }">
+                  <ion-icon :icon="r.sesionActiva ? logInOutline : logOutOutline" />
+                  <div>
+                    <span>{{ r.sesionActiva ? 'TIEMPO CONECTADO' : 'DURACIÓN DE SESIÓN' }}</span>
+                    <strong>{{ duracionSesion(r) }}</strong>
+                  </div>
+                </div>
+              </div>
+              <p v-if="!r.sesionActiva && r.detalle" class="sesion-cierre">{{ r.detalle }}</p>
+            </article>
+          </div>
           <footer v-if="sesiones.total" class="tabla-footer"><span>{{ rango(sesiones) }} de {{ sesiones.total }}</span><nav class="paginacion-registros"><button :disabled="sesiones.pagina===1" @click="sesiones.pagina--">Anterior</button><span>{{ sesiones.pagina }} / {{ sesiones.totalPaginas }}</span><button :disabled="sesiones.pagina===sesiones.totalPaginas" @click="sesiones.pagina++">Siguiente</button></nav></footer>
         </article>
         <article class="historial-card">
@@ -57,22 +94,21 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { IonIcon, onIonViewWillEnter } from '@ionic/vue'
-import { addCircleOutline, createOutline, logInOutline, logOutOutline, refreshOutline, trashOutline } from 'ionicons/icons'
+import { addCircleOutline, createOutline, logInOutline, logOutOutline, personCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
 import AppShell from '@/components/AppShell.vue'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 type TipoRegistro = 'ingreso' | 'desconexion' | 'orden_creada' | 'orden_modificada' | 'orden_eliminada'
-interface RegistroPersonal { id:string; sessionId?:string; usuarioId:string; usuarioNombre:string; usuarioRol?:string; tipo:TipoRegistro; fecha:string; detalle:string; numeroOrden?:string; ordenEliminada?:Record<string, unknown>|string|null; cantidadMovimientos?:number; ultimoUsuario?:string; duracionSegundos?:number|null; sesionActiva?:number|boolean }
+interface RegistroPersonal { id:string; sessionId?:string; usuarioId:string; usuarioNombre:string; usuarioRol?:string; imagenPerfil?:string|null; tipo:TipoRegistro; fecha:string; fechaDesconexion?:string|null; detalle:string; numeroOrden?:string; ordenEliminada?:Record<string, unknown>|string|null; cantidadMovimientos?:number; ultimoUsuario?:string; duracionSegundos?:number|null; sesionActiva?:number|boolean }
 const crearGrupo = () => reactive({ registros:[] as RegistroPersonal[], pagina:1, totalPaginas:1, total:0, conteos:{ingreso:0,orden_creada:0,orden_modificada:0,orden_eliminada:0}, cargando:false, error:'', desde:'', hasta:'', usuario:'todos', tipo:'todos' })
-const sesiones=crearGrupo(); const ordenes=crearGrupo(); const cargando=computed(()=>sesiones.cargando||ordenes.cargando); const ordenSeleccionada=ref(''); const historialOrden=ref<RegistroPersonal[]>([]); const cargandoHistorialOrden=ref(false); const errorHistorialOrden=ref(''); const usuariosSesion=ref<string[]>([]); const usuariosOrdenes=ref<string[]>([]); const sesionesActivas=ref(0); const ahora=ref(Date.now()); let solicitudSesiones=0; let solicitudOrdenes=0
+const sesiones=crearGrupo(); const ordenes=crearGrupo(); const cargando=computed(()=>sesiones.cargando||ordenes.cargando); const ordenSeleccionada=ref(''); const historialOrden=ref<RegistroPersonal[]>([]); const cargandoHistorialOrden=ref(false); const errorHistorialOrden=ref(''); const usuariosSesion=ref<string[]>([]); const usuariosOrdenes=ref<string[]>([]); const sesionesActivas=ref(0); const ahora=ref(Date.now()); const duracionActualizadaEn=ref(Date.now()); let solicitudSesiones=0; let solicitudOrdenes=0
 const cargarGrupo=async(grupo:'sesiones'|'ordenes', estado:ReturnType<typeof crearGrupo>)=>{const n=grupo==='sesiones'?++solicitudSesiones:++solicitudOrdenes; estado.cargando=true; estado.error=''; try{const params=new URLSearchParams({grupo,pagina:String(estado.pagina),desde:estado.desde,hasta:estado.hasta,usuario:estado.usuario,tipo:estado.tipo});const res=await fetch(getApiBaseUrl()+'/registros-personal?'+params,{signal:AbortSignal.timeout(60000)});const data=await res.json().catch(()=>null);if(!res.ok)throw new Error(data?.error||'No se pudieron cargar los registros.');if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n){estado.registros=Array.isArray(data?.registros)?data.registros:[];estado.total=Number(data?.total)||0;estado.pagina=Number(data?.pagina)||1;estado.totalPaginas=Math.max(1,Number(data?.totalPaginas)||1);estado.conteos=data?.conteos||estado.conteos;if(grupo==='sesiones'){usuariosSesion.value=data?.usuarios||[];sesionesActivas.value=Number(data?.sesionesActivas)||0}else usuariosOrdenes.value=data?.usuarios||[]}}catch(e){if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n)estado.error=e instanceof Error?e.message:'No se pudieron cargar los registros.'}finally{if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n)estado.cargando=false}}
 const abrirHistorialOrden=async(numero:string)=>{if(!numero)return;ordenSeleccionada.value=numero;historialOrden.value=[];errorHistorialOrden.value='';cargandoHistorialOrden.value=true;try{const params=new URLSearchParams({grupo:'ordenes',numeroOrden:numero});const res=await fetch(getApiBaseUrl()+'/registros-personal?'+params,{signal:AbortSignal.timeout(60000)});const data=await res.json().catch(()=>null);if(!res.ok)throw new Error(data?.error||'No se pudo cargar el historial de la orden.');if(ordenSeleccionada.value===numero)historialOrden.value=Array.isArray(data?.registros)?data.registros:[]}catch(e){if(ordenSeleccionada.value===numero)errorHistorialOrden.value=e instanceof Error?e.message:'No se pudo cargar el historial de la orden.'}finally{if(ordenSeleccionada.value===numero)cargandoHistorialOrden.value=false}}
 const cerrarHistorialOrden=()=>{ordenSeleccionada.value='';historialOrden.value=[]}
 const formatoOrden=(valor:RegistroPersonal['ordenEliminada'])=>{if(!valor)return '';try{return JSON.stringify(typeof valor==='string'?JSON.parse(valor):valor,null,2)}catch{return String(valor)}}
 const cargarSesiones=()=>void cargarGrupo('sesiones',sesiones); const cargarOrdenes=()=>void cargarGrupo('ordenes',ordenes); const cargarRegistros=()=>{cargarSesiones();cargarOrdenes()}; onIonViewWillEnter(cargarRegistros)
-watch(()=>[sesiones.desde,sesiones.hasta,sesiones.usuario,sesiones.tipo],()=>{if(sesiones.pagina!==1)sesiones.pagina=1;else cargarSesiones()});watch(()=>[ordenes.desde,ordenes.hasta,ordenes.usuario,ordenes.tipo],()=>{if(ordenes.pagina!==1)ordenes.pagina=1;else cargarOrdenes()});watch(()=>sesiones.pagina,cargarSesiones);watch(()=>ordenes.pagina,cargarOrdenes)
-const timer=setInterval(()=>{ahora.value=Date.now()},1000);onUnmounted(()=>clearInterval(timer)); const rango=(g:ReturnType<typeof crearGrupo>)=>g.total?((g.pagina-1)*50+1)+'–'+Math.min(g.pagina*50,g.total):'0'
-const duracionSesion=(r:RegistroPersonal)=>{let segundos=Number(r.duracionSegundos)||0;if(r.tipo==='ingreso'&&Boolean(r.sesionActiva))segundos=Math.max(0,Math.floor((ahora.value-new Date(r.fecha).getTime())/1000));const h=Math.floor(segundos/3600),m=Math.floor((segundos%3600)/60),s=segundos%60;return h+' h '+String(m).padStart(2,'0')+' min '+String(s).padStart(2,'0')+' s'}
-const iconoActividad=(tipo:TipoRegistro)=>({ingreso:logInOutline,desconexion:logOutOutline,orden_creada:addCircleOutline,orden_modificada:createOutline,orden_eliminada:trashOutline})[tipo];const etiquetaActividad=(tipo:TipoRegistro)=>({ingreso:'Ingreso',desconexion:'Desconexión',orden_creada:'Orden creada',orden_modificada:'Orden modificada',orden_eliminada:'Orden eliminada'})[tipo]
+watch(()=>[sesiones.desde,sesiones.hasta,sesiones.usuario,sesiones.tipo],()=>{if(sesiones.pagina!==1)sesiones.pagina=1;else cargarSesiones()});watch(()=>[ordenes.desde,ordenes.hasta,ordenes.usuario,ordenes.tipo],()=>{if(ordenes.pagina!==1)ordenes.pagina=1;else cargarOrdenes()});watch(()=>sesiones.pagina,cargarSesiones);watch(()=>ordenes.pagina,cargarOrdenes);watch(()=>sesiones.registros,()=>{duracionActualizadaEn.value=Date.now()})
+const timer=setInterval(()=>{ahora.value=Date.now()},1000);const refrescarSesionesTimer=setInterval(cargarSesiones,15000);onUnmounted(()=>{clearInterval(timer);clearInterval(refrescarSesionesTimer)}); const rango=(g:ReturnType<typeof crearGrupo>)=>g.total?((g.pagina-1)*50+1)+'–'+Math.min(g.pagina*50,g.total):'0'
+const duracionSesion=(r:RegistroPersonal)=>{let segundos=Number(r.duracionSegundos)||0;if(Boolean(r.sesionActiva))segundos+=Math.max(0,Math.floor((ahora.value-duracionActualizadaEn.value)/1000));const dias=Math.floor(segundos/86400),h=Math.floor((segundos%86400)/3600),m=Math.floor((segundos%3600)/60),s=segundos%60;const partes=[];if(dias)partes.push(dias+' '+(dias===1?'día':'días'));if(h||dias)partes.push(String(h).padStart(2,'0')+' h');partes.push(String(m).padStart(2,'0')+' min');if(Boolean(r.sesionActiva))partes.push(String(s).padStart(2,'0')+' s');return partes.join(' ')}
 const formatearFecha=(valor:string)=>{const fecha=new Date(valor);return Number.isNaN(fecha.getTime())?'—':new Intl.DateTimeFormat('es-SV',{timeZone:'America/El_Salvador',dateStyle:'medium',timeStyle:'short'}).format(fecha)}
 </script>
 
@@ -113,24 +149,38 @@ h2 { margin:0; font-size:clamp(1.4rem,2vw,1.9rem); color:#123a66; }
 .filtros-registros label { display:flex; flex-direction:column; gap:5px; color:#587089; font-size:.75rem; font-weight:800; }
 .filtros-registros input,.filtros-registros select { min-height:38px; min-width:150px; border:1px solid #d5e0ea; border-radius:9px; background:#fff; padding:7px 9px; color:#183b5b; font:inherit; }
 .limpiar-filtros { min-height:38px; padding:8px 11px; font-size:.8rem; }
+.sesiones-lista { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr)); gap:10px; padding:14px; }
+.sesion-card { min-width:0; padding:12px; border:1px solid #e3eaf1; border-radius:13px; background:linear-gradient(145deg,#fff,#f9fbfd); box-shadow:0 4px 12px rgba(12,43,74,.04); }
+.sesion-card.sesion-activa { border-color:#ccebd9; background:linear-gradient(145deg,#fff,#f5fcf7); }
+.sesion-card-principal { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.sesion-identidad { display:flex; align-items:center; gap:8px; min-width:0; }
+.sesion-avatar { display:grid; place-items:center; width:36px; height:36px; flex:0 0 auto; overflow:hidden; border-radius:11px; background:#eaf3fa; color:#2875a9; font-size:1.35rem; }
+.sesion-avatar img { width:100%; height:100%; object-fit:cover; }
+.sesion-activa .sesion-avatar { background:#e3f6eb; color:#19804d; }
+.sesion-usuario { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.sesion-usuario strong { overflow:hidden; color:#173858; font-size:.82rem; text-overflow:ellipsis; white-space:nowrap; }
+.sesion-usuario small { color:#8191a2; font-size:.64rem; text-transform:capitalize; }
+.sesion-estado { display:inline-flex; align-items:center; gap:5px; flex:0 0 auto; padding:5px 7px; border:1px solid #f0dfce; border-radius:999px; background:#fff7ed; color:#a45a21; font-size:.61rem; font-weight:850; white-space:nowrap; }
+.sesion-estado.activa { border-color:#cdebd8; background:#eaf8ef; color:#197549; }
+.sesion-estado-punto { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.sesion-card-detalles { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:7px; margin-top:10px; }
+.sesion-hora,.sesion-duracion { display:flex; flex-direction:column; gap:4px; min-width:0; padding:8px; border-radius:9px; background:#f2f6f9; }
+.sesion-hora span,.sesion-duracion span { color:#8797a7; font-size:.5rem; font-weight:850; letter-spacing:.06em; }
+.sesion-hora strong { overflow:hidden; color:#435c73; font-size:.64rem; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+.sesion-duracion { grid-column:1/-1; flex-direction:row; align-items:center; gap:8px; background:#f0f5fa; color:#365f82; }
+.sesion-duracion.cronometro { background:#eaf8ef; color:#197549; }
+.sesion-duracion ion-icon { flex:0 0 auto; font-size:.95rem; }
+.sesion-duracion div { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.sesion-duracion strong { color:#254761; font-size:.83rem; font-variant-numeric:tabular-nums; }
+.sesion-duracion.cronometro strong { color:#167447; }
+.sesion-cierre { margin:7px 0 0; color:#7b8b9b; font-size:.62rem; }
 .tabla-scroll { overflow:auto; }
-.tabla-sesiones-scroll { overflow-x:hidden; }
-.tabla-sesiones { width:100%; min-width:0; table-layout:fixed; }
-.tabla-sesiones th, .tabla-sesiones td { padding:10px 7px; font-size:.76rem; overflow-wrap:anywhere; }
-.tabla-sesiones th:nth-child(1) { width:27%; }
-.tabla-sesiones th:nth-child(2) { width:22%; }
-.tabla-sesiones th:nth-child(3) { width:23%; }
-.tabla-sesiones th:nth-child(4) { width:28%; }
-.tabla-sesiones .actividad-chip { max-width:100%; padding:5px 6px; gap:4px; white-space:normal; line-height:1.2; }
-.tabla-sesiones .fecha-celda { white-space:normal; font-variant-numeric:tabular-nums; }
 table { width:100%; border-collapse:collapse; min-width:800px; }
 th { padding:12px 14px; background:#f4f8fb; color:#61768b; font-size:.72rem; letter-spacing:.04em; text-align:left; text-transform:uppercase; }
 td { padding:13px 14px; border-top:1px solid #edf1f5; color:#304a62; font-size:.87rem; vertical-align:middle; }
 td small { display:block; margin-top:3px; color:#8392a1; text-transform:capitalize; }
 .actividad-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:999px; background:#f0f5fa; color:#365570; font-size:.76rem; font-weight:800; white-space:nowrap; }
 .actividad-chip ion-icon { font-size:15px; }
-.tipo-ingreso { background:#e9f7ef; color:#167447; }
-.tipo-desconexion { background:#fff2e8; color:#a55416; }
 .tipo-orden_creada { background:#eaf2ff; color:#2859a4; }
 .tipo-orden_modificada { background:#f1edff; color:#6745a3; }
 .detalle-celda { max-width:390px; }
@@ -143,5 +193,5 @@ td small { display:block; margin-top:3px; color:#8392a1; text-transform:capitali
 .paginacion-registros button:disabled { opacity:.45; cursor:not-allowed; }
 @media(max-width:1050px) { .columnas-historial { grid-template-columns:1fr; } }
 @media(max-width:850px) { .resumen-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:560px) { .registros-personal-page { padding:18px 12px 26px; } .page-heading { align-items:flex-start; } .refresh-button { padding:9px 10px; font-size:.78rem; } .resumen-grid { gap:9px; } .resumen-card { padding:13px; } .resumen-card strong { font-size:1.45rem; } .filtros-registros label { flex:1 1 calc(50% - 10px); } .filtros-registros input,.filtros-registros select { min-width:0; width:100%; } }
+@media(max-width:560px) { .registros-personal-page { padding:18px 12px 26px; } .page-heading { align-items:flex-start; } .refresh-button { padding:9px 10px; font-size:.78rem; } .resumen-grid { gap:9px; } .resumen-card { padding:13px; } .resumen-card strong { font-size:1.45rem; } .filtros-registros label { flex:1 1 calc(50% - 10px); } .filtros-registros input,.filtros-registros select { min-width:0; width:100%; } .sesiones-lista { grid-template-columns:1fr; padding:12px; } }
 </style>

@@ -109,21 +109,6 @@
     </div>
 
     <div class="home-body">
-      <!-- ───────────── Sucursal ───────────── -->
-      <div class="config-card sucursal-card">
-        <div class="config-card-header">
-          <span class="config-card-label">Vista de sucursal</span>
-            <ion-icon :icon="addOutline" />
-        </div>
-        <div class="sucursal-select">
-          <ion-icon :icon="locationOutline" class="sucursal-pin" />
-          <select v-model="sucursalActiva" class="sucursal-native">
-            <option v-for="s in sucursales" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <ion-icon :icon="chevronDownOutline" class="sucursal-caret" />
-        </div>
-      </div>
-
       <div v-if="!esAdministrador" class="config-card asistencia-card">
         <div class="card-header-row">
           <span class="card-title">
@@ -190,6 +175,19 @@
             >
               <span class="acceso-icono">
                 <ion-icon :icon="a.icon" />
+                <span
+                  v-if="a.route === '/tabs/ordenes' && (ordenesConIntervencion.length || entregasTardias.length)"
+                  class="ordenes-alerta-badge"
+                  :class="{ 'ordenes-alerta-intervencion': ordenesConIntervencion.length > 0 }"
+                  :aria-label="
+                    ordenesConIntervencion.length
+                      ? `${ordenesConIntervencion.length} orden(es) requieren intervención`
+                      : `${entregasTardias.length} entrega(s) con más de dos días de atraso`
+                  "
+                >
+                  <ion-icon v-if="ordenesConIntervencion.length" :icon="warningOutline" />
+                  <span v-else>{{ entregasTardias.length > 99 ? '99+' : entregasTardias.length }}</span>
+                </span>
               </span>
               <span class="acceso-label">{{ a.label }}</span>
             </button>
@@ -922,22 +920,21 @@ import { useHorarios } from '@/composables/Usehorarios'
 import { useTareas, type TareaAsignada } from '@/composables/useTareas'
 import { useTurno } from '@/composables/useTurno'
 import { useApariencia } from '@/composables/useApariencia'
-import { combinarFechaHoraCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
+import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
 import logo from '@/assets/logo.png'
 import imagenDesarrollador from '@/assets/perfilprogramador.png'
 import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
+import { ordenRequiereIntervencion, useOrdenes } from '@/composables/useOrdenes'
 import { editarUsuarioEquipo } from '@/composables/useEquipo'
 import { subirImagenPerfil } from '@/composables/useCloudinary'
 import { useNotificaciones } from '@/composables/useNotificaciones'
 import { esUrlDrive, esUrlVideo, esUrlVideoDirecto, obtenerUrlVideoDirecto, obtenerUrlVideoIncrustado } from '../utils/mediaAvisos'
 import {
-  addOutline,
   archiveOutline,
   businessOutline,
   calendarClearOutline,
   checkmarkCircleOutline,
   cartOutline,
-  chevronDownOutline,
   closeOutline,
   cutOutline,
   createOutline,
@@ -945,7 +942,6 @@ import {
   documentTextOutline,
   ellipseOutline,
   homeOutline,
-  locationOutline,
   listOutline,
   peopleOutline,
   pricetagOutline,
@@ -977,6 +973,28 @@ const route = useRoute()
 const router = useRouter()
 const navegando = ref(false)
 const { turno, cargarTurno, verificarTurnosAntiguosAbiertos } = useTurno()
+const { ordenes, cargarOrdenes, error: errorCargaOrdenes } = useOrdenes()
+const ahora = ref(new Date())
+const ordenesVisiblesEnTurno = computed(() => {
+  if (esAdministrador.value) return ordenes.value
+  if (!turno.abierto) return []
+  return ordenes.value.filter((orden) => !orden.turnoId || orden.turnoId === turno.id)
+})
+const ordenesConIntervencion = computed(() =>
+  esAdministrador.value ? ordenes.value.filter((orden) => ordenRequiereIntervencion(orden)) : []
+)
+const entregasTardias = computed(() => {
+  const hoy = fechaHoyCentroamerica(ahora.value)
+  const hoyEnMilisegundos = Date.parse(`${hoy}T00:00:00Z`)
+  const estadosFinales = new Set(['entregado', 'cerrada', 'cancelada', 'Cerrada-Cancelada'])
+
+  return ordenesVisiblesEnTurno.value.filter((orden) => {
+    if (!orden.fechaEntrega || estadosFinales.has(orden.estado)) return false
+    const fechaEntrega = Date.parse(`${orden.fechaEntrega.slice(0, 10)}T00:00:00Z`)
+    return Number.isFinite(fechaEntrega) &&
+      Math.floor((hoyEnMilisegundos - fechaEntrega) / 86400000) > 2
+  })
+})
 const rutasQueRequierenTurno = new Set(['/tabs/home', '/tabs/ordenes'])
 const mostrarAvisoTurno = ref(false)
 const avisoCierreProximoMostrado = ref(false)
@@ -1097,8 +1115,14 @@ const irA = async (r: string) => {
   navegando.value = false
 }
 
-const ahora = ref(new Date())
 let relojId: any = null
+
+onIonViewWillEnter(async () => {
+  await cargarOrdenes()
+  if (errorCargaOrdenes.value) {
+    console.error('No se pudieron actualizar las alertas de órdenes:', errorCargaOrdenes.value)
+  }
+})
 
 onMounted(() => {
   relojId = setInterval(() => {
@@ -1160,14 +1184,6 @@ const nombreUsuario = computed(() => (usuarioActual as any)?.value?.nombre || 'U
 const fechaCorta = computed(() =>
   ahora.value.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 )
-
-/* ───────────── Sucursal ───────────── */
-const sucursales = ['Ahuachapán']
-const sucursalActiva = ref(sucursales[0])
-
-const agregarSucursal = () => {
-  // Aquí se abrirá el flujo de creación de sucursal
-}
 
 type RolAcceso = 'administrador' | 'recepcionista' | 'cajero' | 'operador'
 
@@ -2646,40 +2662,6 @@ const aplicarColor = () => {
   cursor: not-allowed;
 }
 
-.sucursal-select {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #f5f9fc;
-  border-radius: 12px;
-  padding: 10px 14px;
-  position: relative;
-}
-
-.sucursal-pin {
-  color: #123a66;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.sucursal-native {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-weight: 700;
-  color: #0a1f38;
-  font-size: 0.95rem;
-  appearance: none;
-}
-
-.sucursal-caret {
-  color: #6d829c;
-  font-size: 16px;
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
 /* ── Accesos + tareas ── */
 .home-grid-row {
   display: grid;
@@ -2747,6 +2729,7 @@ const aplicarColor = () => {
 }
 
 .acceso-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2799,6 +2782,7 @@ const aplicarColor = () => {
 }
 
 .acceso-icono {
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -2807,6 +2791,33 @@ const aplicarColor = () => {
   display: grid;
   place-items: center;
   font-size: 18px;
+}
+
+.ordenes-alerta-badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  padding: 0 4px;
+  border: 2px solid #f5f9fc;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 2px 7px rgba(127, 29, 29, 0.28);
+}
+
+.ordenes-alerta-badge ion-icon {
+  font-size: 13px;
+}
+
+.ordenes-alerta-intervencion {
+  background: #b91c1c;
 }
 
 .acceso-label {
@@ -4041,9 +4052,7 @@ const aplicarColor = () => {
     width: 100%;
   }
 
-  .sucursal-card {
-    display: none;
-  }
+
 
   /* Tarjeta de asistencia integrada en el flujo (reemplaza el botón flotante) */
   .asistencia-card {

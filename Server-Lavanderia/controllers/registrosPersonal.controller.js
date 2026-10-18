@@ -87,7 +87,78 @@ const listarRegistros = async (req, res) => {
     const desde = typeof req.query.desde === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde) ? req.query.desde : "";
     const hasta = typeof req.query.hasta === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta) ? req.query.hasta : "";
     const grupo = req.query.grupo === "sesiones" ? "sesiones" : req.query.grupo === "ordenes" ? "ordenes" : "";
-    if (grupo === "sesiones") condiciones.push("tipo IN ('ingreso', 'desconexion')");
+
+    if (grupo === "sesiones") {
+      const filtrosSesiones = ["s.usuario_id <> 'dev-mode'", "s.usuario_nombre <> 'Desarrollador'"];
+      const parametrosSesiones = [];
+      if (usuario && usuario !== "todos") {
+        filtrosSesiones.push("s.usuario_nombre = ?");
+        parametrosSesiones.push(usuario);
+      }
+      if (tipo === "ingreso") filtrosSesiones.push("s.desconexion_at IS NULL");
+      if (tipo === "desconexion") filtrosSesiones.push("s.desconexion_at IS NOT NULL");
+      if (desde) {
+        filtrosSesiones.push("DATE(s.ingreso_at) >= ?");
+        parametrosSesiones.push(desde);
+      }
+      if (hasta) {
+        filtrosSesiones.push("DATE(s.ingreso_at) <= ?");
+        parametrosSesiones.push(hasta);
+      }
+
+      const filtroSesionesSql = " WHERE " + filtrosSesiones.join(" AND ");
+      const [resumenSesionesRows] = await pool.query(
+        `SELECT COUNT(*) AS totalSesiones,
+          COALESCE(SUM(desconexion_at IS NULL), 0) AS sesionesActivas,
+          COALESCE(SUM(desconexion_at IS NOT NULL), 0) AS sesionesTerminadas
+         FROM registros_sesion_personal s${filtroSesionesSql}`,
+        parametrosSesiones,
+      );
+      const resumenSesiones = resumenSesionesRows[0] || {};
+      const total = Number(resumenSesiones.totalSesiones || 0);
+      const totalPaginas = Math.max(1, Math.ceil(total / limite));
+      const paginaValida = Math.min(pagina, totalPaginas);
+      const offsetValido = (paginaValida - 1) * limite;
+      const [registros] = await pool.query(
+        `SELECT s.id AS sessionId, s.id, s.usuario_id AS usuarioId, s.usuario_nombre AS usuarioNombre,
+          s.usuario_rol AS usuarioRol, u.imagen_perfil AS imagenPerfil,
+          CASE WHEN s.desconexion_at IS NULL THEN 'ingreso' ELSE 'desconexion' END AS tipo,
+          s.ingreso_at AS fecha, s.desconexion_at AS fechaDesconexion,
+          CASE s.motivo_desconexion
+            WHEN 'inactividad' THEN 'Sesión cerrada por inactividad'
+            WHEN 'reemplazada' THEN 'Sesión reemplazada por un nuevo ingreso'
+            WHEN 'salida' THEN 'Sesión cerrada'
+            ELSE NULL
+          END AS detalle,
+          TIMESTAMPDIFF(SECOND, s.ingreso_at, COALESCE(s.desconexion_at, UTC_TIMESTAMP(3))) AS duracionSegundos,
+          (s.desconexion_at IS NULL) AS sesionActiva
+         FROM registros_sesion_personal s
+         LEFT JOIN usuarios_equipo u ON u.id = s.usuario_id${filtroSesionesSql}
+         ORDER BY s.ingreso_at DESC, s.id DESC LIMIT ? OFFSET ?`,
+        [...parametrosSesiones, limite, offsetValido],
+      );
+      const [usuariosSesion] = await pool.query(
+        "SELECT DISTINCT usuario_nombre AS usuarioNombre FROM registros_sesion_personal WHERE usuario_id <> 'dev-mode' AND usuario_nombre <> 'Desarrollador' ORDER BY usuarioNombre",
+      );
+      const [sesionesActivasRows] = await pool.query(
+        "SELECT COUNT(*) AS total FROM registros_sesion_personal WHERE desconexion_at IS NULL AND usuario_id <> 'dev-mode' AND usuario_nombre <> 'Desarrollador'" +
+          (usuario && usuario !== "todos" ? " AND usuario_nombre = ?" : ""),
+        usuario && usuario !== "todos" ? [usuario] : [],
+      );
+
+      return res.status(200).json({
+        registros,
+        total,
+        pagina: paginaValida,
+        limite,
+        totalPaginas,
+        usuarios: usuariosSesion.map((fila) => fila.usuarioNombre).filter(Boolean),
+        conteos: { ingreso: total },
+        sesionesActivas: Number(sesionesActivasRows[0]?.total || 0),
+        sesionesTerminadas: Number(resumenSesiones.sesionesTerminadas || 0),
+      });
+    }
+
     if (grupo === "ordenes") condiciones.push("tipo = 'orden_eliminada'");
     if (usuario && usuario !== "todos") { condiciones.push("usuarioNombre = ?"); parametros.push(usuario); }
     if (tipo) { condiciones.push("tipo = ?"); parametros.push(tipo); }
