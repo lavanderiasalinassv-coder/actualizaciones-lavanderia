@@ -109,12 +109,21 @@
                 </div>
 
                 <div v-if="pasoClienteActiva === 0" class="wizard-panel">
-                  <div v-if="clienteEncontrado" class="cliente-badge cliente-badge-fuerte">
+                  <div v-if="clienteEncontrado" class="cliente-badge cliente-badge-fuerte" :class="{ 'cliente-badge-premium': clientePremiumPuesto !== null }">
                     <ion-icon :icon="starOutline" />
+                    <span v-if="mostrarConfetiPremium" class="cliente-confeti" aria-hidden="true">
+                      <span class="cliente-confeti-conito">&#127881;</span>
+                      <i
+                        v-for="(pieza, indice) in piezasConfetiPremium"
+                        :key="indice"
+                        class="cliente-confeti-pieza"
+                        :style="pieza.estilo"
+                      />
+                    </span>
                     <div>
                       <strong>{{ clienteEncontrado.nombre }}</strong>
                       <span>
-                        {{ clienteEncontrado.esRecurrente ? 'Cliente frecuente' : 'Cliente registrado' }}
+                        {{ etiquetaClienteEncontrado }}
                         · {{ clienteEncontrado.totalOrdenes }} órdenes
                       </span>
                     </div>
@@ -439,34 +448,6 @@
               </div>
             </div>
 
-            <div class="carrito-box compact">
-              <div class="carrito-header">
-                <strong>🛍️ Servicios seleccionados</strong>
-                <span>{{ cantidadTotal }} piezas</span>
-              </div>
-
-              <div v-if="pedido.items.length === 0" class="carrito-vacio">
-                Agrega servicios para comenzar.
-              </div>
-
-              <div v-else class="carrito-lista">
-                <article v-for="item in pedido.items" :key="item.id" class="carrito-item">
-                  <div class="carrito-info">
-                    <strong>{{ item.nombre }}</strong>
-                    <span>${{ item.precio.toFixed(2) }} / {{ etiquetaUnidad(item.unidad) }}</span>
-                  </div>
-                  <div class="carrito-cantidad">
-                    <button @click="decrementar(item.id)">-</button>
-                    <span>{{ item.cantidad }}</span>
-                    <button @click="incrementar(item.id)">+</button>
-                  </div>
-                  <button class="quitar-btn" @click="quitarItem(item.id)">
-                    <ion-icon :icon="trashOutline" />
-                  </button>
-                </article>
-              </div>
-            </div>
-
             <div class="step-actions">
               <button type="button" class="ghost-btn" @click="retrocederPaso">
                 Atrás
@@ -761,7 +742,23 @@
         </section>
 
         <aside class="panel-lateral">
-          <div class="factura-card">
+          <div v-if="etapaActiva < 3" class="carrito-box compact panel-carrito">
+            <div class="carrito-header">
+              <strong>🛍️ Carrito</strong>
+              <span>{{ cantidadTotal }} piezas</span>
+            </div>
+            <div v-if="pedido.items.length === 0" class="carrito-vacio">Agrega servicios para comenzar.</div>
+            <div v-else class="carrito-lista">
+              <article v-for="item in pedido.items" :key="item.id" class="carrito-item">
+                <div class="carrito-info"><strong>{{ item.nombre }}</strong><span>${{ item.precio.toFixed(2) }} / {{ etiquetaUnidad(item.unidad) }}</span></div>
+                <div class="carrito-cantidad"><button @click="decrementar(item.id)">-</button><span>{{ item.cantidad }}</span><button @click="incrementar(item.id)">+</button></div>
+                <button class="quitar-btn" @click="quitarItem(item.id)"><ion-icon :icon="trashOutline" /></button>
+              </article>
+            </div>
+            <div class="carrito-total-lateral"><span>Total parcial</span><strong>${{ total.toFixed(2) }}</strong></div>
+          </div>
+
+          <div v-if="etapaActiva >= 3" class="factura-card">
             <div class="factura-header">
               <img :src="logoTicket" alt="" class="factura-logo" />
               <strong class="factura-marca">LAVANDERÍA SALINAS</strong>
@@ -880,7 +877,7 @@
       </div>
     </ion-modal>
 
-    <ion-modal :is-open="mostrarAdvertenciaStock" class="modal-stock" @didDismiss="cerrarAdvertenciaStock">
+    <ion-modal :is-open="mostrarAdvertenciaStock" class="modal-stock force-light" @didDismiss="cerrarAdvertenciaStock">
       <div class="modal-stock-contenido">
         <div class="modal-stock-header">
           <div class="modal-stock-icono">!</div>
@@ -1061,6 +1058,30 @@ const irAOrdenes = () => router.push('/tabs/ordenes')
 const { servicios, categorias: categoriasCatalogo, cargarCatalogo } = useCatalogo()
 const { promociones, consultarUsosCuponQr, obtenerPromocionesAplicables } = usePromociones()
 const { clientesConEstado } = useClientes()
+const clientePremiumPuesto = computed<number | null>(() => {
+  const seleccionado = clienteEncontrado.value
+  if (!seleccionado || seleccionado.totalOrdenes <= 50) return null
+
+  const candidatos = [
+    ...clientesConEstado.value.filter((cliente) => cliente.id !== seleccionado.id && cliente.totalOrdenes > 50),
+    seleccionado
+  ].sort((a, b) =>
+    b.totalOrdenes - a.totalOrdenes ||
+    a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+  )
+
+  const posicion = candidatos.findIndex((cliente) => cliente.id === seleccionado.id)
+  return posicion >= 0 && posicion < 6 ? posicion + 1 : null
+})
+
+const etiquetaClienteEncontrado = computed(() => {
+  if (clientePremiumPuesto.value !== null) {
+    const lugares = ['Primer lugar', 'Segundo lugar', 'Tercer lugar', 'Cuarto lugar', 'Quinto lugar', 'Sexto lugar']
+    return `Cliente premium · ${lugares[clientePremiumPuesto.value - 1]}`
+  }
+
+  return clienteEncontrado.value?.esRecurrente ? 'Cliente frecuente' : 'Cliente registrado'
+})
 const { esAdministrador } = useSesion()
 
 const {
@@ -1184,6 +1205,27 @@ const categoriasConConteo = computed(() => {
     cantidad: conteoPorCategoria.get(categoria.id) ?? 0
   }))
 })
+const coloresConfetiPremium = ['#e7b83f', '#f0784b', '#4fb3e0', '#7aa86b', '#c77bd1']
+const piezasConfetiPremium = Array.from({ length: 14 }, (_, indice) => {
+  const angulo = (-150 + (indice / 13) * 120) * (Math.PI / 180)
+  const distancia = 25 + (indice % 3) * 5
+  const derivaX = Math.round(Math.cos(angulo) * distancia)
+  const derivaY = Math.round(Math.sin(angulo) * distancia)
+  return {
+    estilo: `left:16px;top:10px;--confeti-x:${derivaX}px;--confeti-y:${derivaY}px;--confeti-x-final:${Math.round(derivaX * 1.25)}px;--confeti-y-final:${derivaY + 38}px;animation-delay:${(indice % 7) * 0.035}s;background:${coloresConfetiPremium[indice % coloresConfetiPremium.length]}`
+  }
+})
+const mostrarConfetiPremium = ref(false)
+let temporizadorConfetiPremium: ReturnType<typeof setTimeout> | undefined
+
+const lanzarConfetiPremium = () => {
+  if (temporizadorConfetiPremium) clearTimeout(temporizadorConfetiPremium)
+  mostrarConfetiPremium.value = true
+  temporizadorConfetiPremium = setTimeout(() => {
+    mostrarConfetiPremium.value = false
+    temporizadorConfetiPremium = undefined
+  }, 2300)
+}
 
 const categoriaActivaDetalle = computed(
   () => categoriasCatalogo.value.find((categoria) => categoria.id === categoriaActivaId.value) ?? null
@@ -1382,6 +1424,7 @@ const seleccionarCliente = (cliente: ClienteConEstado) => {
     : celular
 
   clienteEncontrado.value = cliente
+  if (clientePremiumPuesto.value !== null) lanzarConfetiPremium()
   pedido.nombreCliente = cliente.nombre
   pedido.telefono = telefonoLocal
   pedido.correo = cliente.correo || ''
@@ -1602,7 +1645,9 @@ const buscarCliente = async (telefono: string) => {
   const resultado = await buscarClientePorTelefono(numeroCompleto)
   if (tokenActual !== tokenBusquedaCliente) return // respuesta vieja, se ignora
 
+  const clienteAnteriorId = clienteEncontrado.value?.id
   clienteEncontrado.value = resultado
+  if (resultado && resultado.id !== clienteAnteriorId && clientePremiumPuesto.value !== null) lanzarConfetiPremium()
   if (resultado) {
     pedido.nombreCliente = resultado.nombre
     pedido.correo = resultado.correo || ''
@@ -1870,6 +1915,9 @@ const mostrarToastCupon = async (mensaje: string) => {
 }
 
 onBeforeUnmount(detenerEscaneoCupon)
+onBeforeUnmount(() => {
+  if (temporizadorConfetiPremium) clearTimeout(temporizadorConfetiPremium)
+})
 
 const limpiarPromocion = () => {
   promoSeleccionada.value = null
@@ -4604,81 +4652,154 @@ onMounted(() => {
    MODALES
    ============================================================ */
 .modal-stock {
-  --width: min(460px, 92vw);
-  --border-radius: 20px;
+  --width: min(540px, 92vw);
+  --height: auto;
+  --max-height: min(86vh, 760px);
+  --border-radius: 24px;
+  --background: #ffffff;
+  --ion-background-color: #ffffff;
+  --ion-text-color: #0a1f38;
+  color-scheme: light;
 }
 
 .modal-stock::part(content) {
-  max-height: 88vh;
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  background: #ffffff;
+  color: #0a1f38;
+  box-shadow: 0 24px 70px rgba(10, 31, 56, 0.24);
 }
 
 .modal-stock-contenido {
+  box-sizing: border-box;
+  width: 100%;
   background: #ffffff;
-  padding: 22px;
+  color: #0a1f38;
+  padding: 26px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 12px;
-  max-height: min(82vh, 720px);
+  gap: 16px;
+  max-height: min(86vh, 760px);
   overflow: hidden;
 }
 
 .modal-stock-header {
   display: flex;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 14px;
 }
 
 .modal-stock-icono {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
   display: grid;
-  place-items: center;
-  background: rgba(245, 158, 11, 0.14);
-  color: #8a5a00;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #f5d79b;
+  border-radius: 16px;
+  background: #fff6e5;
+  color: #a15c00;
+  font-size: 1.3rem;
   font-weight: 900;
-  flex-shrink: 0;
+  place-items: center;
+}
+
+.modal-stock-titulo {
+  margin: 1px 0 5px;
+  color: #0a1f38 !important;
+  font-size: 1.25rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.modal-stock-subtitulo {
+  margin: 0;
+  color: #60758d !important;
+  font-size: 0.94rem;
+  line-height: 1.5;
 }
 
 .modal-stock-lista {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 9px;
   overflow: auto;
-  padding-right: 4px;
+  padding: 2px 4px 2px 0;
+  overscroll-behavior: contain;
 }
 
 .modal-stock-item {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 14px;
-  background: #f5f9fc;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 1px solid #e8edf2;
+  border-radius: 16px;
+  background: #f7f9fb;
 }
 
-.modal-stock-item span,
+.modal-stock-item > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.modal-stock-item strong {
+  color: #0a1f38;
+  font-size: 0.96rem;
+}
+
+.modal-stock-item span {
+  color: #60758d !important;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
 .modal-stock-faltante {
-  color: #6d829c;
-  font-size: 0.9rem;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fff0e8;
+  color: #b54708 !important;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .modal-stock-pregunta {
+  margin: 0;
+  color: #0a1f38 !important;
+  font-size: 1rem;
   font-weight: 800;
-  color: #0a1f38;
 }
 
 .modal-stock-botones {
   display: flex;
-  gap: 10px;
-  position: sticky;
-  bottom: 0;
-  padding-top: 8px;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #e8edf2;
   background: #ffffff;
 }
 
-.modal-stock-botones > * {
+.modal-stock-botones > button {
   flex: 1;
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 0.94rem;
+  font-weight: 800;
 }
 
+.modal-stock-botones > .ghost-btn {
+  background: #eaf2f8;
+  color: #123a66;
+}
+
+.modal-stock-botones > .primary-btn {
+  background: linear-gradient(135deg, #123a66, #0d2b4e);
+  color: #ffffff;
+}
 .modal-correo {
   width: 100%;
   box-sizing: border-box;
@@ -5263,5 +5384,219 @@ onMounted(() => {
 
 .modal-navegador-cancelar {
   width: 100%;
+}
+
+/* Presentaci�n clara del asistente en escritorio, conservando el recibo lateral. */
+@media (min-width: 901px) {
+  .orden-guiada {
+    gap: 14px;
+    padding: 8px;
+    border-radius: 24px;
+    background: #f2f2f7;
+  }
+
+  .orden-board {
+    gap: 18px;
+    padding: 24px;
+    border: 1px solid #e5e5ea;
+    border-radius: 24px;
+    background: #f2f2f7;
+    box-shadow: 0 8px 24px rgba(28, 28, 30, 0.06);
+  }
+
+  .orden-board::before { display: none; }
+
+  .pasos-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+  }
+
+  .paso-chip {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    min-height: 54px;
+    padding: 9px 12px;
+    border: 1px solid #e5e5ea;
+    border-radius: 15px;
+    background: #fff;
+    color: #636366;
+    box-shadow: 0 2px 7px rgba(28, 28, 30, 0.035);
+    font-weight: 650;
+    text-align: left;
+  }
+
+  .paso-chip:hover { transform: translateY(-1px); border-color: #c7d4e0; }
+  .paso-chip.active { border-color: #123a66; background: #123a66; color: #fff; box-shadow: 0 5px 14px rgba(18, 58, 102, 0.18); }
+  .paso-chip.done { border-color: #ccebd7; background: #f0faf3; color: #25834a; }
+  .paso-chip:disabled { opacity: 0.8; }
+  .paso-numero { flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid #e5e5ea; background: #f2f2f7; color: #636366; font-size: 0.8rem; }
+  .paso-chip.active .paso-numero { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; }
+  .paso-chip.done .paso-numero { border-color: #b8dfc5; background: #e2f5e8; color: #25834a; }
+
+  .orden-layout {
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .panel-principal { min-width: 0; padding: 18px; border: 1px solid #e5e5ea; border-radius: 20px; background: #fff; box-shadow: 0 4px 16px rgba(28, 28, 30, 0.045); }
+  .panel-cabecera { align-items: center; gap: 14px; margin: 0 2px 16px; padding: 0 0 14px; border: 0; border-bottom: 1px solid #e5e5ea; background: transparent; }
+  .panel-cabecera[class*='paso-color-'] { border: 0; border-bottom: 1px solid #e5e5ea; background: transparent; }
+  .panel-cabecera h3 { margin: 0; color: #1c1c1e; font-size: 1.55rem; font-weight: 750; letter-spacing: -0.035em; }
+  .mini-resumen { gap: 10px; width: auto; padding: 8px 12px; border: 1px solid #e5e5ea; border-radius: 12px; background: #f2f2f7; }
+  .mini-resumen span { color: #636366 !important; }
+  .mini-resumen strong { color: #123a66 !important; }
+
+  .paso-contenido,
+  .paso-contenido[class*='paso-color-'] { gap: 16px; padding: 16px; border: 1px solid #e5e5ea; border-radius: 18px; background: #f2f2f7; box-shadow: none; }
+  .wizard-card,
+  .prendas-card,
+  .toggle-card,
+  .estado-pago,
+  .promos-box,
+  .carrito-box,
+  .fotos-box,
+  .resumen-box,
+  .categoria-card,
+  .producto-card,
+  .tarjeta-resumen { border-color: #e5e5ea; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(28, 28, 30, 0.035); }
+  .wizard-card { padding: 18px; }
+  .wizard-header h4 { color: #1c1c1e; }
+  .wizard-step { color: #8e8e93; }
+  .campo-label { color: #636366; font-weight: 650; }
+  .campo input:not([type='file']):not([type='checkbox']):not([type='radio']),
+  .campo select,
+  .campo textarea,
+  .wizard-panel input:not([type='file']):not([type='checkbox']):not([type='radio']),
+  .wizard-panel select,
+  .wizard-panel textarea {
+    min-height: 48px;
+    border: 1px solid #d1d1d6;
+    border-radius: 12px;
+    background: #fff;
+    color: #1c1c1e;
+    font-size: 16px;
+    box-shadow: none;
+  }
+  .campo textarea, .wizard-panel textarea { min-height: 96px; }
+  .campo input:focus, .campo select:focus, .campo textarea:focus,
+  .wizard-panel input:focus, .wizard-panel select:focus, .wizard-panel textarea:focus { border-color: #4fb3e0; outline: 3px solid rgba(79, 179, 224, 0.16); }
+  .primary-btn, .wizard-actions .primary-btn, .step-actions .primary-btn { border-radius: 13px; background: #123a66; box-shadow: 0 4px 10px rgba(18, 58, 102, 0.16); }
+  .ghost-btn, .wizard-actions .ghost-btn, .step-actions .ghost-btn { border: 1px solid #d1d1d6; border-radius: 13px; background: #fff; color: #123a66; }
+  .panel-lateral { display: block; min-width: 0; }
+  .panel-carrito { align-content: start; padding: 16px; border: 1px solid #e5e5ea; border-radius: 20px; background: #fff; box-shadow: 0 4px 16px rgba(28, 28, 30, 0.06); }
+  .panel-carrito .carrito-header { color: #1c1c1e; font-size: 1rem; }
+  .panel-carrito .carrito-header span { color: #8e8e93; font-size: 0.82rem; }
+  .panel-carrito .carrito-item { grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; padding: 10px; border: 1px solid #e5e5ea; border-radius: 13px; background: #f2f2f7; }
+  .panel-carrito .carrito-info strong { color: #1c1c1e; white-space: normal; }
+  .panel-carrito .carrito-info span { color: #636366; font-size: 0.78rem; }
+  .panel-carrito .carrito-cantidad button { width: 27px; height: 27px; border-radius: 9px; background: #123a66; }
+  .panel-carrito .quitar-btn { color: #8e8e93; }
+  .carrito-total-lateral { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid #e5e5ea; color: #636366; }
+  .carrito-total-lateral strong { color: #123a66; font-size: 1.15rem; }
+  .factura-card { border: 1px solid #e5e5ea; border-radius: 20px; box-shadow: 0 4px 16px rgba(28, 28, 30, 0.06); }
+}
+/* Superficies claras, recibo negro y acentos alternados de la marca. */
+.orden-guiada {
+  color-scheme: light !important;
+  --ion-text-color: #263746;
+  color: #263746 !important;
+}
+
+.orden-guiada :is(h1, h2, h3, h4, h5, p, label, span, strong, small, li, dt, dd, th, td, legend, .campo-label, .ayuda, .wizard-step, .carrito-vacio, .carrito-info, .carrito-total-lateral) {
+  color: #263746 !important;
+}
+
+.orden-guiada :is(input, select, textarea) {
+  color: #263746 !important;
+  border-color: #c8d8e6 !important;
+  background-color: #ffffff !important;
+  color-scheme: light !important;
+}
+
+.orden-guiada :is(input, textarea)::placeholder { color: #788b9b !important; opacity: 1; }
+
+.orden-guiada :is(.panel-principal, .panel-carrito, .factura-card, .paso-contenido, .wizard-card, .prendas-card, .toggle-card, .estado-pago, .promos-box, .carrito-box, .fotos-box, .resumen-box, .categoria-card, .producto-card, .tarjeta-resumen, .wizard-panel, .cliente-badge, .servicio-card, .servicio-item) {
+  background-color: #ffffff !important;
+}
+
+.orden-guiada .panel-cabecera.paso-color-cliente h3,
+.orden-guiada .paso-color-cliente .wizard-header h4 { color: #123a66 !important; }
+.orden-guiada .panel-cabecera.paso-color-servicios h3,
+.orden-guiada .paso-color-servicios .wizard-header h4 { color: #1688ad !important; }
+.orden-guiada .panel-cabecera.paso-color-prendas h3,
+.orden-guiada .paso-color-prendas .wizard-header h4 { color: #25834a !important; }
+.orden-guiada .panel-cabecera.paso-color-entrega h3,
+.orden-guiada .paso-color-entrega .wizard-header h4 { color: #d97706 !important; }
+.orden-guiada .panel-cabecera.paso-color-resumen h3,
+.orden-guiada .paso-color-resumen .wizard-header h4 { color: #4b6f9c !important; }
+
+.orden-guiada .carrito-total-lateral strong,
+.orden-guiada .factura-linea.total strong { color: #25834a !important; }
+.orden-guiada .mini-resumen strong { color: #123a66 !important; }
+
+.orden-guiada .factura-card,
+.orden-guiada .factura-card * {
+  color: #000000 !important;
+  background-color: transparent;
+}
+.orden-guiada .factura-card { background-color: #ffffff !important; }
+
+.orden-guiada .paso-chip.active,
+.orden-guiada .paso-chip.active :is(span, strong),
+.orden-guiada .primary-btn,
+.orden-guiada .step-next-btn,
+.orden-guiada .wizard-actions .primary-btn { color: #ffffff !important; }
+.orden-guiada .paso-chip.done,
+.orden-guiada .paso-chip.done :is(span, strong) { color: #25834a !important; }
+
+.cliente-badge-premium {
+  background: linear-gradient(135deg, #fff8df, #ffffff) !important;
+  border-color: rgba(212, 160, 23, 0.42) !important;
+}
+
+.cliente-badge-premium ion-icon {
+  color: #d4a017 !important;
+  filter: drop-shadow(0 2px 4px rgba(212, 160, 23, 0.3));
+}
+
+.cliente-badge-premium strong { color: #7a5600 !important; }
+.cliente-badge-premium { position: relative; overflow: visible !important; }
+.cliente-confeti { position: absolute; z-index: 3; top: -22px; left: 12px; width: 44px; height: 60px; overflow: visible; pointer-events: none; }
+.cliente-confeti-conito {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  display: inline-block;
+  font-size: 19px;
+  line-height: 1;
+  transform-origin: 50% 100%;
+  animation: brincarConito 0.62s cubic-bezier(0.3, 0.8, 0.35, 1) both !important;
+}
+.cliente-confeti-pieza {
+  position: absolute;
+  z-index: 1;
+  width: 4px;
+  height: 6px;
+  border-radius: 1px;
+  opacity: 0;
+  animation: dispararConfetiConito 1.1s ease-out forwards !important;
+}
+@keyframes brincarConito {
+  0% { transform: translateY(5px) rotate(-18deg) scale(0.75); }
+  42% { transform: translateY(-9px) rotate(12deg) scale(1.12); }
+  70% { transform: translateY(1px) rotate(-6deg) scale(0.98); }
+  100% { transform: translateY(0) rotate(0) scale(1); }
+}
+@keyframes dispararConfetiConito {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0) scale(0.6); }
+  14% { opacity: 1; }
+  42% { opacity: 1; transform: translate(var(--confeti-x), var(--confeti-y)) rotate(130deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--confeti-x-final), var(--confeti-y-final)) rotate(300deg) scale(0.8); }
 }
 </style>
