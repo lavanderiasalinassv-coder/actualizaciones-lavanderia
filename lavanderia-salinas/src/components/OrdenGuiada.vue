@@ -5551,6 +5551,13 @@ onMounted(() => {
 .orden-guiada .primary-btn,
 .orden-guiada .step-next-btn,
 .orden-guiada .wizard-actions .primary-btn { color: #ffffff !important; }
+.orden-guiada .exito-acciones .new-order-btn,
+.orden-guiada .exito-acciones .action-btn.verde,
+.orden-guiada .exito-acciones .action-btn.morado,
+.orden-guiada .exito-acciones .new-order-btn :is(span, ion-icon),
+.orden-guiada .exito-acciones .action-btn.verde :is(span, ion-icon),
+.orden-guiada .exito-acciones .action-btn.morado :is(span, ion-icon) { color: #ffffff !important; }
+.orden-guiada .exito-titulo { color: #16a34a !important; }
 .orden-guiada .paso-chip.done,
 .orden-guiada .paso-chip.done :is(span, strong) { color: #25834a !important; }
 
