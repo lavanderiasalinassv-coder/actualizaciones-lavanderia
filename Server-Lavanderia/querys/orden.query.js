@@ -783,6 +783,7 @@ const actualizarCierreConAnticipo = async (
   fecha,
   concepto,
   estadoPago,
+  esEntrega = false,
 ) => {
   const [[cierre]] = await conn.query(
     "SELECT id, numero_caja, resumen FROM cierres_caja WHERE turno_id = ? ORDER BY cerrado_at DESC LIMIT 1 FOR UPDATE",
@@ -800,6 +801,7 @@ const actualizarCierreConAnticipo = async (
   }
   resumen = resumen && typeof resumen === "object" ? resumen : {};
   resumen.totales = resumen.totales || {};
+  resumen.conteos = resumen.conteos || {};
   resumen.ordenes = Array.isArray(resumen.ordenes) ? resumen.ordenes : [];
   resumen.movimientos = Array.isArray(resumen.movimientos)
     ? resumen.movimientos
@@ -812,6 +814,7 @@ const actualizarCierreConAnticipo = async (
       ? new Date(fechaBase)
       : new Date();
   const ordenResumen = resumen.ordenes.find((item) => item?.id === orden.id);
+  const yaContabaComoEntrega = ordenResumen?.esReferencia === false;
   const anticipoResumen = {
     id: anticipoId,
     monto: montoAnticipo,
@@ -823,6 +826,7 @@ const actualizarCierreConAnticipo = async (
     ordenResumen.estado = orden.estado;
     ordenResumen.estadoPago = estadoPago || "anticipo";
     ordenResumen.total = toNumber(orden.total);
+    if (esEntrega) ordenResumen.esReferencia = false;
     ordenResumen.cobradoEnTurno = Number(
       (Number(ordenResumen.cobradoEnTurno || 0) + montoAnticipo).toFixed(2),
     );
@@ -839,7 +843,7 @@ const actualizarCierreConAnticipo = async (
       total: toNumber(orden.total),
       montoRecibido: toNumber(orden.monto_recibido),
       cobradoEnTurno: montoAnticipo,
-      esReferencia: true,
+      esReferencia: !esEntrega,
       estado: orden.estado,
       estadoPago: estadoPago || orden.estado_pago,
       createdAt: toISO(orden.created_at),
@@ -848,17 +852,32 @@ const actualizarCierreConAnticipo = async (
     });
   }
 
-  resumen.movimientos.push({
-    id: anticipoId || randomUUID(),
-    tipo: "cierre",
-    monto: montoAnticipo,
-    concepto:
-      concepto || `Anticipo de la orden ${formatearNumero(orden.secuencia)}`,
-    creadoAt: toISO(fechaBase),
-    turnoId,
-    numeroCaja: cierre.numero_caja,
-    usuario: "Sistema",
-  });
+  if (esEntrega && !yaContabaComoEntrega) {
+    resumen.conteos.ordenes = Number(resumen.conteos.ordenes || 0) + 1;
+  }
+
+  const conceptoMovimiento =
+    concepto || `Anticipo de la orden ${formatearNumero(orden.secuencia)}`;
+  const movimientoEntregaYaExiste =
+    esEntrega &&
+    resumen.movimientos.some(
+      (movimiento) =>
+        movimiento?.tipo === "cierre" &&
+        Number(movimiento.monto) === 0 &&
+        movimiento.concepto === conceptoMovimiento,
+    );
+  if (!movimientoEntregaYaExiste) {
+    resumen.movimientos.push({
+      id: anticipoId || randomUUID(),
+      tipo: "cierre",
+      monto: montoAnticipo,
+      concepto: conceptoMovimiento,
+      creadoAt: toISO(fechaBase),
+      turnoId,
+      numeroCaja: cierre.numero_caja,
+      usuario: "Sistema",
+    });
+  }
 
   const totales = resumen.totales;
   totales.cobrado = Number(
@@ -888,6 +907,68 @@ const actualizarCierreConAnticipo = async (
     JSON.stringify(resumen),
     cierre.id,
   ]);
+  return cierre.numero_caja;
+};
+
+const quitarEntregaDeCierre = async (conn, turnoId, orden) => {
+  if (!turnoId) return null;
+  const [[cierre]] = await conn.query(
+    "SELECT id, numero_caja, resumen FROM cierres_caja WHERE turno_id = ? ORDER BY cerrado_at DESC LIMIT 1 FOR UPDATE",
+    [turnoId],
+  );
+  if (!cierre) return null;
+
+  let resumen = cierre.resumen;
+  if (typeof resumen === "string") {
+    try {
+      resumen = JSON.parse(resumen);
+    } catch {
+      resumen = {};
+    }
+  }
+  resumen = resumen && typeof resumen === "object" ? resumen : {};
+  resumen.ordenes = Array.isArray(resumen.ordenes) ? resumen.ordenes : [];
+  resumen.movimientos = Array.isArray(resumen.movimientos)
+    ? resumen.movimientos
+    : [];
+  resumen.conteos = resumen.conteos || {};
+
+  const conceptoEntrega = `Entrega antigua de la orden ${formatearNumero(orden.secuencia)}`;
+  const movimientosAntes = resumen.movimientos.length;
+  resumen.movimientos = resumen.movimientos.filter(
+    (movimiento) =>
+      !(
+        movimiento?.tipo === "cierre" &&
+        Number(movimiento.monto) === 0 &&
+        movimiento.concepto === conceptoEntrega
+      ),
+  );
+  let cambio = resumen.movimientos.length !== movimientosAntes;
+
+  const indiceOrden = resumen.ordenes.findIndex((item) => item?.id === orden.id);
+  if (indiceOrden >= 0 && resumen.ordenes[indiceOrden].esReferencia !== true) {
+    const ordenResumen = resumen.ordenes[indiceOrden];
+    const tieneCobros =
+      toNumber(ordenResumen.cobradoEnTurno) > 0 ||
+      (Array.isArray(ordenResumen.anticipos) && ordenResumen.anticipos.length > 0);
+    if (tieneCobros) {
+      ordenResumen.esReferencia = true;
+    } else {
+      resumen.ordenes.splice(indiceOrden, 1);
+    }
+    resumen.conteos.ordenes = Math.max(
+      0,
+      Number(resumen.conteos.ordenes || 0) - 1,
+    );
+    cambio = true;
+  }
+
+  if (cambio) {
+    await conn.execute("UPDATE cierres_caja SET resumen = ? WHERE id = ?", [
+      JSON.stringify(resumen),
+      cierre.id,
+    ]);
+  }
   return cierre.numero_caja;
 };
 
@@ -1935,6 +2016,11 @@ const actualizarEstado = async (
 
     let cajaTexto = "";
     let fechaTurnoSeleccionado = null;
+    let turnoActualCaja = null;
+    let turnoEfectivo = null;
+    let numeroCajaEfectiva = null;
+    let numeroCajaAnterior = null;
+    let esCambioCajaEntrega = false;
     if (estado === "entregado" || estado === "cerrada") {
       fechaTurnoSeleccionado = cambios.turnoId
         ? await obtenerFechaDelTurno(conn, cambios.turnoId)
@@ -1945,24 +2031,61 @@ const actualizarEstado = async (
       const pad = (valor) => String(valor).padStart(2, "0");
       const ahora = new Date();
       const fechaLocalMySQL = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-      sets.push("entregado_at = COALESCE(?, ?)");
-      values.push(entregadoAtValor, fechaLocalMySQL);
-      if (cambios.turnoId) {
-        sets.push("turno_id = ?");
-        values.push(cambios.turnoId);
+      if (orden.estado !== "entregado") {
+        sets.push("entregado_at = COALESCE(?, ?)");
+        values.push(entregadoAtValor, fechaLocalMySQL);
+      }
+      turnoActualCaja = await obtenerTurno();
+      const turnoAbiertoId = turnoActualCaja.abierto
+        ? turnoActualCaja.id
+        : null;
+      turnoEfectivo = cambios.turnoId || turnoAbiertoId;
+      if (estado === "entregado" && !turnoEfectivo) {
+        throw new AppError(
+          "No hay una caja seleccionada para registrar la entrega.",
+          409,
+        );
       }
 
-      const turnoAbiertoId = await obtenerTurnoAbiertoId();
-      const turnoEfectivo = cambios.turnoId || turnoAbiertoId;
+      // La orden entregada debe quedar asociada a la caja que luego la archivará.
+      // Antes solo se guardaba turno_id para entregas antiguas seleccionadas por admin.
+      if (cambios.turnoId || (estado === "entregado" && turnoAbiertoId)) {
+        sets.push("turno_id = ?");
+        values.push(turnoEfectivo);
+      }
 
       if (turnoEfectivo && turnoEfectivo === turnoAbiertoId) {
-        cajaTexto = " en la caja actual";
+        numeroCajaEfectiva = turnoActualCaja.numeroCaja;
+        cajaTexto = ` en Caja #${numeroCajaEfectiva}`;
       } else if (turnoEfectivo) {
         const [[cierreCaja]] = await conn.query(
           "SELECT numero_caja FROM cierres_caja WHERE turno_id = ? ORDER BY cerrado_at DESC LIMIT 1",
           [turnoEfectivo],
         );
-        cajaTexto = cierreCaja ? ` en Caja #${cierreCaja.numero_caja}` : "";
+        numeroCajaEfectiva = cierreCaja?.numero_caja ?? null;
+        cajaTexto = numeroCajaEfectiva ? ` en Caja #${numeroCajaEfectiva}` : "";
+      }
+
+      const yaEstabaEntregadaEnTurnoSeleccionado =
+        orden.estado === "entregado" &&
+        (estado === "entregado" ||
+          (estado === "cerrada" && Boolean(cambios.turnoId)));
+      esCambioCajaEntrega =
+        yaEstabaEntregadaEnTurnoSeleccionado &&
+        orden.turno_id !== turnoEfectivo;
+      if (esCambioCajaEntrega && orden.turno_id) {
+        numeroCajaAnterior = await quitarEntregaDeCierre(
+          conn,
+          orden.turno_id,
+          orden,
+        );
+        if (
+          numeroCajaAnterior == null &&
+          turnoActualCaja.abierto &&
+          orden.turno_id === turnoActualCaja.id
+        ) {
+          numeroCajaAnterior = turnoActualCaja.numeroCaja;
+        }
       }
     }
 
@@ -1982,6 +2105,7 @@ const actualizarEstado = async (
         construirFechaConHora(fechaTurnoSeleccionado || cambios.fechaEntregado),
         `Entrega antigua de la orden ${formatearNumero(orden.secuencia)}`,
         "pagado",
+        true,
       );
     }
 
@@ -1989,8 +2113,18 @@ const actualizarEstado = async (
       typeof cambios.textoMovimiento === "string" &&
       cambios.textoMovimiento.trim()
         ? cambios.textoMovimiento.trim()
-        : `Estado cambiado a ${estado === "cerrada" && cambios.turnoId ? "entregado" : estado}${cajaTexto}`;
-    await registrarMovimientoConn(conn, id, textoMovimiento, usuario);
+        : esCambioCajaEntrega
+          ? numeroCajaAnterior != null && numeroCajaEfectiva != null
+            ? `Entrega trasladada de Caja #${numeroCajaAnterior} a Caja #${numeroCajaEfectiva}`
+            : `Caja de entrega actualizada a Caja #${numeroCajaEfectiva ?? "?"}`
+          : `Estado cambiado a ${estado === "cerrada" && cambios.turnoId ? "entregado" : estado}${cajaTexto}`;
+    if (
+      !(orden.estado === "entregado" &&
+        estado === "entregado" &&
+        !esCambioCajaEntrega)
+    ) {
+      await registrarMovimientoConn(conn, id, textoMovimiento, usuario);
+    }
 
     await conn.commit();
     return await obtenerOrdenCompleta(id);

@@ -334,7 +334,7 @@
           <template v-if="estadoObjetivoCambio === 'entregado'">
             <div v-if="esAdministrador" class="anticipo-antiguo-toggle">
               <label class="toggle-check">
-                <input type="checkbox" v-model="registrarEntregaAntigua" />
+                <input type="checkbox" v-model="registrarEntregaAntigua" @change="alCambiarEntregaAntigua" />
                 Registrar entrega antigua
               </label>
             </div>
@@ -360,7 +360,7 @@
 
           <div class="modal-confirmacion-botones">
             <button class="btn-outline" @click="cancelarCambioEstado">Cancelar</button>
-            <button class="btn-principal" :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado')" @click="confirmarCambioEstado">
+            <button class="btn-principal" :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado') || (esAdministrador && registrarEntregaAntigua && !turnoIdEntregaAntigua)" @click="confirmarCambioEstado">
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Confirmar' }}
             </button>
           </div>
@@ -1799,6 +1799,9 @@ const formatearFechaHora = (valor: string) =>
   formatearFechaCentroamerica(valor, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 const puedeCambiarEstado = (estadoActual: OrdenEstado, estadoDestino: OrdenEstado) => {
+  if (estadoActual === 'entregado' && estadoDestino === 'entregado') {
+    return esAdministrador.value
+  }
   if (esOperador.value) {
     return (
       (estadoActual === 'pendiente' && estadoDestino === 'en_proceso') ||
@@ -1820,7 +1823,11 @@ const solicitarCambioEstado = (idOrden: string, estadoDestino: OrdenEstado) => {
   const orden = obtenerOrdenPorId(idOrden)
   if (!orden) return
 
-  if (estadoDestino === 'entregado' && !turno.abierto) {
+  const reasignarEntregaExistente =
+    estadoDestino === 'entregado' &&
+    orden.estado === 'entregado' &&
+    esAdministrador.value
+  if (estadoDestino === 'entregado' && !turno.abierto && !reasignarEntregaExistente) {
     void mostrarToastSinTurno()
     return
   }
@@ -1828,11 +1835,15 @@ const solicitarCambioEstado = (idOrden: string, estadoDestino: OrdenEstado) => {
 
   ordenCambioPendienteId.value = idOrden
   estadoObjetivoCambio.value = estadoDestino
-  enviarNotificacionCambioEstado.value = true
+  enviarNotificacionCambioEstado.value = !reasignarEntregaExistente
+  if (estadoDestino !== 'entregado') {
+    registrarEntregaAntigua.value = false
+    turnoIdEntregaAntigua.value = ''
+  }
   if (estadoDestino === 'entregado') {
     fechaEntregadoModal.value = fechaHoyCentroamerica()
-    registrarEntregaAntigua.value = false
-    turnoIdEntregaAntigua.value = turno.id || ''
+    registrarEntregaAntigua.value = reasignarEntregaExistente && !turno.abierto
+    turnoIdEntregaAntigua.value = registrarEntregaAntigua.value ? '' : turno.id || ''
     if (esAdministrador.value) void cargarHistorial()
   }
 
@@ -1851,6 +1862,14 @@ const cancelarCambioEstado = () => {
   mostrarConfirmacionEstado.value = false
   ordenCambioPendienteId.value = ''
   estadoObjetivoCambio.value = ''
+  registrarEntregaAntigua.value = false
+  turnoIdEntregaAntigua.value = ''
+}
+
+const alCambiarEntregaAntigua = () => {
+  turnoIdEntregaAntigua.value = registrarEntregaAntigua.value
+    ? ''
+    : turno.id || ''
 }
 
 const cerrarModalRecepcion = () => {
@@ -2007,11 +2026,18 @@ const confirmarCambioEstado = async () => {
   const estado = estadoObjetivoCambio.value
 
   if (!orden || !estado || peticionOrdenEnCurso.value) return
-  if (estado === 'entregado' && !turno.abierto) {
+  if (
+    estado === 'entregado' &&
+    !turno.abierto &&
+    !(esAdministrador.value && registrarEntregaAntigua.value)
+  ) {
     await mostrarToastSinTurno()
     return
   }
-  const usarEntregaAntigua = esAdministrador.value && registrarEntregaAntigua.value
+  const usarEntregaAntigua =
+    estado === 'entregado' &&
+    esAdministrador.value &&
+    registrarEntregaAntigua.value
   if (usarEntregaAntigua && !turnoIdEntregaAntigua.value) {
     window.alert('Selecciona el turno para la entrega antigua.')
     return
@@ -2020,12 +2046,14 @@ const confirmarCambioEstado = async () => {
 
   try {
     const estadoParaActualizar = usarEntregaAntigua ? 'cerrada' : estado
+    const reasignandoEntregaExistente =
+      estado === 'entregado' && orden.estado === 'entregado'
     const ordenActualizada = await cambiarEstado(orden.id, estadoParaActualizar, {
       ...(estado === 'entregado' ? { fechaEntregado: fechaEntregadoModal.value } : {}),
       ...(usarEntregaAntigua ? { turnoId: turnoIdEntregaAntigua.value } : {})
     })
 
-    if (estado === 'entregado') {
+  if (estado === 'entregado' && !reasignandoEntregaExistente) {
       await marcarPago(orden.id, 'pagado', {
         turnoId: usarEntregaAntigua ? turnoIdEntregaAntigua.value : turno.id
       })

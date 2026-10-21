@@ -563,8 +563,8 @@
                       '--estado-paso-color': estadoColores[estado.value].dot
                     }"
                     :aria-current="!ordenCerradaEstable && idx === indiceEstadoActualBarra ? 'step' : undefined"
-                    :disabled="ordenCerradaEstable || peticionOrdenEnCurso || ordenSeleccionada.estado === estado.value || !estadosCambioVisibles.some((visible) => visible.value === estado.value) || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || (turnoCerrado && estado.value !== 'entregado')"
-                    :title="ordenCerradaEstable ? 'Orden cerrada' : ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) && estadosCambioVisibles.some((visible) => visible.value === estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
+                    :disabled="ordenCerradaEstable || peticionOrdenEnCurso || (ordenSeleccionada.estado === estado.value && !(estado.value === 'entregado' && esAdministrador)) || !estadosCambioVisibles.some((visible) => visible.value === estado.value) || !puedeCambiarEstado(ordenSeleccionada.estado, estado.value) || (turnoCerrado && estado.value !== 'entregado')"
+                    :title="ordenCerradaEstable ? 'Orden cerrada' : ordenSeleccionada.estado === estado.value && estado.value === 'entregado' && esAdministrador ? 'Cambiar caja de entrega' : ordenSeleccionada.estado === estado.value ? 'Estado actual' : puedeCambiarEstado(ordenSeleccionada.estado, estado.value) && estadosCambioVisibles.some((visible) => visible.value === estado.value) ? `Cambiar a ${estado.label}` : 'Avanza al siguiente estado'"
                     @click="solicitarCambioEstado(ordenSeleccionada.id, estado.value, 'detalle')"
                   >
                     <span class="estado-paso-indicador" aria-hidden="true">
@@ -1234,8 +1234,8 @@
             </div>
             <div v-if="esAdministrador" class="anticipo-antiguo-toggle">
               <label class="toggle-check">
-                <input type="checkbox" v-model="registrarEntregaAntigua" />
-                Registrar entrega antigua
+                <input type="checkbox" v-model="registrarEntregaAntigua" @change="alCambiarEntregaAntigua" />
+                {{ ordenCambioPendiente?.estado === 'entregado' ? 'Cambiar caja de entrega' : 'Registrar entrega antigua' }}
               </label>
             </div>
             <template v-if="esAdministrador && registrarEntregaAntigua">
@@ -1258,7 +1258,7 @@
             <button class="btn-outline" @click="cancelarCambioEstado">Cancelar</button>
             <button
               class="btn-principal"
-              :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado')"
+              :disabled="peticionOrdenEnCurso || (turnoCerrado && estadoObjetivoCambio !== 'entregado') || (esAdministrador && registrarEntregaAntigua && !turnoIdEntregaAntigua)"
               @click="confirmarCambioEstado"
             >
               {{ peticionOrdenEnCurso ? 'Guardando...' : 'Confirmar' }}
@@ -3889,6 +3889,9 @@ const finalizarArrastreOrden = () => {
 }
 
 const puedeCambiarEstado = (estadoActual: OrdenEstado, estadoDestino: OrdenEstado) => {
+  if (estadoActual === 'entregado' && estadoDestino === 'entregado') {
+    return esAdministrador.value
+  }
   if (esOperador.value) {
     return (estadoActual === 'pendiente' && estadoDestino === 'en_proceso') ||
            (estadoActual === 'en_proceso' && estadoDestino === 'listo')
@@ -3944,7 +3947,11 @@ const solicitarCambioEstado = (
   const orden = obtenerOrdenPorId(idOrden)
   if (!orden) return
 
-  if (estadoDestino === 'entregado' && !turno.abierto) {
+  const reasignarEntregaExistente =
+    estadoDestino === 'entregado' &&
+    orden.estado === 'entregado' &&
+    esAdministrador.value
+  if (estadoDestino === 'entregado' && !turno.abierto && !reasignarEntregaExistente) {
     void mostrarToastSinTurno()
     return
   }
@@ -3952,10 +3959,14 @@ const solicitarCambioEstado = (
 
   ordenCambioPendienteId.value = idOrden
   estadoObjetivoCambio.value = estadoDestino
-  enviarNotificacionCambioEstado.value = true
-  if (estadoDestino === 'entregado') {
+  enviarNotificacionCambioEstado.value = !reasignarEntregaExistente
+  if (estadoDestino !== 'entregado') {
     registrarEntregaAntigua.value = false
-    turnoIdEntregaAntigua.value = turno.id || ''
+    turnoIdEntregaAntigua.value = ''
+  }
+  if (estadoDestino === 'entregado') {
+    registrarEntregaAntigua.value = reasignarEntregaExistente && !turno.abierto
+    turnoIdEntregaAntigua.value = registrarEntregaAntigua.value ? '' : turno.id || ''
     if (esAdministrador.value) void cargarHistorial()
   }
 
@@ -4034,6 +4045,14 @@ const cancelarCambioEstado = () => {
   mostrarConfirmacionEstado.value = false
   ordenCambioPendienteId.value = ''
   estadoObjetivoCambio.value = ''
+  registrarEntregaAntigua.value = false
+  turnoIdEntregaAntigua.value = ''
+}
+
+const alCambiarEntregaAntigua = () => {
+  turnoIdEntregaAntigua.value = registrarEntregaAntigua.value
+    ? ''
+    : turno.id || ''
 }
 
 const cerrarModalRecepcion = () => {
@@ -4212,11 +4231,18 @@ const confirmarCambioEstado = async () => {
   const estado = estadoObjetivoCambio.value
 
   if (!orden || !estado || peticionOrdenEnCurso.value) return
-  if (estado === 'entregado' && !turno.abierto) {
+  if (
+    estado === 'entregado' &&
+    !turno.abierto &&
+    !(esAdministrador.value && registrarEntregaAntigua.value)
+  ) {
     await mostrarToastSinTurno()
     return
   }
-  const usarEntregaAntigua = esAdministrador.value && registrarEntregaAntigua.value
+  const usarEntregaAntigua =
+    estado === 'entregado' &&
+    esAdministrador.value &&
+    registrarEntregaAntigua.value
   if (usarEntregaAntigua && !turnoIdEntregaAntigua.value) {
     window.alert('Selecciona el turno para la entrega antigua.')
     return
@@ -4224,8 +4250,10 @@ const confirmarCambioEstado = async () => {
   peticionOrdenEnCurso.value = true
 
   try {
-    // Registrar el pago antes del movimiento de entrega para conservar el orden del historial.
-    if (estado === 'entregado' && orden.estadoPago !== 'pagado') {
+    const reasignandoEntregaExistente =
+      estado === 'entregado' && orden.estado === 'entregado'
+    // La reasignación de una entrega no debe volver a cobrar la orden.
+    if (!reasignandoEntregaExistente && estado === 'entregado' && orden.estadoPago !== 'pagado') {
       await marcarPago(orden.id, 'pagado', {
         turnoId: usarEntregaAntigua ? turnoIdEntregaAntigua.value : turno.id
       })
