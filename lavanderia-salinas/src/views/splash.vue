@@ -87,6 +87,7 @@
         </transition>
       </div>
 
+      <p v-if="versionAplicacion" class="splash-version">Versión {{ versionAplicacion }}</p>
     </ion-content>
   </ion-page>
 </template>
@@ -115,6 +116,7 @@ const logoActual = computed(() => esDiciembre.value
   : (logoFallido.value ? logoPredeterminado : (apariencia.loginImagen || logoPredeterminado)))
 const estadoServidor = ref<Estado>('cargando')
 const estadoBaseDatos = ref<Estado>('cargando')
+const versionAplicacion = ref('')
 const errorConexion = ref('')
 const revisando = ref(false)
 const listo = ref(false)
@@ -163,6 +165,20 @@ const reproducirSonidoEntrada = async () => {
   } catch (error) {
     console.warn('No se pudo reproducir el sonido de entrada:', error)
     await audio?.close().catch(closeError => console.warn('No se pudo cerrar el audio del splash:', closeError))
+  }
+}
+
+const cargarVersionAplicacion = async () => {
+  const electronAPI = (window as Window & {
+    electronAPI?: { obtenerVersionAplicacion?: () => Promise<string> }
+  }).electronAPI
+
+  if (!electronAPI?.obtenerVersionAplicacion) return
+
+  try {
+    versionAplicacion.value = await electronAPI.obtenerVersionAplicacion()
+  } catch (error) {
+    console.error('No se pudo obtener la versión de la aplicación:', error)
   }
 }
 
@@ -245,6 +261,7 @@ const comprobarConexion = async () => {
 
 onMounted(() => {
   void reproducirSonidoEntrada()
+  void cargarVersionAplicacion()
   void comprobarConexion()
 })
 </script>
@@ -320,7 +337,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 32px 20px 40px;
+  padding: 32px 20px 70px;
   max-width: 420px;
   margin: 0 auto;
   text-align: center;
@@ -454,6 +471,20 @@ onMounted(() => {
 
 .mensaje { min-height: 18px; margin: 12px 0 0; color: #93b2c9; font-size: 11px; }
 .mensaje.error { color: #ff8a75; line-height: 1.5; }
+
+.splash-version {
+  position: fixed;
+  z-index: 2;
+  right: 16px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 16px;
+  margin: 0;
+  color: rgba(188, 214, 232, 0.72);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  pointer-events: none;
+}
 
 .acciones-error { display: flex; gap: 10px; margin-top: 16px; width: 100%; }
 
