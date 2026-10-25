@@ -368,31 +368,6 @@ ipcMain.handle("reiniciar-electron", () => {
   app.exit(0);
 });
 
-ipcMain.handle("ventana:minimizar", (event) => {
-  if (ventanaPrincipal && event.sender === ventanaPrincipal.webContents) {
-    ventanaPrincipal.minimize();
-  }
-});
-
-ipcMain.handle("ventana:alternar-tamano", (event) => {
-  if (!ventanaPrincipal || event.sender !== ventanaPrincipal.webContents) return false;
-  const win = ventanaPrincipal;
-  if (win.isFullScreen() || win.isMaximized()) {
-    if (win.isFullScreen()) win.setFullScreen(false);
-    if (win.isMaximized()) win.unmaximize();
-    win.setSize(1280, 800);
-    win.center();
-    return false;
-  }
-  win.maximize();
-  return true;
-});
-
-ipcMain.handle("ventana:estado", (event) => {
-  if (!ventanaPrincipal || event.sender !== ventanaPrincipal.webContents) return false;
-  return ventanaPrincipal.isFullScreen() || ventanaPrincipal.isMaximized();
-});
-
 ipcMain.handle("obtener-configuracion-base-datos-predeterminada", () => {
   const archivoConfiguracion = app.isPackaged
     ? path.join(
