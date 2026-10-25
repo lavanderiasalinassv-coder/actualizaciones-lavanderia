@@ -9,28 +9,17 @@
       </div>
 
       <div class="splash-wrap">
-        <div class="escena-lavado" :class="{ activa: !listo }">
-          <div class="aura-lavadora" aria-hidden="true"></div>
-          <div class="orbita orbita-uno" aria-hidden="true"></div>
-          <div class="orbita orbita-dos" aria-hidden="true"></div>
-          <span v-for="n in 5" :key="`burbuja-lavadora-${n}`" class="burbuja-lavadora" :class="`burbuja-lavadora-${n}`" aria-hidden="true"></span>
-          <svg class="lavadora-animada" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <rect x="14" y="8" width="72" height="84" rx="14" fill="#0d2b4e" stroke="#a9d8ee" stroke-width="2"/>
-            <line x1="14" y1="26" x2="86" y2="26" stroke="#a9d8ee" stroke-width="1.5" opacity="0.6"/>
-            <circle cx="74" cy="17" r="2" fill="#a9d8ee"/>
-            <circle cx="66" cy="17" r="2" fill="#a9d8ee"/>
-            <circle class="drum-ring" cx="50" cy="58" r="26" fill="#cfe9f5" stroke="#a9d8ee" stroke-width="3"/>
-            <clipPath id="drumClipSplash">
-              <circle cx="50" cy="58" r="21" />
-            </clipPath>
-            <g clip-path="url(#drumClipSplash)">
-              <rect class="agua agua-1" x="20" y="58" width="60" height="30" fill="#123a66"/>
-              <rect class="agua agua-2" x="20" y="62" width="60" height="26" fill="#a9d8ee" opacity="0.75"/>
-            </g>
-            <circle v-if="listo" cx="50" cy="58" r="21" fill="none" stroke="#3ee08a" stroke-width="0" />
-          </svg>
-          <div class="sombra-suelo"></div>
-          <div v-if="listo" class="check-listo">✓</div>
+        <div class="splash-logo-escena">
+          <div class="splash-logo-resplandor" aria-hidden="true"></div>
+          <div class="splash-logo-contenedor">
+            <img
+              :src="logoActual"
+              alt="Lavandería Salinas"
+              class="splash-logo"
+              @error="logoFallido = true"
+            />
+          </div>
+          <span class="splash-logo-destello" aria-hidden="true"></span>
         </div>
 
         <p class="subtitulo">
@@ -103,10 +92,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { IonPage, IonContent } from '@ionic/vue'
 import { useRouter } from 'vue-router'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
+import logoPredeterminado from '@/assets/logo.png'
+import logoNavidad from '@/assets/logo-navidad.png'
+import { useApariencia } from '@/composables/useApariencia'
+import { useDiciembre } from '@/composables/useDiciembre'
 
 type Estado = 'cargando' | 'listo' | 'error'
 
@@ -114,6 +107,12 @@ type Estado = 'cargando' | 'listo' | 'error'
 const CODIGO_DESARROLLADOR = '592647'
 
 const router = useRouter()
+const { apariencia } = useApariencia()
+const esDiciembre = useDiciembre()
+const logoFallido = ref(false)
+const logoActual = computed(() => esDiciembre.value
+  ? logoNavidad
+  : (logoFallido.value ? logoPredeterminado : (apariencia.loginImagen || logoPredeterminado)))
 const estadoServidor = ref<Estado>('cargando')
 const estadoBaseDatos = ref<Estado>('cargando')
 const errorConexion = ref('')
@@ -126,6 +125,46 @@ const mostrarDev = ref(false)
 const codigoDev = ref('')
 const errorDev = ref('')
 const inputDev = ref<HTMLInputElement | null>(null)
+
+const reproducirSonidoEntrada = async () => {
+  if (typeof window.AudioContext === 'undefined') return
+
+  let audio: AudioContext | undefined
+  try {
+    audio = new window.AudioContext()
+    await audio.resume()
+    if (audio.state !== 'running') {
+      await audio.close()
+      return
+    }
+
+    const inicio = audio.currentTime + 0.025
+    ;[523, 659, 784, 1046].forEach((frecuencia, indice) => {
+      const tono = audio!.createOscillator()
+      const volumen = audio!.createGain()
+      const momento = inicio + indice * 0.12
+      const duracion = 0.42
+
+      tono.type = 'sine'
+      tono.frequency.setValueAtTime(frecuencia, momento)
+      volumen.gain.setValueAtTime(0.0001, momento)
+      volumen.gain.exponentialRampToValueAtTime(0.035, momento + 0.025)
+      volumen.gain.exponentialRampToValueAtTime(0.0001, momento + duracion)
+
+      tono.connect(volumen)
+      volumen.connect(audio!.destination)
+      tono.start(momento)
+      tono.stop(momento + duracion)
+    })
+
+    window.setTimeout(() => {
+      void audio?.close().catch(error => console.warn('No se pudo cerrar el audio del splash:', error))
+    }, 1000)
+  } catch (error) {
+    console.warn('No se pudo reproducir el sonido de entrada:', error)
+    await audio?.close().catch(closeError => console.warn('No se pudo cerrar el audio del splash:', closeError))
+  }
+}
 
 const claseEstado = (estado: Estado) => `estado-${estado}`
 const textoEstado = (estado: Estado, cargando: string) => {
@@ -204,7 +243,10 @@ const comprobarConexion = async () => {
   }
 }
 
-onMounted(comprobarConexion)
+onMounted(() => {
+  void reproducirSonidoEntrada()
+  void comprobarConexion()
+})
 </script>
 
 <style scoped>
@@ -278,103 +320,80 @@ onMounted(comprobarConexion)
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 32px 20px 70px;
+  padding: 32px 20px 40px;
   max-width: 420px;
   margin: 0 auto;
   text-align: center;
   animation: tarjetaFlota 6s ease-in-out infinite;
 }
 
-.escena-lavado {
+.splash-logo-escena {
   position: relative;
-  width: 118px;
-  height: 118px;
-  margin: 6px 0 4px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  isolation: isolate;
+  display: grid;
+  width: 100%;
+  min-height: 170px;
+  margin: 0 0 4px;
+  place-items: center;
 }
 
-.aura-lavadora { position: absolute; inset: 17px; border-radius: 50%; background: radial-gradient(circle, rgba(79,179,224,.2), rgba(79,179,224,0) 72%); filter: blur(8px); animation: auraPulsa 3s ease-in-out infinite; }
-.orbita { position: absolute; left: 50%; top: 49%; border: 1px solid rgba(169,216,238,.18); border-radius: 50%; transform: translate(-50%,-50%); pointer-events: none; }
-.orbita-uno { width: 105px; height: 105px; animation: orbitaGira 12s linear infinite; }
-.orbita-dos { width: 126px; height: 80px; border-color: rgba(169,216,238,.1); transform: translate(-50%,-50%) rotate(-24deg); animation: orbitaGiraInversa 16s linear infinite; }
-.burbuja-lavadora { position: absolute; z-index: 3; width: 7px; height: 7px; border: 1px solid rgba(223,247,255,.85); border-radius: 50%; background: rgba(169,216,238,.25); box-shadow: 0 0 8px rgba(169,216,238,.55); opacity: 0; animation: burbujaChica 2.8s ease-out infinite; }
-.burbuja-lavadora-1 { left: 8px; top: 40px; animation-delay: .1s; }
-.burbuja-lavadora-2 { right: 7px; top: 52px; width: 5px; height: 5px; animation-delay: .8s; }
-.burbuja-lavadora-3 { left: 24px; top: 12px; width: 4px; height: 4px; animation-delay: 1.5s; }
-.burbuja-lavadora-4 { right: 24px; top: 19px; width: 6px; height: 6px; animation-delay: 2s; }
-.burbuja-lavadora-5 { right: 17px; bottom: 20px; width: 4px; height: 4px; animation-delay: 1.1s; }
-
-.lavadora-animada {
-  width: 108px;
-  height: 108px;
-  z-index: 2;
-  transform-origin: center center;
+.splash-logo-resplandor {
+  position: absolute;
+  width: min(75vw, 360px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 188, 229, 0.38), rgba(42, 106, 190, 0.12) 42%, transparent 70%);
+  filter: blur(12px);
+  animation: splash-resplandor 2.05s ease-out both;
 }
 
-.escena-lavado.activa .lavadora-animada { animation: lavadoraFlota 3.2s ease-in-out infinite; filter: drop-shadow(0 9px 8px rgba(0,0,0,.2)); }
-.escena-lavado.activa .drum-ring { animation: pulsoAro 2.4s ease-in-out infinite; }
-.escena-lavado.activa .agua { animation: chapoteo 1.6s ease-in-out infinite; transform-origin: center; }
-.escena-lavado.activa .agua-2 { animation-delay: -0.5s; animation-duration: 1.9s; }
-
-@keyframes giroSuave {
-  0%   { transform: rotate(0deg); }
-  50%  { transform: rotate(8deg); }
-  100% { transform: rotate(0deg); }
+.splash-logo-contenedor {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(68vw, 300px);
+  min-height: 150px;
+  place-items: center;
+  animation: splash-logo 2.05s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
-@keyframes lavadoraFlota { 0%,100% { transform: translateY(1px) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+
+.splash-logo {
+  display: block;
+  width: 100%;
+  max-height: 30vh;
+  object-fit: contain;
+}
+
+.splash-logo-destello {
+  position: absolute;
+  top: calc(50% + 82px);
+  left: 50%;
+  width: min(76vw, 330px);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(128, 224, 249, 0.8), transparent);
+  animation: splash-destello 1.5s ease-out both;
+}
+
+@keyframes splash-logo {
+  0% { opacity: 0; transform: scale(0.72); }
+  48% { opacity: 1; transform: scale(1.04); }
+  72% { transform: scale(1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes splash-resplandor {
+  0% { opacity: 0; transform: scale(0.45); }
+  48% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.72; transform: scale(1); }
+}
+@keyframes splash-destello {
+  0% { opacity: 0; width: 0; }
+  55% { opacity: 0.9; width: min(76vw, 330px); }
+  100% { opacity: 0; width: min(76vw, 330px); }
+}
 @keyframes fondoRespira { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
 @keyframes tarjetaFlota { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@keyframes auraPulsa { 0%,100% { opacity: .55; transform: scale(.88); } 50% { opacity: 1; transform: scale(1.12); } }
-@keyframes orbitaGira { to { transform: translate(-50%,-50%) rotate(360deg); } }
-@keyframes orbitaGiraInversa { to { transform: translate(-50%,-50%) rotate(-384deg); } }
 @keyframes burbujaSube { 0% { transform: translate3d(0,0,0) scale(.72); opacity: 0; } 12% { opacity: .58; } 75% { opacity: .34; } 100% { transform: translate3d(24px,-115vh,0) scale(1.25); opacity: 0; } }
 @keyframes destelloBrilla { 0%,100% { opacity: 0; transform: scale(.5); } 45%,60% { opacity: .9; transform: scale(1.45); } }
-@keyframes burbujaChica { 0% { opacity: 0; transform: translateY(10px) scale(.6); } 25% { opacity: .9; } 100% { opacity: 0; transform: translateY(-28px) scale(1.25); } }
-@keyframes pulsoAro {
-  0%, 100% { stroke-width: 3; }
-  50%      { stroke-width: 1.5; }
-}
-@keyframes chapoteo {
-  0%, 100% { transform: translateX(-4%) rotate(-3deg); }
-  50%      { transform: translateX(4%) rotate(3deg); }
-}
-
-.sombra-suelo {
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 74px;
-  height: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  border-radius: 50%;
-  z-index: 1;
-}
-.escena-lavado.activa .sombra-suelo { animation: sombraEscala 2.4s ease-in-out infinite; }
-
-@keyframes sombraEscala {
-  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.7; }
-  50%      { transform: translateX(-50%) scale(0.85); opacity: 0.4; }
-}
-
-.check-listo {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 40px;
-  font-weight: 800;
-  color: #3ee08a;
-  animation: popIn 0.25s ease-out;
-}
-
-@keyframes popIn {
-  from { transform: scale(0.5); opacity: 0; }
-  to   { transform: scale(1); opacity: 1; }
-}
 
 .subtitulo { margin: 6px 0 22px; color: #bcd6e8; font-size: 13px; }
 
@@ -525,5 +544,13 @@ onMounted(comprobarConexion)
 @media (max-width: 520px) {
   .burbuja:nth-child(even) { display: none; }
   .splash-wrap { animation-duration: 8s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-logo-resplandor,
+  .splash-logo-contenedor,
+  .splash-logo-destello {
+    animation-duration: 650ms;
+  }
 }
 </style>
