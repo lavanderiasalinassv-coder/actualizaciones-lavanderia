@@ -22,11 +22,12 @@
         <button type="button" class="stat-card stat-top" :class="{ active: vistaClientes === 'top' }" @click="setVistaClientes('top')">
           <span class="stat-icon"><ion-icon :icon="trophyOutline" /></span>
           <span class="stat-label">Top</span>
-          <strong>{{totalClientesTop }}</strong>
+          <strong>10</strong>
         </button>
         <button type="button" class="stat-card stat-reportes" :class="{ active: vistaClientes === 'reportes' }" @click="setVistaClientes('reportes')">
           <span class="stat-icon"><ion-icon :icon="statsChartOutline" /></span>
-          <span class="stat-label">Reportes de clientes</span>
+          <span class="stat-label">Reportes</span>
+          <strong>Clientes</strong>
         </button>
       </div>
 
@@ -143,8 +144,8 @@
             <div class="top-escenario-icon"><ion-icon :icon="trophyOutline" /></div>
             <div>
               <p>Reconocimiento a la fidelidad</p>
-              <h2 id="titulo-top-clientes">Clientes destacados</h2>
-              <span>El podio de quienes más órdenes han realizado</span>
+              <h2 id="titulo-top-clientes">Top 10 clientes</h2>
+              <span>Los 10 clientes con más órdenes realizadas</span>
             </div>
           </header>
 
@@ -171,10 +172,10 @@
         </section>
 
         <h2 v-if="vistaClientes === 'top' && clientesTarjetasPagina.length" class="top-resto-titulo">
-          Otros clientes destacados
+          Puestos 4 al 10
         </h2>
 
-        <div class="clientes-grid clientes-grid-fija">
+        <div class="clientes-grid clientes-grid-fija" :class="{ 'clientes-grid-top': vistaClientes === 'top' }">
           <div
             v-for="(cliente, indice) in clientesTarjetasPagina"
             :key="cliente.id"
@@ -184,6 +185,7 @@
             <span v-if="vistaClientes !== 'top' && claseMedalla(indice)" class="medalla-badge">
               {{ emojiMedalla(indice) }}
             </span>
+            <span v-if="vistaClientes === 'top'" class="top-ranking-badge">#{{ indice + 4 }}</span>
 
             <div class="cliente-header">
               <div class="cliente-avatar">
@@ -211,9 +213,15 @@
                 <span class="resumen-label">ÓRDENES</span>
                 <strong>{{ cliente.totalOrdenes }}</strong>
               </div>
-              <div class="cliente-desde-resumen">
-                <span class="resumen-label">CLIENTE DESDE</span>
-                <strong>{{ formatearFechaCliente(cliente.fechaRegistro) }}</strong>
+              <div class="cliente-fechas-resumen">
+                <div v-if="vistaClientes !== 'top'" class="cliente-ultima-visita-resumen">
+                  <span class="resumen-label">ÚLTIMA VISITA</span>
+                  <strong>{{ cliente.ultimaOrden ? formatearFechaCliente(cliente.ultimaOrden) : 'Sin órdenes' }}</strong>
+                </div>
+                <div class="cliente-desde-resumen">
+                  <span class="resumen-label">CLIENTE DESDE</span>
+                  <strong>{{ formatearFechaCliente(cliente.fechaRegistro) }}</strong>
+                </div>
               </div>
             </div>
 
@@ -279,7 +287,7 @@
         <h3>{{ vistaClientes === 'top' ? 'Aún no hay clientes destacados' : 'No hay clientes registrados' }}</h3>
         <p>
           {{ vistaClientes === 'top'
-            ? 'Los clientes aparecerán aquí al superar las 50 órdenes.'
+            ? 'Los clientes aparecerán aquí al alcanzar las 100 órdenes.'
             : 'Agrega el primer cliente desde aquí o guárdalo desde un pedido.' }}
         </p>
       </div>
@@ -515,17 +523,21 @@ const clientesFiltrados = computed(() => {
       .filter((cliente) => cliente.esRecurrente)
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
   } else if (vistaClientes.value === 'top') {
-    base = base
-      .filter((cliente) => cliente.totalOrdenes > 50)
-      .sort((a, b) =>
-        b.totalOrdenes - a.totalOrdenes ||
-        a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
-      )
+    const ordenados = base.sort((a, b) =>
+      b.totalOrdenes - a.totalOrdenes ||
+      a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+    )
+    const clientesConMinimo = ordenados.filter((cliente) => cliente.totalOrdenes >= MIN_ORDENES_TOP)
+    const idsConMinimo = new Set(clientesConMinimo.map((cliente) => cliente.id))
+    base = [
+      ...clientesConMinimo,
+      ...ordenados.filter((cliente) => !idsConMinimo.has(cliente.id))
+    ]
   } else {
     base.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
   }
 
-  if (vistaClientes.value === 'top') return base.slice(0, 6)
+  if (vistaClientes.value === 'top') return base.slice(0, MAX_CLIENTES_TOP)
 
   return base
 })
@@ -746,6 +758,8 @@ const solicitarOpinionWhatsapp = (cliente: Cliente) => {
 
 /* Paginación de 5 columnas por 8 filas */
 const CLIENTES_POR_PAGINA = 40
+const MAX_CLIENTES_TOP = 10
+const MIN_ORDENES_TOP = 100
 const paginaActual = ref(1)
 
 const posicionGlobal = (indiceEnPagina: number) =>
@@ -780,14 +794,16 @@ const clientesPagina = computed(() => {
 const clientesPodioOrdenados = computed(() => {
   const destacados = clientesFiltrados.value.slice(0, 3)
   return [
-    { cliente: destacados[1], puesto: 2 },
     { cliente: destacados[0], puesto: 1 },
+    { cliente: destacados[1], puesto: 2 },
     { cliente: destacados[2], puesto: 3 }
   ].filter((item): item is { cliente: ClienteConEstado; puesto: number } => Boolean(item.cliente))
 })
 
 const clientesTarjetasPagina = computed(() =>
-  vistaClientes.value === 'top' ? clientesPagina.value.slice(3) : clientesPagina.value
+  vistaClientes.value === 'top'
+    ? clientesFiltrados.value.slice(3, MAX_CLIENTES_TOP)
+    : clientesPagina.value
 )
 
 const paginaAnterior = () => {
@@ -894,10 +910,6 @@ const sumarOrdenes = (cantidad: number) => {
 const reiniciarOrdenes = () => {
   totalOrdenesBorrador.value = 0
 }
-
-const totalClientesTop = computed(() =>
-  (clientesTop.value ?? clientes.value).filter((cliente) => cliente.totalOrdenes > 50).length
-)
 
 const mostrarToast = async (mensaje: string, color: 'success' | 'danger' = 'success') => {
   const toast = await toastController.create({
@@ -1033,29 +1045,6 @@ h3 {
   --stat-accent: #6941a5;
   --stat-tint: #e2d5ff;
   background: linear-gradient(145deg, #f2ebff 0%, #dfd0ff 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-}
-
-.stat-reportes .stat-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
-  font-size: 20px;
-}
-
-.stat-reportes .stat-label {
-  grid-column: auto;
-  grid-row: auto;
-  align-self: center;
-  color: var(--stat-accent);
-  font-size: .78rem;
-  text-align: center;
-  line-height: 1.2;
 }
 
 .reportes-clientes { color: #123a66; }
@@ -1271,6 +1260,11 @@ h3 {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.clientes-grid-top {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row;
+}
+
 .top-escenario {
   position: relative;
   overflow: hidden;
@@ -1400,14 +1394,17 @@ h3 {
 }
 
 .top-podio-item.puesto-1 {
+  order: 2;
   animation-delay: 180ms;
 }
 
 .top-podio-item.puesto-2 {
+  order: 1;
   animation-delay: 80ms;
 }
 
 .top-podio-item.puesto-3 {
+  order: 3;
   animation-delay: 300ms;
 }
 
@@ -1679,6 +1676,22 @@ h3 {
   filter: drop-shadow(0 3px 6px rgba(10, 31, 56, 0.18));
 }
 
+.top-ranking-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eaf2fb;
+  color: #31516e;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
 .medalla-oro {
   --card-accent: #c79a24;
   --card-tint: #fff8e5;
@@ -1799,11 +1812,15 @@ h3 {
 }
 
 .cliente-ordenes-resumen,
-.cliente-desde-resumen {
+.cliente-fechas-resumen,
+.cliente-desde-resumen,
+.cliente-ultima-visita-resumen {
   display: grid;
   min-width: 0;
   gap: 3px;
 }
+
+.cliente-fechas-resumen { gap: 5px; }
 
 .cliente-ordenes-resumen {
   justify-items: center;
@@ -1827,7 +1844,8 @@ h3 {
   line-height: 1;
 }
 
-.cliente-desde-resumen strong {
+.cliente-desde-resumen strong,
+.cliente-ultima-visita-resumen strong {
   overflow: hidden;
   color: #405a73;
   font-size: 0.66rem;
@@ -2341,10 +2359,28 @@ select:focus {
     gap: 10px;
   }
 
+  .clientes-grid-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .cliente-card {
     padding: 14px 12px;
     border-radius: 16px;
     gap: 10px;
+  }
+
+  .clientes-grid-top .cliente-card {
+    padding: 16px 12px 12px;
+  }
+
+  .clientes-grid-top .cliente-header {
+    padding-right: 34px;
+  }
+
+  .clientes-grid-top .cliente-info-head h3 {
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .cliente-header {

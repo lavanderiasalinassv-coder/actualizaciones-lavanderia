@@ -762,6 +762,30 @@ async function migrateHorasAjustadas() {
   }
 }
 
+async function migrateConceptoMovimientoCaja() {
+  try {
+    const [columns] = await pool.query(
+      "SHOW COLUMNS FROM movimientos_caja LIKE 'concepto'",
+    );
+    if (!columns.length) {
+      throw new Error("No se encontró movimientos_caja.concepto.");
+    }
+
+    const type = String(columns[0].Type).toLowerCase();
+    if (!["text", "mediumtext", "longtext"].includes(type)) {
+      await pool.query(
+        "ALTER TABLE movimientos_caja MODIFY COLUMN concepto TEXT NOT NULL",
+      );
+      console.log("✓ Campo de concepto de movimientos de caja ampliado.");
+    }
+  } catch (error) {
+    console.error(
+      "Error durante la migración del concepto de movimientos de caja:",
+      error.message,
+    );
+  }
+}
+
 async function migratePerfilImagen() {
   try {
     const [columns] = await pool.execute(
@@ -878,6 +902,7 @@ app.listen(PORT, async () => {
     ["precisión de inventario", migratePrecisionInventario],
     ["estado listo", migrateEstadoListo],
     ["auditoría de movimientos", migrateOrdenMovimientosAuditoria],
+    ["concepto de movimientos de caja", migrateConceptoMovimientoCaja],
     ["horas ajustadas", migrateHorasAjustadas],
     ["perfil de imagen", migratePerfilImagen],
     ["notificaciones", migrateNotificaciones],

@@ -141,8 +141,11 @@
               </div>
 
               <div v-show="!mostrarAccionesCompactas" class="banner-acciones">
-                <button v-if="!esOperador && !esRecepcionista" class="banner-btn" :disabled="botonesOperativosBloqueados" @click="IrAdeposito">
-                  <ion-icon :icon="businessOutline" />
+                <button v-if="!esOperador && !esRecepcionista" class="banner-btn" :disabled="botonesOperativosBloqueados" :title="hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
+                  <span class="banner-deposito-icono">
+                    <ion-icon :icon="businessOutline" />
+                    <span v-if="hayDepositosPendientes" class="deposito-pendiente-insignia" aria-label="Hay depósitos pendientes">!</span>
+                  </span>
                   <span>Deposito</span>
                 </button>
                 <button v-if="!esOperador" class="banner-btn" :disabled="botonesOperativosBloqueados" @click="abrirModalGasto">
@@ -259,8 +262,11 @@
               </button>
 
               <div v-show="mostrarAccionesCompactas" class="banner-acciones banner-acciones-compactas">
-                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="IrAdeposito">
-                  <ion-icon :icon="businessOutline" />
+                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" :title="hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
+                  <span class="banner-deposito-icono">
+                    <ion-icon :icon="businessOutline" />
+                    <span v-if="hayDepositosPendientes" class="deposito-pendiente-insignia" aria-label="Hay depósitos pendientes">!</span>
+                  </span>
                   <span>Deposito</span>
                 </button>
                 <button v-if="!esOperador" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" @click="abrirModalGasto">
@@ -1676,6 +1682,10 @@ watch(ultimaOrdenCreada, (orden) => {
 const { turno } = useTurno()
 const { registrarGasto, eliminarGasto } = useCajaMovimientos()
 const { registrarCierreTurno, cargarHistorial, historialCierres, eliminarCierre } = useHistorialCierres()
+const hayDepositosPendientes = computed(() => historialCierres.value.some((cierre) =>
+  (!turno.id || cierre.turnoId !== turno.id) &&
+  (!cierre.deposito || cierre.deposito.estado === 'pendiente')
+))
 const { cerrarSesion: cerrarSesionSesion, recargarSesion, rol, usuarioActual, esOperador, esAdministrador } = useSesion()
 const { funcionesBloqueadas } = useAccesoOperativo()
 const {
@@ -2226,6 +2236,12 @@ const revisarAvisosNuevos = async () => {
 onMounted(() => {
   recargarSesion()
   void cargarAvisosIniciales()
+})
+
+onMounted(() => {
+  void cargarHistorial().catch((error) => {
+    console.error('No se pudo cargar el estado de depósitos pendientes:', error)
+  })
   intervaloNotificaciones = setInterval(() => {
     void revisarAvisosNuevos()
   }, 5000)
@@ -3950,6 +3966,28 @@ ion-content.shell-container {
 
 .banner-btn ion-icon {
   font-size: 18px;
+}
+
+.banner-deposito-icono {
+  position: relative;
+  display: inline-flex;
+}
+
+.deposito-pendiente-insignia {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #08101c;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .banner-btn-perfil img {

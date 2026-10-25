@@ -184,9 +184,13 @@
             <textarea id="motivo-diferencia" v-model="motivoDiferencia" rows="3" placeholder="Ej: se dejó efectivo para cambio"></textarea>
           </div>
 
+          <p v-if="esError && mensaje" class="mensaje error" role="alert">{{ mensaje }}</p>
+
           <div class="revision-acciones">
             <button type="button" class="revision-secundario" @click="cerrarRevision">Revisar después</button>
-            <button type="button" class="revision-primario" :disabled="!puedeConfirmarRevision" @click="confirmarRevision">Guardar revisión</button>
+            <button type="button" class="revision-primario" :disabled="!puedeConfirmarRevision || guardandoRevision" @click="confirmarRevision">
+              {{ guardandoRevision ? 'Guardando...' : 'Guardar revisión' }}
+            </button>
           </div>
         </div>
       </ion-modal>
@@ -221,6 +225,7 @@ const cierresDelDepositoEditado = ref<string[]>([])
 const comprobanteUrl = ref('')
 const subiendoComprobante = ref(false)
 const mostrarRevision = ref(false)
+const guardandoRevision = ref(false)
 const cargandoDepositos = ref(false)
 const guardandoDeposito = ref(false)
 let cargaInicialTerminada = false
@@ -405,47 +410,56 @@ const cerrarRevision = () => {
 }
 
 const confirmarRevision = async () => {
+  if (guardandoRevision.value) return
+  guardandoRevision.value = true
   const montoReal = revisionResultado.value === 'diferente' ? Number(montoDepositadoReal.value) : montoRevision.value
   const pendientes = cierresPendientesDeposito.value
-  
-  // Si el resultado es depositado o diferente, registrar el depósito
-  if (revisionResultado.value === 'depositado' || revisionResultado.value === 'diferente') {
-    const conceptoBase = revisionResultado.value === 'diferente' 
-      ? `Depósito a banco (diferencia: ${motivoDiferencia.value.trim()})`
-      : 'Depósito a banco'
-    const concepto = `${conceptoBase} [CIERRES:${pendientes.map((cierre) => cierre.id).join(',')}]`
-    
-    const deposito = await registrarDeposito({
-      monto: montoReal,
-      concepto: concepto,
-      comprobanteUrl: undefined
-    })
-    if (!deposito) {
-      mensaje.value = 'No se pudo registrar el depósito. Los cierres siguen pendientes.'
-      esError.value = true
-      return
-    }
-  }
-  
-  for (const cierre of pendientes) {
-    const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja/${cierre.id}/deposito`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        estado: revisionResultado.value,
+
+  try {
+    if (revisionResultado.value === 'depositado' || revisionResultado.value === 'diferente') {
+      const conceptoBase = revisionResultado.value === 'diferente'
+        ? `Depósito a banco (diferencia: ${motivoDiferencia.value.trim()})`
+        : 'Depósito a banco'
+      const concepto = `${conceptoBase} [CIERRES:${pendientes.map((cierre) => cierre.id).join(',')}]`
+
+      const deposito = await registrarDeposito({
         monto: montoReal,
-        motivo: motivoDiferencia.value.trim()
+        concepto,
+        comprobanteUrl: undefined
       })
-    })
-    if (!respuesta.ok) {
-      const datos = await respuesta.json().catch(() => null)
-      mensaje.value = datos?.error ?? 'No se pudo actualizar el estado de un cierre.'
-      esError.value = true
-      return
+      if (!deposito) {
+        mensaje.value = 'No se pudo registrar el depósito. Los cierres siguen pendientes.'
+        esError.value = true
+        return
+      }
     }
+
+    for (const cierre of pendientes) {
+      const respuesta = await fetch(`${getApiBaseUrl()}/cierres-caja/${cierre.id}/deposito`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estado: revisionResultado.value,
+          monto: montoReal,
+          motivo: motivoDiferencia.value.trim()
+        })
+      })
+      if (!respuesta.ok) {
+        const datos = await respuesta.json().catch(() => null)
+        mensaje.value = datos?.error ?? 'No se pudo actualizar el estado de un cierre.'
+        esError.value = true
+        return
+      }
+    }
+
+    await cargarHistorial()
+    mostrarRevision.value = false
+  } catch (error) {
+    mensaje.value = error instanceof Error ? error.message : 'No se pudo guardar la revisión.'
+    esError.value = true
+  } finally {
+    guardandoRevision.value = false
   }
-  await cargarHistorial()
-  mostrarRevision.value = false
 }
 </script>
 

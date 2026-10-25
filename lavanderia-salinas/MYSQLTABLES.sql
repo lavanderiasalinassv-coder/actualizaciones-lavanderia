@@ -225,7 +225,7 @@ CREATE TABLE `movimientos_caja` (
   `id` char(36) NOT NULL,
   `tipo` enum('gasto','deposito','cierre') NOT NULL,
   `monto` decimal(12,2) NOT NULL,
-  `concepto` varchar(255) NOT NULL,
+  `concepto` text NOT NULL,
   `turno_id` varchar(80) NOT NULL,
   `numero_caja` int NOT NULL DEFAULT '0',
   `usuario` varchar(150) NOT NULL DEFAULT '',
