@@ -24,9 +24,13 @@
           <span class="stat-label">Top</span>
           <strong>{{totalClientesTop }}</strong>
         </button>
+        <button type="button" class="stat-card stat-reportes" :class="{ active: vistaClientes === 'reportes' }" @click="setVistaClientes('reportes')">
+          <span class="stat-icon"><ion-icon :icon="statsChartOutline" /></span>
+          <span class="stat-label">Reportes de clientes</span>
+        </button>
       </div>
 
-      <div v-if="vistaClientes !== 'top'" class="search-bar">
+      <div v-if="vistaClientes !== 'top' && vistaClientes !== 'reportes'" class="search-bar">
         <ion-icon :icon="searchOutline" />
         <input v-model="busqueda" type="text" placeholder="Buscar cliente..." />
       </div>
@@ -36,7 +40,89 @@
         <p>Cargando clientes...</p>
       </div>
 
-      <div v-else-if="clientesFiltrados.length" class="clientes-paginado">
+      <section v-else-if="vistaClientes === 'reportes'" class="reportes-clientes">
+        <div v-if="cargandoReportes" class="loading-state"><div class="spinner"></div><p>Preparando reportes...</p></div>
+        <div v-else class="reportes-bandeja">
+          <aside class="reportes-resumen">
+            <div class="reportes-resumen-titulo">
+              <span>REPORTES</span>
+              <h2>Clientes a contactar</h2>
+            </div>
+            <div class="dona-reportes" :style="{ background: fondoDona }" role="img" :aria-label="`${totalPorContactar} clientes por contactar de ${estadisticas.totalClientes}`">
+              <div class="dona-reportes-centro"><strong>{{ totalPorContactar }}</strong><span>por contactar</span></div>
+            </div>
+            <ul class="leyenda-reportes">
+              <li v-for="segmento in segmentosDona" :key="segmento.clave">
+                <span class="leyenda-punto" :style="{ background: segmento.color }"></span>
+                <span>{{ segmento.nombre }}</span>
+                <strong>{{ segmento.total }}</strong>
+              </li>
+            </ul>
+            <button v-if="posiblesDuplicados.length || calculandoDuplicados" type="button" class="btn-duplicados-reportes" :disabled="calculandoDuplicados" @click="abrirModalDuplicados">
+              <span v-if="calculandoDuplicados" class="spinner-duplicados" aria-hidden="true"></span>
+              <ion-icon v-else :icon="peopleOutline" />
+              {{ calculandoDuplicados ? 'Buscando duplicados...' : 'Revisar posibles duplicados' }}
+            </button>
+            <button type="button" class="btn-refrescar-reportes" :disabled="cargandoReportes" @click="actualizarReportes">
+              <ion-icon :icon="refreshOutline" :class="{ refrescando: cargandoReportes }" />
+              {{ cargandoReportes ? 'Actualizando...' : 'Refrescar datos' }}
+            </button>
+          </aside>
+
+          <div class="reportes-contactos">
+            <nav class="pestanas-reportes" aria-label="Categorías de reportes">
+              <button type="button" :class="{ activa: pestanaReporte === 'inactivos' }" :aria-pressed="pestanaReporte === 'inactivos'" @click="cambiarPestanaReporte('inactivos')">
+                <span class="pestana-reporte-titulo">Sin actividad <strong>{{ clientesInactivos.length }}</strong></span>
+                <small>Última orden hace más de un mes</small>
+              </button>
+              <button type="button" :class="{ activa: pestanaReporte === 'unaOrden' }" :aria-pressed="pestanaReporte === 'unaOrden'" @click="cambiarPestanaReporte('unaOrden')">
+                <span class="pestana-reporte-titulo">Una orden <strong>{{ clientesUnaOrden.length }}</strong></span>
+                <small>Solo una orden registrada</small>
+              </button>
+              <button type="button" :class="{ activa: pestanaReporte === 'sinOrdenes' }" :aria-pressed="pestanaReporte === 'sinOrdenes'" @click="cambiarPestanaReporte('sinOrdenes')">
+                <span class="pestana-reporte-titulo">Sin órdenes <strong>{{ clientesSinOrdenes.length }}</strong></span>
+                <small>Aún no han realizado una orden</small>
+              </button>
+            </nav>
+
+            <label class="busqueda-reporte">
+              <ion-icon :icon="searchOutline" aria-hidden="true" />
+              <input v-model="busquedaReporte" type="search" placeholder="Buscar por nombre..." :aria-label="`Buscar en ${nombrePestanaReporte}`" />
+              <button v-if="busquedaReporte" type="button" aria-label="Limpiar búsqueda" @click="busquedaReporte = ''">×</button>
+            </label>
+
+            <div v-if="listaReporteActiva.length" class="lista-contactos-reporte">
+              <article v-for="cliente in listaReporteActiva" :key="cliente.id" class="contacto-reporte">
+                <span class="contacto-reporte-avatar">{{ inicialesCliente(cliente.nombre) }}</span>
+                <div class="contacto-reporte-datos">
+                  <strong>{{ cliente.nombre }}</strong>
+                  <span v-if="pestanaReporte === 'inactivos'">Última visita hace {{ diasDesde(cliente.ultimaOrden || null) }} días · {{ cliente.totalOrdenes }} órdenes</span>
+                  <span v-else-if="pestanaReporte === 'unaOrden'">Cliente desde {{ formatearFechaCliente(cliente.fechaRegistro) }} · 1 orden</span>
+                  <span v-else>Registrado {{ formatearFechaCliente(cliente.fechaRegistro) }} · 0 órdenes</span>
+                </div>
+                <button type="button" class="contacto-reporte-whatsapp" :aria-label="`Solicitar opinión a ${cliente.nombre} por WhatsApp`" :disabled="!telefonoWhatsAppCliente(cliente)" @click="solicitarOpinionWhatsapp(cliente)">
+                  <ion-icon :icon="logoWhatsapp" />
+                  <span>Escribir por WhatsApp</span>
+                </button>
+              </article>
+            </div>
+            <p v-else class="vacio-reporte-contactos">{{ busquedaReporte.trim() ? 'No hay coincidencias con ese nombre.' : 'No hay clientes en este grupo.' }}</p>
+
+            <footer class="pie-lista-reportes">
+              <span>Mostrando {{ listaReporteActiva.length }} de {{ totalReporteFiltrado }}</span>
+              <button v-if="!busquedaReporte.trim() && listaReporteActiva.length < totalReporteFiltrado" type="button" @click="mostrarMasReporte(pestanaReporte)">Cargar 50 más</button>
+            </footer>
+          </div>
+        </div>
+      </section>
+
+      <div
+        v-else-if="clientesFiltrados.length"
+        class="clientes-paginado"
+        @pointerdown="iniciarSwipePaginaClientes"
+        @pointerup="finalizarSwipePaginaClientes"
+        @pointercancel="cancelarSwipePaginaClientes"
+      >
         <section v-if="vistaClientes === 'top'" class="top-escenario" aria-labelledby="titulo-top-clientes">
           <div class="top-confeti" aria-hidden="true">
             <span
@@ -132,6 +218,17 @@
             </div>
 
             <div v-if="vistaClientes !== 'top'" class="cliente-acciones">
+              <ion-button
+                v-if="clienteTieneOrdenFinalizada(cliente)"
+                fill="clear"
+                class="btn-icon btn-icon-whatsapp"
+                :aria-label="`Solicitar opinión a ${cliente.nombre} por WhatsApp`"
+                title="Solicitar opinión por WhatsApp"
+                :disabled="!telefonoWhatsAppCliente(cliente)"
+                @click="solicitarOpinionWhatsapp(cliente)"
+              >
+                <ion-icon :icon="logoWhatsapp" />
+              </ion-button>
               <ion-button
                 fill="clear"
                 class="btn-icon"
@@ -234,6 +331,30 @@
       </div>
     </ion-modal>
 
+    <ion-modal class="modal-clientes modal-duplicados" :is-open="mostrarModalDuplicados" @didDismiss="mostrarModalDuplicados = false">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Revisión de datos</p>
+            <h2>Posibles clientes duplicados</h2>
+          </div>
+          <button type="button" class="modal-close" aria-label="Cerrar" @click="mostrarModalDuplicados = false"><ion-icon :icon="closeOutline" /></button>
+        </div>
+        <div v-if="calculandoDuplicados" class="loading-state carga-duplicados"><div class="spinner"></div><p>Comparando datos de clientes...</p></div>
+        <div v-else-if="posiblesDuplicados.length" class="duplicados-lista">
+          <article v-for="par in posiblesDuplicados" :key="`${par.clienteA.id}-${par.clienteB.id}`" class="duplicado-par">
+            <div class="duplicado-comparacion">
+              <div class="duplicado-cliente"><strong>{{ par.clienteA.nombre }}</strong><span>{{ par.clienteA.celular || 'Sin teléfono' }} · {{ par.clienteA.totalOrdenes }} órdenes</span><small>{{ par.clienteA.correo || 'Sin correo' }}</small><button type="button" :disabled="eliminandoDuplicadoId !== null" @click="eliminarClienteDuplicado(par, par.clienteA)">{{ eliminandoDuplicadoId === par.clienteA.id ? 'Eliminando...' : 'Eliminar este registro' }}</button></div>
+              <span class="duplicado-vs">VS</span>
+              <div class="duplicado-cliente"><strong>{{ par.clienteB.nombre }}</strong><span>{{ par.clienteB.celular || 'Sin teléfono' }} · {{ par.clienteB.totalOrdenes }} órdenes</span><small>{{ par.clienteB.correo || 'Sin correo' }}</small><button type="button" :disabled="eliminandoDuplicadoId !== null" @click="eliminarClienteDuplicado(par, par.clienteB)">{{ eliminandoDuplicadoId === par.clienteB.id ? 'Eliminando...' : 'Eliminar este registro' }}</button></div>
+            </div>
+            <div class="duplicado-accion">Coincidencia detectada: {{ par.motivo }}. Se recomienda conservar el registro con más órdenes.</div>
+          </article>
+        </div>
+        <p v-else class="vacio-reporte-contactos">No encontramos posibles duplicados con coincidencias claras.</p>
+      </div>
+    </ion-modal>
+
     <ion-modal
       class="modal-clientes modal-contador-ordenes"
       :is-open="Boolean(clienteContadorSeleccionado)"
@@ -284,9 +405,10 @@ import {
   IonButton,
   IonIcon,
   IonModal,
+  onIonViewWillEnter,
   toastController
 } from '@ionic/vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   personAddOutline,
   personCircleOutline,
@@ -301,7 +423,10 @@ import {
   chevronBackOutline,
   chevronForwardOutline,
   receiptOutline,
-  trophyOutline
+  trophyOutline,
+  statsChartOutline,
+  logoWhatsapp,
+  refreshOutline
 } from 'ionicons/icons'
 import {
   agregarCliente,
@@ -309,12 +434,14 @@ import {
   eliminarCliente,
   actualizarTotalOrdenesCliente,
   obtenerClientesConEstado,
+  buscarClientes,
   obtenerEstadísticasClientes,
   recargarClientes,
   type Cliente,
   type ClienteConEstado
 } from '@/composables/useClientes'
 import { formatearFechaCentroamerica } from '@/composables/useFechas'
+import { useOrdenes, type Orden } from '@/composables/useOrdenes'
 
 const clientes = ref<ClienteConEstado[]>([])
 const cargandoClientes = ref(true)
@@ -322,8 +449,21 @@ const mostrarFormulario = ref(false)
 const modoEdicion = ref(false)
 const clienteEditandoId = ref<string | null>(null)
 const busqueda = ref('')
+const resultadosBusqueda = ref<ClienteConEstado[] | null>(null)
+const clientesTop = ref<ClienteConEstado[] | null>(null)
+const clientesReportes = ref<ClienteConEstado[] | null>(null)
+const cargandoReportes = ref(false)
+const LIMITE_INICIAL_REPORTE = 50
+const limitesReportes = ref({ inactivos: LIMITE_INICIAL_REPORTE, unaOrden: LIMITE_INICIAL_REPORTE, sinOrdenes: LIMITE_INICIAL_REPORTE })
+const pestanaReporte = ref<'inactivos' | 'unaOrden' | 'sinOrdenes'>('inactivos')
+const busquedaReporte = ref('')
+const mostrarModalDuplicados = ref(false)
+const posiblesDuplicados = ref<Array<{ clienteA: ClienteConEstado; clienteB: ClienteConEstado; motivo: string }>>([])
+const calculandoDuplicados = ref(false)
+const eliminandoDuplicadoId = ref<string | null>(null)
 const estadisticas = ref({ totalClientes: 0, clientesRecurrentes: 0, clientesNuevos: 0, totalOrdenes: 0 })
-const vistaClientes = ref<'todos' | 'recurrentes' | 'top'>('todos')
+const vistaClientes = ref<'todos' | 'recurrentes' | 'top' | 'reportes'>('todos')
+const { ordenes, cargarOrdenes } = useOrdenes()
 const clienteContadorSeleccionado = ref<ClienteConEstado | null>(null)
 const totalOrdenesBorrador = ref(0)
 const guardandoContador = ref(false)
@@ -338,6 +478,8 @@ const confetiPodio = Array.from({ length: 28 }, (_, indice) => ({
 }))
 const formatearFechaCliente = (fecha: string | null) =>
   formatearFechaCentroamerica(fecha, { day: '2-digit', month: 'short', year: 'numeric' })
+const inicialesCliente = (nombre: string) =>
+  nombre.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0] || '').join('').toUpperCase() || '?'
 
 const form = ref({
   nombre: '',
@@ -346,8 +488,8 @@ const form = ref({
   codigoPais: '503'
 })
 
-const cargarClientes = async () => {
-  cargandoClientes.value = true
+const cargarClientes = async (mostrarCarga = true) => {
+  if (mostrarCarga) cargandoClientes.value = true
   try {
     // Ejecutar ambas llamadas en paralelo para mejorar velocidad
     await Promise.all([
@@ -356,12 +498,18 @@ const cargarClientes = async () => {
     ])
     clientes.value = obtenerClientesConEstado()
   } finally {
-    cargandoClientes.value = false
+    if (mostrarCarga) cargandoClientes.value = false
   }
 }
 
 const clientesFiltrados = computed(() => {
-  let base = [...clientes.value]
+  const q = busqueda.value.trim()
+  const fuente = vistaClientes.value === 'top' && clientesTop.value !== null
+    ? clientesTop.value
+    : q && resultadosBusqueda.value !== null
+      ? resultadosBusqueda.value
+      : clientes.value
+  let base = [...fuente]
   if (vistaClientes.value === 'recurrentes') {
     base = base
       .filter((cliente) => cliente.esRecurrente)
@@ -379,21 +527,221 @@ const clientesFiltrados = computed(() => {
 
   if (vistaClientes.value === 'top') return base.slice(0, 6)
 
-  const q = busqueda.value.trim().toLowerCase()
-  const filtrados = q
-    ? base.filter((cliente) =>
-        cliente.nombre.toLowerCase().includes(q) ||
-        cliente.celular.toLowerCase().includes(q) ||
-        (cliente.correo ?? '').toLowerCase().includes(q)
-      )
-    : base
-
-  return filtrados
+  return base
 })
 
-const setVistaClientes = (vista: 'todos' | 'recurrentes' | 'top') => {
+const setVistaClientes = async (vista: 'todos' | 'recurrentes' | 'top' | 'reportes') => {
   vistaClientes.value = vista
   busqueda.value = ''
+  if (vista === 'top' && clientesTop.value === null) {
+    clientesTop.value = await buscarClientes('')
+  }
+  if (vista === 'reportes' && clientesReportes.value === null) await actualizarReportes()
+}
+
+const actualizarReportes = async () => {
+  if (cargandoReportes.value) return
+  cargandoReportes.value = true
+  try {
+    const [lista, stats] = await Promise.all([buscarClientes(''), obtenerEstadísticasClientes()])
+    clientesReportes.value = lista
+    estadisticas.value = stats
+    limitesReportes.value = {
+      inactivos: LIMITE_INICIAL_REPORTE,
+      unaOrden: LIMITE_INICIAL_REPORTE,
+      sinOrdenes: LIMITE_INICIAL_REPORTE
+    }
+    await nextTick()
+    calcularPosiblesDuplicados()
+  } finally {
+    cargandoReportes.value = false
+  }
+}
+
+const clientesInactivos = computed(() => {
+  const limite = new Date()
+  limite.setMonth(limite.getMonth() - 1)
+  return (clientesReportes.value ?? [])
+    .filter((cliente) => cliente.totalOrdenes > 0 && cliente.ultimaOrden && new Date(cliente.ultimaOrden).getTime() < limite.getTime())
+    .sort((a, b) => new Date(a.ultimaOrden || 0).getTime() - new Date(b.ultimaOrden || 0).getTime())
+})
+const clientesUnaOrden = computed(() => (clientesReportes.value ?? []).filter((cliente) => cliente.totalOrdenes === 1))
+const clientesSinOrdenes = computed(() => (clientesReportes.value ?? []).filter((cliente) => cliente.totalOrdenes === 0))
+const clientesInactivosVisibles = computed(() => clientesInactivos.value.slice(0, limitesReportes.value.inactivos))
+const clientesUnaOrdenVisibles = computed(() => clientesUnaOrden.value.slice(0, limitesReportes.value.unaOrden))
+const clientesSinOrdenesVisibles = computed(() => clientesSinOrdenes.value.slice(0, limitesReportes.value.sinOrdenes))
+const mostrarMasReporte = (grupo: keyof typeof limitesReportes.value) => {
+  limitesReportes.value[grupo] += LIMITE_INICIAL_REPORTE
+}
+const normalizarDatoDuplicado = (dato: string) => dato.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').replace(/[^a-z0-9]/g, '')
+const similitudNombre = (a: string, b: string) => {
+  const x = normalizarDatoDuplicado(a)
+  const y = normalizarDatoDuplicado(b)
+  if (!x || !y) return 0
+  const fila = Array.from({ length: y.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= x.length; i++) {
+    let diagonal = fila[0]
+    fila[0] = i
+    for (let j = 1; j <= y.length; j++) {
+      const anterior = fila[j]
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, diagonal + (x[i - 1] === y[j - 1] ? 0 : 1))
+      diagonal = anterior
+    }
+  }
+  return 1 - fila[y.length] / Math.max(x.length, y.length)
+}
+const calcularPosiblesDuplicados = () => {
+  const lista = clientesReportes.value ?? []
+  const pares: typeof posiblesDuplicados.value = []
+  const datos = lista.map((cliente) => ({
+    cliente,
+    nombre: normalizarDatoDuplicado(cliente.nombre),
+    telefono: normalizarDatoDuplicado(cliente.celular || ''),
+    correo: normalizarDatoDuplicado(cliente.correo || '')
+  }))
+  for (let i = 0; i < lista.length; i++) {
+    for (let j = i + 1; j < lista.length; j++) {
+      const a = lista[i]
+      const b = lista[j]
+      const datoA = datos[i]
+      const datoB = datos[j]
+      const telA = datoA.telefono
+      const telB = datoB.telefono
+      const correoA = datoA.correo
+      const correoB = datoB.correo
+      const telefonoIgual = telA.length >= 7 && telB.length >= 7 && (telA === telB || telA.slice(-8) === telB.slice(-8))
+      const correoIgual = correoA.length > 4 && correoA === correoB
+      const nombresCandidatos = datoA.nombre.length > 0 && datoB.nombre.length > 0 &&
+        (datoA.nombre.slice(0, 3) === datoB.nombre.slice(0, 3) || datoA.nombre.startsWith(datoB.nombre) || datoB.nombre.startsWith(datoA.nombre))
+      const nombreScore = nombresCandidatos ? similitudNombre(a.nombre, b.nombre) : 0
+      if (telefonoIgual || correoIgual || nombreScore >= 0.86) {
+        const motivo = [telefonoIgual && 'teléfono', correoIgual && 'correo', nombreScore >= 0.86 && `nombre similar (${Math.round(nombreScore * 100)}%)`].filter(Boolean).join(' y ')
+        pares.push({ clienteA: a, clienteB: b, motivo })
+      }
+    }
+  }
+  posiblesDuplicados.value = pares.sort((a, b) => Math.max(b.clienteA.totalOrdenes, b.clienteB.totalOrdenes) - Math.max(a.clienteA.totalOrdenes, a.clienteB.totalOrdenes))
+}
+const abrirModalDuplicados = async () => {
+  mostrarModalDuplicados.value = true
+  calculandoDuplicados.value = true
+  await nextTick()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  calcularPosiblesDuplicados()
+  calculandoDuplicados.value = false
+}
+const eliminarClienteDuplicado = async (
+  par: { clienteA: ClienteConEstado; clienteB: ClienteConEstado; motivo: string },
+  eliminar: ClienteConEstado
+) => {
+  const conservar = par.clienteA.id === eliminar.id ? par.clienteB : par.clienteA
+  if (!window.confirm(`¿Eliminar a ${eliminar.nombre} (${eliminar.totalOrdenes} órdenes) y conservar a ${conservar.nombre} (${conservar.totalOrdenes} órdenes)? Esta acción no se puede deshacer.`)) return
+  eliminandoDuplicadoId.value = eliminar.id
+  try {
+    await eliminarCliente(eliminar.id)
+    if (clientesReportes.value) clientesReportes.value = clientesReportes.value.filter((cliente) => cliente.id !== eliminar.id)
+    posiblesDuplicados.value = posiblesDuplicados.value.filter((item) => item.clienteA.id !== eliminar.id && item.clienteB.id !== eliminar.id)
+    estadisticas.value = await obtenerEstadísticasClientes()
+    await mostrarToast(`Se eliminó ${eliminar.nombre}. Se conservó ${conservar.nombre}.`)
+  } catch (error: unknown) {
+    await mostrarToast(error instanceof Error ? error.message : 'No se pudo eliminar el cliente.', 'danger')
+  } finally {
+    eliminandoDuplicadoId.value = null
+  }
+}
+const cambiarPestanaReporte = (grupo: typeof pestanaReporte.value) => {
+  pestanaReporte.value = grupo
+  busquedaReporte.value = ''
+  limitesReportes.value[grupo] = LIMITE_INICIAL_REPORTE
+}
+const nombrePestanaReporte = computed(() => ({
+  inactivos: 'Sin actividad',
+  unaOrden: 'Una orden',
+  sinOrdenes: 'Sin órdenes'
+}[pestanaReporte.value]))
+const clientesReporteActivos = computed(() => {
+  if (pestanaReporte.value === 'inactivos') return clientesInactivos.value
+  if (pestanaReporte.value === 'unaOrden') return clientesUnaOrden.value
+  return clientesSinOrdenes.value
+})
+const clientesReporteFiltrados = computed(() => {
+  const consulta = busquedaReporte.value.trim().toLocaleLowerCase('es')
+  return consulta
+    ? clientesReporteActivos.value.filter((cliente) => cliente.nombre.toLocaleLowerCase('es').includes(consulta))
+    : clientesReporteActivos.value
+})
+const totalReporteFiltrado = computed(() => clientesReporteFiltrados.value.length)
+const listaReporteActiva = computed(() => {
+  if (busquedaReporte.value.trim()) return clientesReporteFiltrados.value
+  return clientesReporteFiltrados.value.slice(0, limitesReportes.value[pestanaReporte.value])
+})
+const segmentosDona = computed(() => {
+  const sinOrdenesIds = new Set(clientesSinOrdenes.value.map((cliente) => cliente.id))
+  const inactivosUnicos = clientesInactivos.value.filter((cliente) => !sinOrdenesIds.has(cliente.id))
+  const idsYaContados = new Set([...sinOrdenesIds, ...inactivosUnicos.map((cliente) => cliente.id)])
+  const unaOrdenUnicos = clientesUnaOrden.value.filter((cliente) => !idsYaContados.has(cliente.id))
+  const sinOrdenes = sinOrdenesIds.size
+  const inactivos = inactivosUnicos.length
+  const unaOrden = unaOrdenUnicos.length
+  const activos = Math.max(0, estadisticas.value.totalClientes - sinOrdenes - inactivos - unaOrden)
+  return [
+    { clave: 'inactivos', nombre: 'Sin actividad', total: inactivos, color: '#f59e0b' },
+    { clave: 'unaOrden', nombre: 'Una orden', total: unaOrden, color: '#3b82f6' },
+    { clave: 'sinOrdenes', nombre: 'Sin órdenes', total: sinOrdenes, color: '#8b5cf6' },
+    { clave: 'activos', nombre: 'Activos', total: activos, color: '#cbd5e1' }
+  ]
+})
+const totalPorContactar = computed(() => segmentosDona.value
+  .filter((segmento) => segmento.clave !== 'activos')
+  .reduce((total, segmento) => total + segmento.total, 0)
+)
+const fondoDona = computed(() => {
+  const total = estadisticas.value.totalClientes
+  if (!total) return 'conic-gradient(#cbd5e1 0% 100%)'
+  let acumulado = 0
+  const paradas = segmentosDona.value.map((segmento, indice) => {
+    const inicio = acumulado
+    acumulado += (segmento.total / total) * 100
+    const fin = indice === segmentosDona.value.length - 1 ? 100 : acumulado
+    return `${segmento.color} ${inicio}% ${fin}%`
+  })
+  return `conic-gradient(${paradas.join(', ')})`
+})
+const diasDesde = (fecha: string | null) => {
+  if (!fecha) return 0
+  const partes = fecha.slice(0, 10).split('-').map(Number)
+  if (partes.length !== 3 || partes.some((parte) => !Number.isFinite(parte))) return 0
+  const fechaVisita = new Date(partes[0], partes[1] - 1, partes[2])
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((hoy.getTime() - fechaVisita.getTime()) / 86400000))
+}
+const normalizarTelefono = (telefono: string) => telefono.replace(/\D/g, '')
+const telefonoWhatsAppCliente = (cliente: Cliente) => normalizarTelefono(cliente.celular || '')
+const telefonosDeOrdenesFinalizadas = computed(() => {
+  const telefonos = new Set<string>()
+  ordenes.value.forEach((orden: Orden) => {
+    if (orden.estado !== 'entregado' && orden.estado !== 'cerrada') return
+    const telefonosOrden = [orden.telefono, `${orden.codigoPais || ''}${orden.telefono || ''}`]
+    telefonosOrden.forEach((valor) => {
+      const telefono = normalizarTelefono(valor || '')
+      if (telefono.length >= 7) {
+        telefonos.add(telefono)
+        telefonos.add(telefono.slice(-8))
+      }
+    })
+  })
+  return telefonos
+})
+const clienteTieneOrdenFinalizada = (cliente: Cliente) => {
+  const telefono = telefonoWhatsAppCliente(cliente)
+  return telefono.length >= 7 && telefonosDeOrdenesFinalizadas.value.has(telefono.slice(-8))
+}
+const solicitarOpinionWhatsapp = (cliente: Cliente) => {
+  const phone = telefonoWhatsAppCliente(cliente)
+  if (!phone) return
+  const message = 'Le saludamos de Lavandería Salinas 🫧\n\nEsperamos que se encuentre muy bien 😊\n\nNos gustaría saber si todo ha estado en orden con el servicio que adquirió. Su opinión es muy valiosa para nosotros, ya que nos permite seguir mejorando y ofrecerle siempre la mejor atención.\n\nSi tiene algún comentario o consulta, no dude en comunicarse con nosotros. Estaremos encantados de atenderle.\n\n¡Gracias por confiar en nosotros! 🙏'
+  window.dispatchEvent(new CustomEvent('whatsapp-compose', { detail: { phone, message } }))
 }
 
 /* Paginación de 5 columnas por 8 filas */
@@ -450,12 +798,52 @@ const paginaSiguiente = () => {
   if (paginaActual.value < totalPaginas.value) paginaActual.value += 1
 }
 
-watch([busqueda, vistaClientes], () => {
+const swipePaginaClientes = ref<{ pointerId: number; x: number; y: number } | null>(null)
+const iniciarSwipePaginaClientes = (event: PointerEvent) => {
+  if (event.pointerType === 'mouse' || totalPaginas.value <= 1) return
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('button, ion-button, a, input, textarea, select, [data-no-swipe]')) return
+  swipePaginaClientes.value = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+  if (event.currentTarget instanceof HTMLElement) event.currentTarget.setPointerCapture(event.pointerId)
+}
+const cancelarSwipePaginaClientes = () => {
+  swipePaginaClientes.value = null
+}
+const finalizarSwipePaginaClientes = (event: PointerEvent) => {
+  const gesto = swipePaginaClientes.value
+  if (!gesto || gesto.pointerId !== event.pointerId) return
+  swipePaginaClientes.value = null
+  const desplazamientoX = event.clientX - gesto.x
+  const desplazamientoY = event.clientY - gesto.y
+  if (Math.abs(desplazamientoX) < 60 || Math.abs(desplazamientoX) < Math.abs(desplazamientoY) * 1.3) return
+  event.preventDefault()
+  if (desplazamientoX < 0) paginaSiguiente()
+  else paginaAnterior()
+}
+
+let temporizadorBusquedaClientes: ReturnType<typeof setTimeout> | undefined
+let tokenBusquedaClientes = 0
+watch([busqueda, vistaClientes], ([termino]) => {
   paginaActual.value = 1
+  if (temporizadorBusquedaClientes) clearTimeout(temporizadorBusquedaClientes)
+  const consulta = termino.trim()
+  const token = ++tokenBusquedaClientes
+  if (!consulta) {
+    resultadosBusqueda.value = null
+    return
+  }
+  resultadosBusqueda.value = []
+  temporizadorBusquedaClientes = setTimeout(async () => {
+    const resultados = await buscarClientes(consulta)
+    if (token === tokenBusquedaClientes) resultadosBusqueda.value = resultados
+  }, 180)
 })
 
-onMounted(() => {
-  cargarClientes()
+onIonViewWillEnter(() => {
+  if (vistaClientes.value !== 'reportes') {
+    void cargarClientes()
+    void cargarOrdenes()
+  }
 })
 
 const abrirFormulario = () => {
@@ -508,7 +896,7 @@ const reiniciarOrdenes = () => {
 }
 
 const totalClientesTop = computed(() =>
-  clientes.value.filter((cliente) => cliente.totalOrdenes > 50).length
+  (clientesTop.value ?? clientes.value).filter((cliente) => cliente.totalOrdenes > 50).length
 )
 
 const mostrarToast = async (mensaje: string, color: 'success' | 'danger' = 'success') => {
@@ -637,9 +1025,119 @@ h3 {
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 11px;
 }
+
+.stat-reportes {
+  --stat-accent: #6941a5;
+  --stat-tint: #e2d5ff;
+  background: linear-gradient(145deg, #f2ebff 0%, #dfd0ff 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.stat-reportes .stat-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  font-size: 20px;
+}
+
+.stat-reportes .stat-label {
+  grid-column: auto;
+  grid-row: auto;
+  align-self: center;
+  color: var(--stat-accent);
+  font-size: .78rem;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.reportes-clientes { color: #123a66; }
+.reportes-bandeja { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 660px; overflow: hidden; border: 1px solid #e1e8ef; border-radius: 18px; background: #f8fafc; box-shadow: 0 8px 26px rgba(10, 31, 56, .07); }
+.reportes-resumen { display: flex; flex-direction: column; align-items: stretch; padding: 26px 24px 22px; border-right: 1px solid #e1e8ef; background: #fff; }
+.reportes-resumen-titulo > span { color: #0f766e; font-size: 12px; font-weight: 850; letter-spacing: .14em; }
+.reportes-resumen-titulo h2 { margin: 7px 0 0; color: #123a66; font-size: 24px; line-height: 1.2; font-weight: 800; }
+.dona-reportes { display: grid; width: 180px; aspect-ratio: 1; place-items: center; margin: 27px auto 24px; border-radius: 50%; }
+.dona-reportes-centro { display: flex; width: 128px; height: 128px; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #fff; box-shadow: 0 2px 10px rgba(10, 31, 56, .08); }
+.dona-reportes-centro strong { color: #123a66; font-size: 2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.dona-reportes-centro span { margin-top: 6px; color: #52677e; font-size: .78rem; }
+.leyenda-reportes { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.leyenda-reportes li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 9px; color: #52677e; font-size: .82rem; }
+.leyenda-punto { width: 10px; height: 10px; border-radius: 50%; }
+.leyenda-reportes strong { color: #123a66; font-variant-numeric: tabular-nums; }
+.btn-duplicados-reportes { order: 1; display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; margin: 18px 0 12px; padding: 0 10px; border: 1px solid #d8c8f3; border-radius: 11px; background: #f7f2ff; color: #6941a5; font: inherit; font-size: .76rem; font-weight: 800; cursor: pointer; }
+.btn-duplicados-reportes:hover { background: #efe6ff; }
+.btn-duplicados-reportes:disabled { opacity: .7; cursor: wait; }
+.btn-duplicados-reportes ion-icon { font-size: 17px; }
+.spinner-duplicados { width: 16px; height: 16px; border: 2px solid rgba(105, 65, 165, .25); border-top-color: #6941a5; border-radius: 50%; animation: girar-spinner .7s linear infinite; }
+.btn-refrescar-reportes { order: 2; display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: auto; padding: 0 12px; border: 1px solid #0f766e; border-radius: 12px; background: transparent; color: #0f766e; font: inherit; font-size: .84rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.btn-refrescar-reportes:hover:not(:disabled) { background: #f0fdfa; }
+.btn-refrescar-reportes:disabled { opacity: .65; cursor: wait; }
+.btn-refrescar-reportes ion-icon { font-size: 17px; }
+.btn-refrescar-reportes ion-icon.refrescando { animation: girar-refresco .85s linear infinite; }
+@keyframes girar-refresco { to { transform: rotate(360deg); } }
+.reportes-contactos { display: flex; min-width: 0; flex-direction: column; padding: 22px; background: #f8fafc; }
+.pestanas-reportes { display: flex; gap: 5px; overflow-x: auto; margin-bottom: 18px; padding: 5px; border-radius: 14px; background: #eef3f8; scrollbar-width: thin; scrollbar-color: #8bbcb7 #e5eeef; scrollbar-gutter: stable; }
+.pestanas-reportes::-webkit-scrollbar { width: 8px; height: 8px; }
+.pestanas-reportes::-webkit-scrollbar-track { margin: 2px 5px; border-radius: 99px; background: #e5eeef; }
+.pestanas-reportes::-webkit-scrollbar-thumb { min-width: 36px; border: 2px solid #e5eeef; border-radius: 99px; background: linear-gradient(90deg, #8bbcb7, #5f9d98); }
+.pestanas-reportes::-webkit-scrollbar-thumb:hover { background: #397f79; }
+.pestanas-reportes button { display: flex; flex: 1 0 180px; min-height: 64px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 8px 14px; border: 0; border-radius: 10px; background: transparent; color: #4a627e; font: inherit; cursor: pointer; text-align: left; white-space: normal; transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
+.pestana-reporte-titulo { display: flex; align-items: center; gap: 7px; font-size: .8rem; font-weight: 800; white-space: nowrap; }
+.pestana-reporte-titulo strong { font-size: .7rem; font-variant-numeric: tabular-nums; }
+.pestanas-reportes button small { color: #718198; font-size: .68rem; font-weight: 550; line-height: 1.25; }
+.pestanas-reportes button.activa { background: #0f766e; color: #fff; box-shadow: 0 3px 9px rgba(15, 118, 110, .2); }
+.pestanas-reportes button.activa small { color: rgba(255, 255, 255, .84); }
+.busqueda-reporte { display: flex; min-height: 44px; flex-direction: row; align-items: center; gap: 10px; margin: 0 0 14px; padding: 0 12px; border: 1px solid #dbe4ec; border-radius: 11px; background: #fff; color: #718198; text-transform: none; letter-spacing: normal; box-shadow: 0 2px 7px rgba(10, 31, 56, .035); }
+.busqueda-reporte > ion-icon { flex: 0 0 auto; font-size: 18px; }
+.busqueda-reporte input { box-sizing: border-box; min-width: 0; flex: 1; margin: 0; padding: 0 2px !important; border: 0 !important; border-radius: 0; outline: 0; background: transparent !important; color: #123a66; font: inherit; font-size: .84rem; box-shadow: none !important; }
+.busqueda-reporte input:focus { outline: 0; border: 0; box-shadow: none; }
+.busqueda-reporte input::placeholder { color: #91a0af; }
+.busqueda-reporte button { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 8px; background: #eef3f8; color: #52677e; font-size: 20px; cursor: pointer; }
+.busqueda-reporte:focus-within { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15, 118, 110, .1); }
+.pestanas-reportes button:focus-visible,.btn-refrescar-reportes:focus-visible,.contacto-reporte-whatsapp:focus-visible,.pie-lista-reportes button:focus-visible { outline: 3px solid rgba(15, 118, 110, .28); outline-offset: 2px; }
+.lista-contactos-reporte { display: grid; align-content: start; gap: 10px; max-height: 510px; overflow: auto; padding: 2px 5px 2px 2px; scrollbar-width: thin; scrollbar-color: #8bbcb7 #e5eeef; scrollbar-gutter: stable; }
+.lista-contactos-reporte::-webkit-scrollbar,.duplicados-lista::-webkit-scrollbar { width: 9px; height: 9px; }
+.lista-contactos-reporte::-webkit-scrollbar-track,.duplicados-lista::-webkit-scrollbar-track { margin: 4px 1px; border-radius: 99px; background: #e5eeef; }
+.lista-contactos-reporte::-webkit-scrollbar-thumb,.duplicados-lista::-webkit-scrollbar-thumb { min-height: 36px; border: 2px solid #e5eeef; border-radius: 99px; background: linear-gradient(180deg, #8bbcb7, #5f9d98); }
+.lista-contactos-reporte::-webkit-scrollbar-thumb:hover,.duplicados-lista::-webkit-scrollbar-thumb:hover { background: #397f79; }
+.contacto-reporte { display: flex; min-width: 0; align-items: center; gap: 13px; padding: 13px 14px; border: 1px solid #e1e8ef; border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgba(10, 31, 56, .05); }
+.contacto-reporte-avatar { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border-radius: 50%; background: #e6f4f1; color: #0f766e; font-size: .84rem; font-weight: 850; }
+.contacto-reporte-datos { display: grid; min-width: 0; flex: 1; gap: 5px; }
+.contacto-reporte-datos strong { overflow: hidden; color: #123a66; font-size: .9rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.contacto-reporte-datos span { color: #52677e; font-size: .8rem; line-height: 1.35; }
+.contacto-reporte-whatsapp { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; padding: 0 13px; border: 0; border-radius: 10px; background: #15803d; color: #fff; font: inherit; font-size: .78rem; font-weight: 750; cursor: pointer; transition: background .16s ease, transform .16s ease; }
+.contacto-reporte-whatsapp:hover:not(:disabled) { transform: translateY(-1px); background: #166534; }
+.contacto-reporte-whatsapp:disabled { opacity: .5; cursor: not-allowed; }
+.contacto-reporte-whatsapp ion-icon { font-size: 19px; }
+.pie-lista-reportes { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 4px 0; color: #52677e; font-size: .78rem; }
+.pie-lista-reportes button { padding: 5px 8px; border: 0; background: transparent; color: #0f766e; font: inherit; font-weight: 800; cursor: pointer; }
+.pie-lista-reportes button:hover { text-decoration: underline; }
+.vacio-reporte-contactos { display: grid; min-height: 240px; margin: 0; place-items: center; color: #52677e; font-size: .9rem; text-align: center; }
+.modal-duplicados { --width: min(94vw, 820px); }
+.modal-duplicados .modal-content { max-height: 88vh; overflow: hidden; }
+.duplicados-lista { display: grid; gap: 12px; overflow-y: auto; padding: 2px 5px 2px 2px; scrollbar-width: thin; scrollbar-color: #8bbcb7 #e5eeef; scrollbar-gutter: stable; }
+.duplicado-par { padding: 14px; border: 1px solid #e1e8ef; border-radius: 14px; background: #fff; }
+.duplicado-comparacion { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.duplicado-cliente { display: grid; min-width: 0; align-content: start; gap: 7px; }
+.duplicado-cliente strong { overflow: hidden; color: #123a66; font-size: .88rem; text-overflow: ellipsis; white-space: nowrap; }
+.duplicado-cliente span,.duplicado-cliente small { overflow-wrap: anywhere; color: #52677e; font-size: .75rem; }
+.duplicado-cliente button { min-height: 34px; margin-top: 3px; padding: 0 9px; border: 1px solid #fecaca; border-radius: 9px; background: #fff5f5; color: #b91c1c; font: inherit; font-size: .7rem; font-weight: 800; cursor: pointer; }
+.duplicado-cliente button:hover:not(:disabled) { background: #fee2e2; }
+.duplicado-cliente button:disabled { opacity: .6; cursor: wait; }
+.duplicado-vs { color: #9baec1; font-size: .7rem; font-weight: 900; }
+.duplicado-accion { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 11px; border-top: 1px solid #edf1f5; color: #52677e; font-size: .74rem; }
+.duplicado-accion button { flex: 0 0 auto; min-height: 36px; padding: 0 10px; border: 1px solid #fecaca; border-radius: 9px; background: #fff5f5; color: #b91c1c; font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; }
+.duplicado-accion button:disabled { opacity: .6; cursor: wait; }
+.duplicado-accion button:hover:not(:disabled) { background: #fee2e2; }
+.carga-duplicados { min-height: 220px; border: 0; }
+@media (prefers-reduced-motion: reduce) { .btn-refrescar-reportes ion-icon.refrescando { animation: none; } }
 
 .stat-card {
   --stat-accent: #315f8d;
@@ -721,6 +1219,8 @@ h3 {
   background: linear-gradient(145deg, #fff5d9 0%, #ffe3a2 100%);
 }
 
+.btn-icon-whatsapp { color: #159447 !important; }
+
 .stat-card.active {
   transform: translateY(-2px);
   border-color: var(--stat-accent);
@@ -758,6 +1258,7 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  touch-action: pan-y;
 }
 
 .clientes-grid {
@@ -1671,6 +2172,18 @@ select:focus {
   flex: 1;
 }
 
+@media (max-width: 860px) {
+  .reportes-bandeja { grid-template-columns: minmax(0, 1fr); }
+  .reportes-resumen { align-items: center; border-right: 0; border-bottom: 1px solid #e1e8ef; }
+  .reportes-resumen-titulo { width: 100%; }
+  .reportes-resumen-titulo h2 { font-size: 22px; }
+  .dona-reportes { width: 140px; margin: 18px auto; }
+  .dona-reportes-centro { width: 100px; height: 100px; }
+  .dona-reportes-centro strong { font-size: 1.7rem; }
+  .leyenda-reportes { width: min(100%, 420px); }
+  .btn-refrescar-reportes { width: min(100%, 420px); margin-top: 20px; }
+}
+
 @media (max-width: 560px) {
   .page-content {
     padding: 16px 12px 20px;
@@ -1780,8 +2293,22 @@ select:focus {
   }
 
   .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
+
+  .reportes-resumen { padding: 20px 16px; }
+  .reportes-contactos { padding: 14px 10px; }
+  .duplicado-comparacion { grid-template-columns: minmax(0, 1fr); }
+  .duplicado-vs { display: none; }
+  .duplicado-accion { align-items: stretch; flex-direction: column; }
+  .duplicado-cliente button { width: 100%; }
+  .contacto-reporte { gap: 9px; padding: 10px; }
+  .contacto-reporte-avatar { width: 40px; height: 40px; flex-basis: 40px; }
+  .contacto-reporte-whatsapp { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; }
+  .contacto-reporte-whatsapp span { display: none; }
+  .contacto-reporte-whatsapp ion-icon { font-size: 21px; }
+  .pie-lista-reportes { flex-wrap: wrap; gap: 8px 12px; }
 
   .stat-card {
     min-height: 82px;

@@ -1,5 +1,11 @@
 <template>
   <ion-app :style="estilosAppConPanel">
+    <div v-if="electronAPI && !ventanaMaximizada" class="barra-arrastre-ventana" aria-hidden="true"></div>
+    <div v-if="electronAPI" class="controles-ventana" aria-label="Controles de ventana">
+      <button type="button" :title="ventanaMaximizada ? 'Restaurar ventana' : 'Maximizar ventana'" :aria-label="ventanaMaximizada ? 'Restaurar ventana' : 'Maximizar ventana'" @click="alternarTamanoVentana">
+        <ion-icon :icon="ventanaMaximizada ? contractOutline : expandOutline" />
+      </button>
+    </div>
     <ion-router-outlet />
     <SaliAssistant v-if="rutaProtegida" />
     <WhatsappPanel
@@ -90,7 +96,7 @@
 import { IonApp, IonRouterOutlet, IonModal, IonIcon } from '@ionic/vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { timeOutline, checkmarkCircleOutline } from 'ionicons/icons'
+import { timeOutline, checkmarkCircleOutline, expandOutline, contractOutline } from 'ionicons/icons'
 import { useSesion } from '@/composables/useSesion'
 import SaliAssistant from '@/components/SaliAssistant.vue'
 import WhatsappPanel from '@/components/WhatsappPanel.vue'
@@ -100,6 +106,15 @@ import { usePanelRedes } from '@/composables/usePanelRedes'
 
 const route = useRoute()
 const router = useRouter()
+const electronAPI = (window as Window & { electronAPI?: { alternarTamanoVentana: () => Promise<boolean>; obtenerEstadoVentana: () => Promise<boolean> } }).electronAPI
+const ventanaMaximizada = ref(true)
+const alternarTamanoVentana = async () => {
+  if (!electronAPI) return
+  ventanaMaximizada.value = await electronAPI.alternarTamanoVentana()
+}
+onMounted(() => {
+  electronAPI?.obtenerEstadoVentana().then(estado => { ventanaMaximizada.value = estado }).catch(() => {})
+})
 const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/', '/login', '/verificacion-2fa'])
 const rutaProtegida = computed(() => !RUTAS_SIN_CONTROL_INACTIVIDAD.has(route.path))
 const { cerrarSesion, validarSesion } = useSesion()
@@ -342,6 +357,40 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.controles-ventana {
+  position: fixed;
+  z-index: 20000;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 9px;
+  background: rgba(18, 29, 45, .78);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .2);
+  -webkit-app-region: no-drag;
+}
+.barra-arrastre-ventana {
+  position: fixed;
+  z-index: 19999;
+  inset: 0 0 auto;
+  height: 40px;
+  -webkit-app-region: drag;
+}
+.controles-ventana button {
+  display: grid;
+  width: 34px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #fff;
+  background: transparent;
+  cursor: pointer;
+}
+.controles-ventana button:hover { background: rgba(255, 255, 255, .18); }
+.controles-ventana ion-icon { font-size: 17px; }
 .modal-inactividad {
   --width: min(420px, calc(100vw - 24px));
   --height: auto;

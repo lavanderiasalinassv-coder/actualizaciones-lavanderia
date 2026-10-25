@@ -296,7 +296,7 @@
             </transition>
           </div>
 
-          <div v-else-if="etapaActiva === 1" class="paso-contenido paso-color-servicios">
+          <div v-else-if="etapaActiva === 1" class="paso-contenido paso-color-servicios" :class="{ 'con-resultados-busqueda': busquedaActiva }">
             <div class="buscador-row">
               <div class="search-bar">
                 <ion-icon :icon="searchOutline" />
@@ -1057,7 +1057,7 @@ const router = useRouter()
 const irAOrdenes = () => router.push('/tabs/ordenes')
 const { servicios, categorias: categoriasCatalogo, cargarCatalogo } = useCatalogo()
 const { promociones, consultarUsosCuponQr, obtenerPromocionesAplicables } = usePromociones()
-const { clientesConEstado } = useClientes()
+const { clientesConEstado, buscarClientes } = useClientes()
 const clientePremiumPuesto = computed<number | null>(() => {
   const seleccionado = clienteEncontrado.value
   if (!seleccionado || seleccionado.totalOrdenes <= 50) return null
@@ -1407,9 +1407,29 @@ const clientesSugeridos = computed(() => {
   const consulta = pedido.nombreCliente.trim().toLowerCase()
   if (clienteEncontrado.value || consulta.length < 2) return []
 
-  return clientesConEstado.value
+  const candidatos = clientesBusquedaRemota.value.length
+    ? clientesBusquedaRemota.value
+    : clientesConEstado.value
+  return candidatos
     .filter((cliente) => cliente.nombre.toLowerCase().includes(consulta))
     .slice(0, 8)
+})
+
+const clientesBusquedaRemota = ref<ClienteConEstado[]>([])
+let temporizadorBusquedaCliente: ReturnType<typeof setTimeout> | undefined
+let tokenSugerenciasCliente = 0
+watch(() => pedido.nombreCliente, (nombre) => {
+  if (temporizadorBusquedaCliente) clearTimeout(temporizadorBusquedaCliente)
+  const consulta = nombre.trim()
+  const token = ++tokenSugerenciasCliente
+  if (consulta.length < 2 || clienteEncontrado.value) {
+    clientesBusquedaRemota.value = []
+    return
+  }
+  temporizadorBusquedaCliente = setTimeout(async () => {
+    const resultados = await buscarClientes(consulta)
+    if (token === tokenSugerenciasCliente) clientesBusquedaRemota.value = resultados
+  }, 180)
 })
 
 const limpiarClienteSeleccionado = () => {
@@ -2472,6 +2492,10 @@ onMounted(() => {
   box-shadow: 0 18px 44px rgba(10, 31, 56, 0.10), 0 2px 0 rgba(255, 255, 255, 0.72) inset;
 }
 
+.orden-board {
+  overflow: visible;
+}
+
 .orden-hero::before,
 .orden-board::before,
 .orden-exito::before {
@@ -2967,6 +2991,14 @@ onMounted(() => {
 .paso-color-resumen {
   border-color: #dce9e4;
   background: linear-gradient(135deg, #eff8f4 0%, #f1f6ff 54%, #fff8ed 100%);
+}
+
+.paso-color-servicios {
+  position: relative;
+}
+
+.paso-color-servicios.con-resultados-busqueda {
+  z-index: 5;
 }
 
 .paso-color-cliente .wizard-card,
@@ -3605,8 +3637,20 @@ onMounted(() => {
 }
 
 .resultados-busqueda {
+  position: absolute;
+  z-index: 20;
+  top: 76px;
+  right: 16px;
+  left: 16px;
   display: grid;
   gap: 14px;
+  max-height: min(62vh, 620px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(10, 31, 56, .24);
 }
 
 .resultados-busqueda-cabecera {

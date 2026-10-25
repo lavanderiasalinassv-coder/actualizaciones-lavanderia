@@ -29,8 +29,9 @@
             </div>
           </div>
         </div>
+        <div v-if="!soloDetalleId && (ordenesQueRequierenIntervencion.length || entregasTardias.length)" class="ordenes-resumen-alertas">
         <button
-          v-if="!soloDetalleId && (ordenesQueRequierenIntervencion.length || entregasTardias.length)"
+          v-if="ordenesQueRequierenIntervencion.length"
           type="button"
           class="ordenes-indicador-alerta"
           :class="{ 'ordenes-indicador-intervencion': ordenesQueRequierenIntervencion.length > 0 }"
@@ -49,6 +50,18 @@
           <ion-icon v-if="ordenesQueRequierenIntervencion.length" :icon="warningOutline" />
           <span v-else>{{ entregasTardias.length > 99 ? '99+' : entregasTardias.length }}</span>
         </button>
+          <button
+            v-if="entregasTardias.length"
+            type="button"
+            class="ordenes-retraso-trigger"
+            :aria-label="`Ver ${entregasTardias.length} ordenes con retraso`"
+            title="Ver ordenes con mas de dos dias de retraso"
+            @click="mostrarModalRetrasos = true"
+          >
+            <span>Con retraso</span>
+            <strong>{{ ordenesConRetraso.length }} {{ ordenesConRetraso.length === 1 ? 'orden' : 'ordenes' }}</strong>
+          </button>
+        </div>
       </div>
 
       <div v-if="totalPaginas > 1" class="paginacion-ordenes" aria-label="Paginación de órdenes">
@@ -102,6 +115,44 @@
             <span class="resumen-chip">{{ ordenesFiltradas.length }} órdenes</span>
           </div>
 
+          <ion-modal :is-open="mostrarModalRetrasos" class="modal-retrasos" @didDismiss="mostrarModalRetrasos = false">
+            <div class="retrasos-modal-contenido force-light" role="dialog" aria-labelledby="titulo-modal-retrasos">
+              <header class="retrasos-modal-header">
+                <div>
+                  <p class="ayuda-modal-etiqueta">Seguimiento de entregas</p>
+                  <h2 id="titulo-modal-retrasos">Órdenes con retraso</h2>
+                  <p class="retrasos-modal-descripcion">{{ ordenesConRetraso.length }} {{ ordenesConRetraso.length === 1 ? 'orden lleva' : 'órdenes llevan' }} más de 2 días desde su fecha prometida.</p>
+                </div>
+                <button type="button" class="ayuda-modal-cerrar" aria-label="Cerrar" @click="mostrarModalRetrasos = false">
+                  <ion-icon :icon="closeOutline" />
+                </button>
+              </header>
+              <p class="retrasos-modal-contador">Recordatorios abiertos hoy: <strong>{{ totalRecordatoriosAbiertosHoy }}</strong></p>
+              <div class="retrasos-modal-lista" aria-label="Lista de órdenes con retraso">
+                <p v-if="ordenesConRetraso.length === 0" class="lista-retrasadas-vacia">No hay órdenes con más de dos días de retraso.</p>
+                <div v-for="orden in ordenesConRetraso" :key="orden.id" class="orden-retrasada-fila">
+                  <button type="button" class="orden-retrasada-numero" @click="verOrdenRetrasada(orden)">
+                    Orden {{ orden.numero }}
+                  </button>
+                  <span class="orden-retrasada-cliente">{{ orden.nombreCliente }}</span>
+                  <strong class="orden-retrasada-dias">{{ diasDeRetraso(orden) }} {{ diasDeRetraso(orden) === 1 ? 'día' : 'días' }} de retraso</strong>
+                  <span v-if="recordatorioAbiertoHoy(orden.id)" class="orden-retrasada-estado">Enviado hoy</span>
+                  <button
+                    type="button"
+                    class="orden-retrasada-whatsapp"
+                    :disabled="!telefonoWhatsAppDeOrden(orden)"
+                    :aria-label="`Enviar recordatorio por WhatsApp para la orden ${orden.numero}`"
+                    :title="`Enviar recordatorio por WhatsApp a ${orden.nombreCliente}`"
+                    @click.stop="enviarRecordatorioWhatsapp(orden)"
+                  >
+                    <ion-icon :icon="logoWhatsapp" aria-hidden="true" />
+                    <span aria-hidden="true">!</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </ion-modal>
+
           <div class="ordenes-filtros-seccion">
             <span class="ordenes-filtros-etiqueta">Estado</span>
             <div class="chip-row">
@@ -111,12 +162,25 @@
                 class="filtro-chip"
                 :class="{ active: estadoActivo === filtro.value }"
                 :style="estadoActivo === filtro.value ? { background: filtro.color, borderColor: filtro.color, color: filtro.textOn } : {}"
-                @click="estadoActivo = filtro.value"
+                @click="seleccionarEstado(filtro.value)"
               >
                 <span class="dot" :style="{ background: estadoActivo === filtro.value ? filtro.textOn : filtro.color }"></span>
                 {{ filtro.label }}
               </button>
+              <button
+                type="button"
+                class="filtro-chip"
+                :class="{ active: soloConMora }"
+                :style="soloConMora ? { background: '#b42318', borderColor: '#b42318', color: '#ffffff' } : {}"
+                :aria-pressed="soloConMora"
+                @click="alternarFiltroMora"
+              >
+                <span class="dot" :style="{ background: soloConMora ? '#ffffff' : '#b42318' }"></span>
+                Con mora
+              </button>
+
             </div>
+
           </div>
 
           <div class="ordenes-filtros-pie">
@@ -324,7 +388,10 @@
                 '--card-accent-bg': estadoColores[orden.estado].bg,
                 '--card-accent-fuerte': estadoColores[orden.estado].textStrong
               }"
-              @click="abrirDetalle(orden.id)"
+              @touchstart.passive="iniciarSwipeTarjeta($event, orden)"
+              @touchend="finalizarSwipeTarjeta($event, orden)"
+              @touchcancel="cancelarSwipeTarjeta"
+              @click="manejarClickTarjeta($event, orden.id)"
             >
             <div class="card-top">
               <div class="card-top-identidad">
@@ -665,7 +732,7 @@
               <section class="detalle-bloque">
                 <div class="seccion-titulo">
                   <strong>💵 Cargos extra</strong>
-                  <button v-if="ordenSeleccionada.estado !== 'cancelada' && ordenSeleccionada.estado !== 'cerrada'" class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click="abrirModalCargoExtra">
+                  <button v-if="ordenSeleccionada.estado !== 'cancelada' && ordenSeleccionada.estado !== 'cerrada'" type="button" class="link extra" :disabled="peticionOrdenEnCurso || turnoCerrado" @click.stop="abrirModalCargoExtra">
                     + Agregar cargo extra
                   </button>
                 </div>
@@ -907,6 +974,18 @@
                 <div class="seccion-titulo">
                   <strong>⚠️ Control de mora</strong>
                   <div class="seccion-titulo-acciones">
+                    <button
+                      v-if="!esOperador && montoMoraOrden(ordenSeleccionada) > 0"
+                      type="button"
+                      class="mora-recordatorio-whatsapp"
+                      :disabled="!numeroWhatsappOrden"
+                      title="Notificar cargo de mora por WhatsApp"
+                      aria-label="Notificar cargo de mora por WhatsApp"
+                      @click="notificarCargoMoraWhatsapp"
+                    >
+                      <ion-icon :icon="logoWhatsapp" aria-hidden="true" />
+                      <span aria-hidden="true">!</span>
+                    </button>
                     <button
                       v-if="ordenSeleccionada.moraActiva !== false && !ordenSeleccionada.moraDetenida"
                       type="button"
@@ -1796,9 +1875,51 @@ const {
 
 const busqueda = ref('')
 const estadoActivo = ref<'todos' | 'intervencion' | OrdenEstado>('todos')
+const soloConMora = ref(false)
+const mostrarModalRetrasos = ref(false)
+const seleccionarEstado = (estado: typeof estadoActivo.value) => {
+  estadoActivo.value = estado
+  soloConMora.value = false
+}
+const alternarFiltroMora = () => {
+  soloConMora.value = !soloConMora.value
+  if (soloConMora.value) estadoActivo.value = 'todos'
+}
 const ayudaAlertasAbierta = ref(false)
 const explicacionIndicadorAbierta = ref(false)
 const ahoraTablero = ref(Date.now())
+const CLAVE_RECORDATORIOS_RETRASO = 'ordenes-recordatorio-retraso-diario'
+const leerRegistroRecordatorios = () => {
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  try {
+    const registro = JSON.parse(localStorage.getItem(CLAVE_RECORDATORIOS_RETRASO) || 'null') as { fecha?: string; ordenes?: string[] } | null
+    return registro?.fecha === hoy
+      ? { fecha: hoy, ordenes: new Set(registro.ordenes || []) }
+      : { fecha: hoy, ordenes: new Set<string>() }
+  } catch {
+    return { fecha: hoy, ordenes: new Set<string>() }
+  }
+}
+const registroRecordatorios = ref(leerRegistroRecordatorios())
+const totalRecordatoriosAbiertosHoy = computed(() => {
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  return registroRecordatorios.value.fecha === hoy ? registroRecordatorios.value.ordenes.size : 0
+})
+const recordatorioAbiertoHoy = (ordenId: string) => {
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  return registroRecordatorios.value.fecha === hoy && registroRecordatorios.value.ordenes.has(ordenId)
+}
+const registrarRecordatorioAbierto = (ordenId: string) => {
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  const ordenesDelDia = registroRecordatorios.value.fecha === hoy
+    ? new Set(registroRecordatorios.value.ordenes)
+    : new Set<string>()
+  ordenesDelDia.add(ordenId)
+  registroRecordatorios.value = { fecha: hoy, ordenes: ordenesDelDia }
+  try {
+    localStorage.setItem(CLAVE_RECORDATORIOS_RETRASO, JSON.stringify({ fecha: hoy, ordenes: [...ordenesDelDia] }))
+  } catch { /* El contador sigue disponible durante esta sesión aunque el almacenamiento esté bloqueado. */ }
+}
 let relojTableroIntervalo: number | undefined
 const mostrarModalEliminarDia = ref(false)
 const mostrarModalMotivoIntervencion = ref(false)
@@ -1959,6 +2080,9 @@ const prioridadEstado: Record<string, number> = {
 
 const arrastrandoOrdenId = ref('')
 const columnaActivaDrop = ref<OrdenEstado | ''>('')
+const swipeTarjetaActivo = ref<{ ordenId: string; touchId: number; x: number; y: number } | null>(null)
+const swipeTarjetaConsumidoId = ref('')
+let limpiarSwipeTarjetaTimeout: number | undefined
 const mostrarConfirmacionPagoEntrega = ref(false)
 const avanzandoConfirmacionPagoEntrega = ref(false)
 const mostrarConfirmacionEstado = ref(false)
@@ -2289,6 +2413,29 @@ const entregasTardias = computed(() => {
   })
 })
 
+const ordenesConRetraso = computed(() =>
+  [...entregasTardias.value].sort((a, b) =>
+    String(a.fechaEntrega || '').localeCompare(String(b.fechaEntrega || ''))
+  )
+)
+
+const diasDeRetraso = (orden: Orden) => {
+  if (!orden.fechaEntrega) return 0
+  const hoy = fechaHoyCentroamerica(new Date(ahoraTablero.value))
+  const fechaPrometida = Date.parse(`${orden.fechaEntrega.slice(0, 10)}T00:00:00Z`)
+  const fechaActual = Date.parse(`${hoy}T00:00:00Z`)
+  if (!Number.isFinite(fechaPrometida) || !Number.isFinite(fechaActual)) return 0
+  return Math.max(0, Math.floor((fechaActual - fechaPrometida) / 86400000))
+}
+
+const telefonoWhatsAppDeOrden = (orden: Orden) =>
+  `${orden.codigoPais || ''}${orden.telefono || ''}`.replace(/\D/g, '')
+
+const numeroWhatsappOrden = computed(() => {
+  const orden = ordenSeleccionada.value
+  return orden ? telefonoWhatsAppDeOrden(orden) : ''
+})
+
 const abrirExplicacionIndicador = () => {
   explicacionIndicadorAbierta.value = true
   ayudaAlertasAbierta.value = true
@@ -2345,6 +2492,7 @@ const ordenesFiltradas = computed(() => {
     if (intervencion && !esAdministrador.value) return false
     if (estadoActivo.value === 'intervencion') return intervencion
     if (ordenCerrada) return false
+    if (soloConMora.value && !clasesAlertaEntrega(orden)['alerta-mora']) return false
 
     // Las canceladas solo se muestran durante el turno donde se cancelaron.
     if (orden.estado === 'cancelada') {
@@ -2409,7 +2557,7 @@ const paginaSiguiente = () => {
   paginaActual.value = Math.min(totalPaginas.value, paginaActual.value + 1)
 }
 
-watch([busqueda, estadoActivo], () => {
+watch([busqueda, estadoActivo, soloConMora], () => {
   paginaActual.value = 1
 })
 
@@ -3226,6 +3374,11 @@ const reiniciarArrastre = () => {
   columnaActivaDrop.value = ''
 }
 
+const verOrdenRetrasada = (orden: Orden) => {
+  mostrarModalRetrasos.value = false
+  void abrirDetalle(orden.id)
+}
+
 const abrirDetalle = async (id: string) => {
   const orden = obtenerOrdenPorId(id)
   if (requiereIntervencion(orden) && !esAdministrador.value) return
@@ -3640,6 +3793,36 @@ const enviarWhatsApp = () => {
   }))
 }
 
+const abrirWhatsAppConPlantilla = (mensaje: string, orden: Orden | null = ordenSeleccionada.value) => {
+  const phone = orden ? telefonoWhatsAppDeOrden(orden) : ''
+  if (!phone || typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('whatsapp-compose', {
+    detail: { phone, message: mensaje }
+  }))
+}
+
+const enviarRecordatorioWhatsapp = (orden: Orden | null = ordenSeleccionada.value) => {
+  if (!orden || !telefonoWhatsAppDeOrden(orden)) return
+  abrirWhatsAppConPlantilla(
+  '¡Hola! 👋 Te escribimos de Lavandería Salinas. Tus prendas ya están limpias y listas para que pases por ellas. Estamos en 3ra calle oriente, barrio Las Flores, #2-3, a media cuadra de ANDA. Atendemos de lunes a viernes de 8:00 am a 5:00 pm y sábados de 8:00 am a 12:00 pm. ¡Gracias por preferirnos! 😊'
+    , orden
+  )
+  registrarRecordatorioAbierto(orden.id)
+}
+
+const notificarCargoMoraWhatsapp = () => {
+  const orden = ordenSeleccionada.value
+  if (!orden || montoMoraOrden(orden) <= 0 || !telefonoWhatsAppDeOrden(orden)) return
+  const cargoMora = montoMoraOrden(orden)
+  const mensaje = [
+    `¡Hola, ${orden.nombreCliente}! 👋 Le saludamos de Lavandería Salinas 🫧.`,
+    `Le informamos que a su orden ${orden.numero} se le aplicó un cargo por mora. De acuerdo con la política del servicio, después de 2 días calendario de gracia desde la fecha prometida de entrega, se aplica un cargo de $0.50 por cada día de retraso hasta retirar las prendas.`,
+    orden.fechaEntrega ? `📅 Fecha prometida de entrega: ${formatearFechaCorta(orden.fechaEntrega)}.` : '',
+    `🧾 Cargo por mora acumulado: $${cargoMora.toFixed(2)} USD.\n💰 Total actualizado de su orden: $${orden.total.toFixed(2)} USD.`,
+    'Si tiene alguna consulta, con gusto le atenderemos. Gracias por su comprensión y por confiar en Lavandería Salinas. 🙏'
+  ].filter(Boolean).join('\n\n')
+  abrirWhatsAppConPlantilla(mensaje, orden)
+}
 
 const generarHtmlReporteOrden = (orden: Orden) => {
   const fecha = formatearFechaCorta(orden.createdAt)
@@ -3878,6 +4061,63 @@ const textoFechaEditable = (valor: string) =>
   valor
     ? formatearFechaCentroamericaMesCorto(valor, { day: '2-digit', year: 'numeric' })
     : 'Selecciona una fecha'
+
+const iniciarSwipeTarjeta = (event: TouchEvent, orden: Orden) => {
+  const target = event.target instanceof Element ? event.target : null
+  const control = target?.closest('button, a, input, textarea, select, [data-no-swipe]')
+  if (control && control !== event.currentTarget) return
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  swipeTarjetaActivo.value = {
+    ordenId: orden.id,
+    touchId: touch.identifier,
+    x: touch.clientX,
+    y: touch.clientY
+  }
+}
+
+const cancelarSwipeTarjeta = () => {
+  swipeTarjetaActivo.value = null
+}
+
+const finalizarSwipeTarjeta = (event: TouchEvent, orden: Orden) => {
+  const gesto = swipeTarjetaActivo.value
+  if (!gesto || gesto.ordenId !== orden.id) return
+  const touch = Array.from(event.changedTouches).find((candidato) => candidato.identifier === gesto.touchId)
+  if (!touch) return
+  swipeTarjetaActivo.value = null
+
+  const desplazamientoX = touch.clientX - gesto.x
+  const desplazamientoY = touch.clientY - gesto.y
+  if (Math.abs(desplazamientoX) < 60 || Math.abs(desplazamientoX) < Math.abs(desplazamientoY) * 1.3) return
+
+  event.preventDefault()
+  swipeTarjetaConsumidoId.value = orden.id
+  if (limpiarSwipeTarjetaTimeout !== undefined) window.clearTimeout(limpiarSwipeTarjetaTimeout)
+  limpiarSwipeTarjetaTimeout = window.setTimeout(() => {
+    swipeTarjetaConsumidoId.value = ''
+    limpiarSwipeTarjetaTimeout = undefined
+  }, 700)
+
+  const indiceActual = estadosOrden.indexOf(orden.estado)
+  const indiceDestino = indiceActual + (desplazamientoX > 0 ? 1 : -1)
+  const estadoDestino = estadosOrden[indiceDestino]
+  if (indiceActual < 0 || !estadoDestino || !puedeCambiarEstado(orden.estado, estadoDestino)) return
+  solicitarCambioEstado(orden.id, estadoDestino, 'tablero')
+}
+
+const manejarClickTarjeta = (event: MouseEvent, ordenId: string) => {
+  if (swipeTarjetaConsumidoId.value === ordenId) {
+    event.preventDefault()
+    swipeTarjetaConsumidoId.value = ''
+    if (limpiarSwipeTarjetaTimeout !== undefined) {
+      window.clearTimeout(limpiarSwipeTarjetaTimeout)
+      limpiarSwipeTarjetaTimeout = undefined
+    }
+    return
+  }
+  abrirDetalle(ordenId)
+}
 
 const iniciarArrastreOrden = (id: string) => {
   arrastrandoOrdenId.value = id
@@ -4355,6 +4595,7 @@ onIonViewWillEnter(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', actualizarOrdenesPorPagina)
+  if (limpiarSwipeTarjetaTimeout !== undefined) window.clearTimeout(limpiarSwipeTarjetaTimeout)
   if (relojTableroIntervalo !== undefined) {
     window.clearInterval(relojTableroIntervalo)
     relojTableroIntervalo = undefined
@@ -4477,10 +4718,18 @@ onBeforeUnmount(() => {
   min-height: 24px;
 }
 
-.ordenes-indicador-alerta {
-  appearance: none;
+.ordenes-resumen-alertas {
   grid-column: 2;
   grid-row: 1 / span 2;
+  display: flex;
+  align-items: flex-start;
+  justify-self: end;
+  gap: 7px;
+  max-width: 100%;
+}
+
+.ordenes-indicador-alerta {
+  appearance: none;
   display: inline-flex;
   align-self: start;
   justify-self: end;
@@ -4532,6 +4781,24 @@ onBeforeUnmount(() => {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.ordenes-retraso-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #b42318;
+  font: inherit;
+  font-size: .72rem;
+  cursor: pointer;
+}
+
+.ordenes-retraso-trigger strong { font-size: .68rem; }
+.ordenes-retraso-trigger:hover { background: #fee2e2; }
 
 .btn-subir-foto-link {
   cursor: pointer;
@@ -4666,6 +4933,51 @@ onBeforeUnmount(() => {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+.lista-retrasadas-vacia { margin: 3px; color: #74869a; font-size: .76rem; }
+
+.orden-retrasada-fila {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto 34px;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 3px 5px;
+  border-bottom: 1px solid rgba(180, 35, 24, .08);
+}
+
+.orden-retrasada-numero {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #123a66;
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orden-retrasada-numero:hover { text-decoration: underline; }
+.orden-retrasada-cliente { overflow: hidden; color: #687c90; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
+.orden-retrasada-dias { color: #b42318; font-size: .7rem; white-space: nowrap; }
+.orden-retrasada-estado { color: #168443; font-size: .68rem; font-weight: 750; white-space: nowrap; }
+
+.orden-retrasada-whatsapp {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #bbf7d0;
+  border-radius: 50%;
+  background: #f0fdf4;
+  color: #16a34a;
+  cursor: pointer;
+}
+
+.orden-retrasada-whatsapp ion-icon { font-size: 19px; }
+.orden-retrasada-whatsapp span { position: absolute; top: -4px; right: -3px; color: #dc2626; font-size: 14px; font-weight: 900; line-height: 1; }
+.orden-retrasada-whatsapp:disabled { opacity: .45; cursor: not-allowed; }
 
 .ordenes-filtros-pie {
   display: flex;
@@ -5004,6 +5316,51 @@ ion-modal.modal-ayuda-alertas::part(content) {
   box-shadow: 0 24px 70px rgba(10, 31, 56, 0.28);
 }
 
+ion-modal.modal-retrasos {
+  --width: min(560px, calc(100vw - 32px));
+  --height: min(620px, calc(100dvh - 32px));
+  --border-radius: 18px;
+}
+
+ion-modal.modal-retrasos::part(content) {
+  border: 1px solid rgba(18, 58, 102, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(10, 31, 56, 0.28);
+}
+
+.retrasos-modal-contenido {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+  height: 100%;
+  padding: 20px;
+  background: #fff;
+}
+
+.retrasos-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.retrasos-modal-header h2 { margin: 0; color: #123a66; font-size: 1.15rem; }
+.retrasos-modal-descripcion { margin: 6px 0 0; color: #687c90; font-size: .8rem; }
+.retrasos-modal-contador { margin: 0; color: #123a66; font-size: .82rem; }
+.retrasos-modal-contador strong { color: #168443; font-size: .95rem; }
+
+.retrasos-modal-lista {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #f3c6c2;
+  border-radius: 12px;
+  background: #fffafa;
+}
+
 .ayuda-modal-contenido {
   display: grid;
   gap: 18px;
@@ -5159,6 +5516,7 @@ ion-modal.modal-ayuda-alertas::part(content) {
   text-align: left;
   position: relative;
   overflow: hidden;
+  touch-action: pan-y;
   border: 1px solid rgba(10, 31, 56, 0.08);
   border-radius: 16px;
   padding: 16px;
@@ -7568,6 +7926,40 @@ ion-modal.modal-ayuda-alertas::part(content) {
   justify-content: flex-end;
   gap: 7px;
 }
+
+.mora-recordatorio-whatsapp {
+  position: relative;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #bbf7d0;
+  border-radius: 50%;
+  background: #f0fdf4;
+  color: #16a34a;
+  cursor: pointer;
+}
+
+.mora-recordatorio-whatsapp ion-icon { font-size: 20px; }
+.mora-recordatorio-whatsapp span {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+.mora-recordatorio-whatsapp:hover:not(:disabled) { background: #dcfce7; }
+.mora-recordatorio-whatsapp:disabled { opacity: .5; cursor: not-allowed; }
 
 .mora-accion {
   display: inline-flex;

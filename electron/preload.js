@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  minimizarVentana: () => ipcRenderer.invoke("ventana:minimizar"),
+  alternarTamanoVentana: () => ipcRenderer.invoke("ventana:alternar-tamano"),
+  obtenerEstadoVentana: () => ipcRenderer.invoke("ventana:estado"),
   reiniciarElectron: () => ipcRenderer.invoke("reiniciar-electron"),
   obtenerConfiguracionBaseDatosPredeterminada: () =>
     ipcRenderer.invoke("obtener-configuracion-base-datos-predeterminada"),

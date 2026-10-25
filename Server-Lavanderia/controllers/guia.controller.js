@@ -598,6 +598,41 @@ const ARTICULOS_ADICIONALES_V12 = [
   },
 ];
 
+const ARTICULOS_ADICIONALES_V13 = [
+  {
+    id: "ad7af4d0-219a-4bca-9c10-000000000022",
+    titulo: "Reportes de clientes y revisión de duplicados",
+    descripcion: "Consulta clientes sin actividad, con una orden o sin órdenes; busca contactos, solicita opiniones por WhatsApp y revisa posibles duplicados.",
+    contenido: `<div style="padding:20px;border:1px solid #cfe4eb;border-radius:18px;background:linear-gradient(135deg,#effaff,#f8f7ff)">
+  <p style="margin:0 0 16px;color:#38566c;font-size:16px;line-height:1.8">La vista <strong style="color:#087e8b">Clientes → Reportes de clientes</strong> ayuda a identificar a quién contactar y a revisar si hay perfiles repetidos. El resumen clasifica el directorio en grupos para orientar el seguimiento.</p>
+  <div style="display:grid;gap:12px">
+    <div style="padding:16px;border:1px solid #dce8ef;border-left:5px solid #f59e0b;border-radius:12px;background:#fff">
+      <h3 style="margin:0 0 8px;color:#123a66">1. Revisa los grupos de contacto</h3>
+      <ul style="margin:0;padding-left:22px;color:#526a80;line-height:1.8">
+        <li><strong>Sin actividad:</strong> clientes con órdenes y cuya última visita fue hace más de un mes.</li>
+        <li><strong>Una orden:</strong> clientes que tienen una sola orden registrada.</li>
+        <li><strong>Sin órdenes:</strong> clientes registrados que todavía no tienen órdenes.</li>
+      </ul>
+      <p style="margin:8px 0 0;color:#526a80;line-height:1.8">Usa las pestañas para cambiar de grupo. El buscador filtra por nombre; cuando la lista supera el límite inicial, pulsa <strong>Cargar 50 más</strong>. El resumen y el gráfico muestran las cantidades por categoría.</p>
+    </div>
+    <div style="padding:16px;border:1px solid #dce8ef;border-left:5px solid #16805a;border-radius:12px;background:#fff">
+      <h3 style="margin:0 0 8px;color:#123a66">2. Contacta por WhatsApp</h3>
+      <p style="margin:0;color:#526a80;line-height:1.8">En cada contacto disponible, pulsa <strong>Escribir por WhatsApp</strong> para preparar un mensaje y solicitar la opinión del cliente sobre el servicio. Si el teléfono no está registrado, el botón aparece deshabilitado.</p>
+    </div>
+    <div style="padding:16px;border:1px solid #dce8ef;border-left:5px solid #8666bb;border-radius:12px;background:#fff">
+      <h3 style="margin:0 0 8px;color:#123a66">3. Revisa posibles duplicados</h3>
+      <p style="margin:0;color:#526a80;line-height:1.8">El botón <strong>Revisar posibles duplicados</strong> aparece cuando se detectan coincidencias claras en teléfono, correo o nombre. Al abrirlo, compara ambos perfiles y revisa el motivo de la coincidencia junto con sus datos y cantidad de órdenes.</p>
+      <p style="margin:8px 0 0;color:#526a80;line-height:1.8">La coincidencia es una sugerencia: comprueba que realmente sean la misma persona. Cada perfil tiene su propio botón <strong>Eliminar este registro</strong>, así que puedes elegir cuál quitar. Antes de eliminar, la aplicación pide confirmación y recomienda conservar el que tenga más órdenes.</p>
+    </div>
+  </div>
+  <div style="margin-top:14px;padding:14px 16px;border:1px solid #f1dfb8;border-radius:12px;background:#fff8e8;color:#76531d;line-height:1.8"><strong>Importante:</strong> eliminar un cliente es permanente. Revisa nombre, teléfono, correo y órdenes de los dos perfiles antes de confirmar; si no tienes certeza de que sean duplicados, conserva ambos.</div>
+  <div style="margin-top:13px;padding:14px 16px;border:1px solid #d6e8dd;border-radius:12px;background:#f2faf4;color:#456653;line-height:1.8"><strong>Consejo:</strong> después de actualizar el directorio, pulsa <strong>Refrescar datos</strong> para volver a cargar los reportes y revisar las coincidencias con la información actual.</div>
+</div>`,
+    imagenUrl: null,
+    videoUrl: null,
+  },
+];
+
 let asegurarTablaPromise;
 
 const asegurarTabla = async () => {
@@ -814,6 +849,22 @@ const asegurarTabla = async () => {
         }
         await pool.query(
           "INSERT IGNORE INTO guia_configuracion (clave, valor) VALUES ('articulos_adicionales_v12', 'completado')",
+        );
+      }
+      const [estadoSemillaV13] = await pool.query(
+        "SELECT valor FROM guia_configuracion WHERE clave = 'articulos_adicionales_v13' LIMIT 1",
+      );
+      if (estadoSemillaV13.length === 0) {
+        for (const articulo of ARTICULOS_ADICIONALES_V13) {
+          await pool.query(
+            `INSERT IGNORE INTO guia_articulos
+              (id, titulo, descripcion, contenido, imagen_url, video_url)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [articulo.id, articulo.titulo, articulo.descripcion, articulo.contenido, articulo.imagenUrl, articulo.videoUrl],
+          );
+        }
+        await pool.query(
+          "INSERT IGNORE INTO guia_configuracion (clave, valor) VALUES ('articulos_adicionales_v13', 'completado')",
         );
       }
     })().catch((error) => {
