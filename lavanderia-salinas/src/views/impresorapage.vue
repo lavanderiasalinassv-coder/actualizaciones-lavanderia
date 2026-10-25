@@ -2,7 +2,10 @@
   <AppShell>
     <main class="printer-page">
       <header class="printer-header">
-        <div>
+        <button class="volver-ajustes" type="button" title="Volver a ajustes" aria-label="Volver a ajustes" @click="volverAjustes">
+          <ion-icon :icon="arrowBackOutline" />
+        </button>
+        <div class="printer-title">
           <h1>Impresora Bluetooth</h1>
         </div>
       </header>
@@ -50,6 +53,9 @@
 defineOptions({ name: 'ImpresoraPage' })
 
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { IonIcon } from '@ionic/vue'
+import { arrowBackOutline } from 'ionicons/icons'
 import AppShell from '@/components/AppShell.vue'
 import {
   bluetoothDisponible,
@@ -64,6 +70,8 @@ import type {
   ImpresoraBluetooth,
 } from '@/composables/useBluetoothPrinter'
 
+const router = useRouter()
+const volverAjustes = () => void router.replace('/tabs/configuracion')
 const bluetoothCompatible = bluetoothDisponible()
 const impresora = ref<ImpresoraBluetooth | null>(null)
 const anchoPapel = ref<58 | 80>(58)
@@ -151,7 +159,11 @@ onMounted(cargar)
 
 <style scoped>
 .printer-page{max-width:880px;margin:0 auto;padding:clamp(20px,4vw,44px);color:#0a1f38}
+.printer-header{display:flex;align-items:center;gap:14px}
+.printer-title{min-width:0}
 .printer-header h1{margin:0;font-size:clamp(1.7rem,4vw,2.3rem)}
+.volver-ajustes{display:grid;place-items:center;width:40px;height:40px;flex:0 0 auto;border:1px solid rgba(10,31,56,.12);border-radius:11px;background:rgba(255,255,255,.82);color:#123a66;font-size:20px;cursor:pointer;transition:transform .2s ease,background .2s ease}
+.volver-ajustes:hover{transform:translateX(-3px);background:#fff}
 .printer-card{display:flex;align-items:center;gap:18px;margin:28px 0;padding:22px;border:1px solid #dce6ee;border-radius:18px;background:#fff;box-shadow:0 8px 24px #0a1f380c}
 .status-icon{display:grid;place-items:center;flex:none;width:58px;height:58px;border-radius:16px;background:#edf5fa;font-size:28px}
 .printer-info{flex:1;min-width:0}

@@ -2,6 +2,9 @@
   <AppShell>
     <main class="guia-page">
       <header class="guia-hero">
+        <button class="guia-volver-ajustes" type="button" title="Volver a ajustes" aria-label="Volver a ajustes" @click="volverAjustes">
+          <ion-icon :icon="arrowBackOutline" />
+        </button>
         <div class="guia-hero-icon" aria-hidden="true">
           <ion-icon :icon="bookOutline" />
         </div>
@@ -254,6 +257,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { IonIcon, IonModal, IonSpinner } from '@ionic/vue'
+import { useRouter } from 'vue-router'
 import DOMPurify from 'dompurify'
 import {
   addOutline,
@@ -274,6 +278,9 @@ import AppShell from '@/components/AppShell.vue'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useSesion } from '@/composables/useSesion'
 import { esUrlDrive, obtenerUrlVideoDirecto, obtenerUrlVideoIncrustado } from '@/utils/mediaAvisos'
+
+const router = useRouter()
+const volverAjustes = () => void router.replace('/tabs/configuracion')
 
 interface GuiaArticulo {
   id: string
@@ -587,6 +594,8 @@ onMounted(async () => {
 .guia-vistas { display: grid; gap: 14px; min-width: 0; }
 .guia-indice { display: grid; gap: 18px; min-width: 0; }
 .guia-hero { display: flex; align-items: center; gap: 17px; padding: 23px; border: 1px solid #dce8ef; border-radius: 19px; background: linear-gradient(120deg, #fff 0%, #f1f9fc 100%); box-shadow: 0 10px 26px rgba(18, 58, 102, .07); }
+.guia-volver-ajustes { display: grid; flex: 0 0 auto; width: 40px; height: 40px; place-items: center; border: 1px solid rgba(10,31,56,.12); border-radius: 11px; background: rgba(255,255,255,.82); color: #123a66; font-size: 20px; cursor: pointer; transition: transform .2s ease, background .2s ease; }
+.guia-volver-ajustes:hover { transform: translateX(-3px); background: #fff; }
 .guia-hero-icon { display: grid; flex: 0 0 auto; width: 54px; height: 54px; place-items: center; border-radius: 16px; background: #e3f5f4; color: #087e8b; font-size: 27px; }
 .guia-hero-copy { min-width: 0; flex: 1; }
 .guia-eyebrow { margin: 0 0 5px; color: #13858e; font-size: .72rem; font-weight: 900; letter-spacing: .12em; }
@@ -686,7 +695,7 @@ onMounted(async () => {
   .guia-page { gap: 14px; }
   .guia-hero { align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 17px; }
   .guia-hero-icon { width: 44px; height: 44px; border-radius: 13px; font-size: 22px; }
-  .guia-hero-copy { flex-basis: calc(100% - 58px); }
+  .guia-hero-copy { flex-basis: calc(100% - 116px); }
   .guia-hero-copy > p:last-child { font-size: .87rem; }
   .guia-hero > .guia-accion-principal { width: 100%; }
   .guia-lista-seccion, .guia-articulo { padding: 17px; }

@@ -2,10 +2,15 @@
   <AppShell>
     <main class="registros-personal-page force-light">
       <header class="page-heading">
-        <div>
-          <p class="eyebrow">Equipo</p>
-          <h2>Registros de personal</h2>
-          <p class="page-description">Ingresos, desconexiones y actividad en órdenes.</p>
+        <div class="page-heading-title">
+          <button class="volver-ajustes" type="button" title="Volver a ajustes" aria-label="Volver a ajustes" @click="volverAjustes">
+            <ion-icon :icon="arrowBackOutline" />
+          </button>
+          <div>
+            <p class="eyebrow">Equipo</p>
+            <h2>Registros de personal</h2>
+            <p class="page-description">Ingresos, desconexiones y actividad en órdenes.</p>
+          </div>
         </div>
         <button class="refresh-button" type="button" :disabled="cargando" @click="cargarRegistros">
           <ion-icon :icon="refreshOutline" /> {{ cargando ? 'Actualizando…' : 'Actualizar' }}
@@ -94,7 +99,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { IonIcon, onIonViewWillEnter } from '@ionic/vue'
-import { addCircleOutline, createOutline, logInOutline, logOutOutline, personCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
+import { useRouter } from 'vue-router'
+import { addCircleOutline, arrowBackOutline, createOutline, logInOutline, logOutOutline, personCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
 import AppShell from '@/components/AppShell.vue'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
@@ -107,6 +113,8 @@ const crearGrupo = () => reactive({ registros:[] as RegistroPersonal[], pagina:1
 const sesiones=crearGrupo(); const ordenes=crearGrupo(); const cargando=computed(()=>sesiones.cargando||ordenes.cargando); const ordenSeleccionada=ref(''); const historialOrden=ref<RegistroPersonal[]>([]); const cargandoHistorialOrden=ref(false); const errorHistorialOrden=ref(''); const errorHistorialCajas=ref(''); const usuariosSesion=ref<string[]>([]); const usuariosOrdenes=ref<string[]>([]); const sesionesActivas=ref(0); const ahora=ref(Date.now()); const duracionActualizadaEn=ref(Date.now()); let solicitudSesiones=0; let solicitudOrdenes=0
 const { historialCierres, cargarHistorial } = useHistorialCierres()
 const { turno, cargarTurno } = useTurno()
+const router = useRouter()
+const volverAjustes = () => void router.replace('/tabs/configuracion')
 const cargarGrupo=async(grupo:'sesiones'|'ordenes', estado:ReturnType<typeof crearGrupo>)=>{const n=grupo==='sesiones'?++solicitudSesiones:++solicitudOrdenes; estado.cargando=true; estado.error=''; try{const params=new URLSearchParams({grupo,pagina:String(estado.pagina),desde:estado.desde,hasta:estado.hasta,usuario:estado.usuario,tipo:estado.tipo});const res=await fetch(getApiBaseUrl()+'/registros-personal?'+params,{signal:AbortSignal.timeout(60000)});const data=await res.json().catch(()=>null);if(!res.ok)throw new Error(data?.error||'No se pudieron cargar los registros.');if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n){estado.registros=Array.isArray(data?.registros)?data.registros:[];estado.total=Number(data?.total)||0;estado.pagina=Number(data?.pagina)||1;estado.totalPaginas=Math.max(1,Number(data?.totalPaginas)||1);estado.conteos=data?.conteos||estado.conteos;if(grupo==='sesiones'){usuariosSesion.value=data?.usuarios||[];sesionesActivas.value=Number(data?.sesionesActivas)||0}else usuariosOrdenes.value=data?.usuarios||[]}}catch(e){if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n)estado.error=e instanceof Error?e.message:'No se pudieron cargar los registros.'}finally{if((grupo==='sesiones'?solicitudSesiones:solicitudOrdenes)===n)estado.cargando=false}}
 const abrirHistorialOrden=async(numero:string)=>{if(!numero)return;ordenSeleccionada.value=numero;historialOrden.value=[];errorHistorialOrden.value='';cargandoHistorialOrden.value=true;try{const params=new URLSearchParams({grupo:'ordenes',numeroOrden:numero});const res=await fetch(getApiBaseUrl()+'/registros-personal?'+params,{signal:AbortSignal.timeout(60000)});const data=await res.json().catch(()=>null);if(!res.ok)throw new Error(data?.error||'No se pudo cargar el historial de la orden.');if(ordenSeleccionada.value===numero)historialOrden.value=Array.isArray(data?.registros)?data.registros:[]}catch(e){if(ordenSeleccionada.value===numero)errorHistorialOrden.value=e instanceof Error?e.message:'No se pudo cargar el historial de la orden.'}finally{if(ordenSeleccionada.value===numero)cargandoHistorialOrden.value=false}}
 const cerrarHistorialOrden=()=>{ordenSeleccionada.value='';historialOrden.value=[]}
@@ -133,6 +141,9 @@ const formatearFecha=(valor:string)=>{const fecha=new Date(valor);return Number.
 <style scoped>
 .registros-personal-page { min-height: 100%; padding: 24px clamp(16px, 3vw, 36px) 34px; color: #102a43; }
 .page-heading { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:22px; }
+.page-heading-title { display:flex; align-items:center; gap:14px; min-width:0; }
+.volver-ajustes { display:grid; place-items:center; width:40px; height:40px; flex:0 0 auto; border:1px solid rgba(10,31,56,.12); border-radius:11px; background:rgba(255,255,255,.82); color:#123a66; font-size:20px; cursor:pointer; transition:transform .2s ease,background .2s ease; }
+.volver-ajustes:hover { transform:translateX(-3px); background:#fff; }
 .eyebrow { margin:0 0 5px; color:#58738f; text-transform:uppercase; letter-spacing:.12em; font-size:.72rem; font-weight:800; }
 h2 { margin:0; font-size:clamp(1.4rem,2vw,1.9rem); color:#123a66; }
 .page-description { margin:6px 0 0; color:#60758c; }
