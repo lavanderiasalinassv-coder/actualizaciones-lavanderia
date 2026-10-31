@@ -223,8 +223,31 @@ const enviarCorreoRecuperacion = async (correo, codigo) => {
   }
 };
 
+const enviarCorreoVerificacionLealtad = async (correo, nombre, codigo, motivo = "registro_tarjeta") => {
+  const nombreSeguro = String(nombre || "cliente")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  await transporter.sendMail({
+    from: "Lavandería Salinas <lavanderiasalinassv@gmail.com>",
+    to: correo,
+    subject: motivo === "canje_premio" ? "Código para canjear tu premio de lealtad - Lavandería Salinas" : "Verifica tu tarjeta de lealtad - Lavandería Salinas",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#123a66;">
+        <h2>Lavandería Salinas</h2>
+        <p>Hola ${nombreSeguro}, ${motivo === "canje_premio" ? "se está enviando este código para verificar tu identidad y activar el canje de tu promoción del programa de lealtad en una orden." : "usa este código para activar tu tarjeta de lealtad:"}</p>
+        <p style="padding:18px;border-radius:12px;background:#eef8fa;text-align:center;font-size:32px;font-weight:bold;letter-spacing:8px;color:#123a66;">${codigo}</p>
+        <p>El código vence en 10 minutos. ${motivo === "canje_premio" ? "Si no solicitaste el código o no estás de acuerdo con el canje, contacta a Lavandería Salinas por nuestros canales habituales y no compartas el código." : "Si no solicitaste esta tarjeta, ignora este mensaje."}</p>
+      </div>
+    `,
+  });
+};
+
 module.exports = {
   enviarCorreoHTML,
   enviarCorreoNotificacion,
   enviarCorreoRecuperacion,
+  enviarCorreoVerificacionLealtad,
 };

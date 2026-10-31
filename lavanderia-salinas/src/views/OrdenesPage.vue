@@ -1720,6 +1720,16 @@
         </div>
       </div>
     </ion-modal>
+    <ConfirmarVisitaLealtadModal
+      :is-open="mostrarModalLealtad"
+      :nombre-cliente="ordenLealtadPendiente?.nombreCliente ?? 'el cliente'"
+      :orden-numero="ordenLealtadPendiente?.numero ?? ''"
+      :procesando="procesandoVisitaLealtad"
+      :error="errorVisitaLealtad"
+      :resultado="resultadoVisitaLealtad"
+      @close="cerrarModalLealtad"
+      @confirm="confirmarVisitaLealtad"
+    />
     </div>
   </component>
 </template>
@@ -1735,6 +1745,7 @@ const emit = defineEmits<{
 }>()
 
 import AppShell from '@/components/AppShell.vue'
+import ConfirmarVisitaLealtadModal from '@/components/ConfirmarVisitaLealtadModal.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
@@ -1751,6 +1762,7 @@ import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, fechaISOaCentroa
 import { useCatalogo } from '@/composables/Usecatalogo'
 import { useClientes } from '@/composables/useClientes'
 import { useHistorialCierres } from '@/composables/useHistorialCierres'
+import { buscarTarjetaLealtadPorTelefono, registrarVisitaLealtad } from '@/composables/useLealtad'
 import { useTurno } from '@/composables/useTurno'
 import { useSesion } from '@/composables/useSesion'
 import { enviarCorreoNotificacion } from '@/composables/useCorreo'
@@ -2086,6 +2098,11 @@ let limpiarSwipeTarjetaTimeout: number | undefined
 const mostrarConfirmacionPagoEntrega = ref(false)
 const avanzandoConfirmacionPagoEntrega = ref(false)
 const mostrarConfirmacionEstado = ref(false)
+const mostrarModalLealtad = ref(false)
+const ordenLealtadPendiente = ref<Orden | null>(null)
+const procesandoVisitaLealtad = ref(false)
+const errorVisitaLealtad = ref('')
+const resultadoVisitaLealtad = ref<{ nombre: string; sellos: number; meta: number; premioDisponible: boolean } | null>(null)
 const ordenCambioPendienteId = ref('')
 const estadoObjetivoCambio = ref<OrdenEstado | ''>('')
 const mostrarModalRecepcion = ref(false)
@@ -4510,14 +4527,51 @@ const confirmarCambioEstado = async () => {
       void enviarNotificacionEstado(orden, estado, estado === 'entregado' ? ordenActualizada.entregadoAt ?? ordenActualizada.updatedAt : undefined)
     }
     cancelarCambioEstado()
+    if (estado === 'entregado' && !reasignandoEntregaExistente) {
+      ordenLealtadPendiente.value = ordenActualizada
+      errorVisitaLealtad.value = ''
+      resultadoVisitaLealtad.value = null
+      mostrarModalLealtad.value = true
+    }
   } catch (error) {
     window.alert(
       error instanceof Error
         ? error.message
         : 'No se pudo actualizar el estado de la orden.'
     )
-    } finally {
-      peticionOrdenEnCurso.value = false
+  } finally {
+    peticionOrdenEnCurso.value = false
+  }
+}
+
+const cerrarModalLealtad = () => {
+  mostrarModalLealtad.value = false
+  ordenLealtadPendiente.value = null
+  procesandoVisitaLealtad.value = false
+  errorVisitaLealtad.value = ''
+  resultadoVisitaLealtad.value = null
+}
+
+const confirmarVisitaLealtad = async () => {
+  const orden = ordenLealtadPendiente.value
+  if (!orden || procesandoVisitaLealtad.value) return
+  procesandoVisitaLealtad.value = true
+  errorVisitaLealtad.value = ''
+  try {
+    const telefono = `${orden.codigoPais || '+503'}${orden.telefono || ''}`
+    const tarjeta = await buscarTarjetaLealtadPorTelefono(telefono)
+    if (!tarjeta?.token) throw new Error('No se encontró una tarjeta de lealtad asociada a este teléfono.')
+    const actualizada = await registrarVisitaLealtad(tarjeta.token, orden.id)
+    resultadoVisitaLealtad.value = {
+      nombre: actualizada.nombre || orden.nombreCliente,
+      sellos: actualizada.sellos,
+      meta: actualizada.meta,
+      premioDisponible: actualizada.premioDisponible
+    }
+  } catch (error) {
+    errorVisitaLealtad.value = error instanceof Error ? error.message : 'No se pudo registrar la visita de lealtad.'
+  } finally {
+    procesandoVisitaLealtad.value = false
   }
 }
 

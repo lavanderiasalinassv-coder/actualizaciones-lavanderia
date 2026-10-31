@@ -23,6 +23,13 @@
           :class="{ activo: vistaPromociones === 'cupones' }"
           @click="vistaPromociones = 'cupones'"
         >Cupones</button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="vistaPromociones === 'lealtad'"
+          :class="{ activo: vistaPromociones === 'lealtad' }"
+          @click="vistaPromociones = 'lealtad'"
+        >Programa de lealtad</button>
       </div>
 
       <div v-if="mostrarFormulario" class="formulario-promo" :class="{ 'formulario-cupon': formulario.generarQr }">
@@ -176,6 +183,8 @@
             </div>
           </div>
         </section>
+
+        <ProgramaLealtadPanel v-else-if="vistaPromociones === 'lealtad'" />
 
         <template v-else>
         <div v-if="cargando && promociones.length === 0" class="promociones-cargando" role="status" aria-live="polite">
@@ -339,6 +348,7 @@ import {
 } from 'ionicons/icons'
 import AppShell from '@/components/AppShell.vue'
 import CuponQrCard from '@/components/CuponQrCard.vue'
+import ProgramaLealtadPanel from '@/components/ProgramaLealtadPanel.vue'
 import { usePromociones, type Promocion, type TipoDescuento, type TipoClienteAplica, type DiaSemana } from '@/composables/usePromociones'
 
 const { promociones, cargando, error, cargarPromociones, crearPromocion, actualizarPromocion, eliminarPromocion } = usePromociones()
@@ -346,7 +356,7 @@ const { promociones, cargando, error, cargarPromociones, crearPromocion, actuali
 const mostrarFormulario = ref(false)
 const editandoId = ref<string | null>(null)
 const filtroVigencia = ref<'todas' | 'vigentes' | 'inactivas' | 'cupones'>('todas')
-const vistaPromociones = ref<'promociones' | 'cupones'>('promociones')
+const vistaPromociones = ref<'promociones' | 'cupones' | 'lealtad'>('promociones')
 const guardando = ref(false)
 
 const diasSemana: DiaSemana[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']

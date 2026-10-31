@@ -243,6 +243,15 @@
                         <ion-icon :icon="sparklesOutline" />
                         Promociones disponibles
                       </div>
+                      <div v-if="buscandoTarjetaLealtad" class="lealtad-promo-info">Consultando visitas de lealtad...</div>
+                      <div v-else-if="tarjetaLealtad" class="lealtad-promo-info">
+                        <strong>{{ tarjetaLealtad.nombre }} tiene {{ tarjetaLealtad.sellos }} de {{ tarjetaLealtad.meta }} visitas en el programa de lealtad.</strong>
+                        <template v-if="tarjetaLealtad.premioDisponible && tarjetaLealtad.sellos >= tarjetaLealtad.meta">
+                          <span>Premio: {{ tarjetaLealtad.premio }} · {{ tarjetaLealtad.tipoDescuento === 'dinero' ? '$' + Number(tarjetaLealtad.valorDescuento || 0).toFixed(2) : Number(tarjetaLealtad.valorDescuento || 0) + '%' }} de descuento</span>
+                          <button v-if="!premioLealtadAplicado" type="button" class="lealtad-promo-aplicar" @click="aplicarPremioLealtad">{{ premioLealtadVerificado ? 'Canjear premio' : 'Verificar para canjear' }}</button>
+                          <span v-else>Premio aplicado a esta orden</span>
+                        </template>
+                      </div>
                       <div v-if="promocionesVisibles.length" class="promo-grid">
                         <button
                           v-for="promo in promocionesVisibles"
@@ -877,6 +886,29 @@
       </div>
     </ion-modal>
 
+    <ion-modal :is-open="mostrarVerificacionPremio" class="modal-verificacion-premio" @didDismiss="cerrarVerificacionPremio">
+      <div class="modal-verificacion-contenido">
+        <header class="modal-verificacion-header">
+          <div><span>Programa de lealtad</span><h3>Verificar premio</h3></div>
+          <button type="button" aria-label="Cerrar" @click="cerrarVerificacionPremio">×</button>
+        </header>
+        <p class="modal-verificacion-explicacion">Para activar el canje, confirma con el cliente escaneando el QR personal de su tarjeta o enviando un código al correo registrado.</p>
+        <div v-if="premioLealtadVerificado" class="modal-verificacion-ok" role="status">Identidad verificada. Ya puedes activar el canje de {{ tarjetaLealtad?.premio }}.</div>
+        <template v-else>
+          <div class="modal-verificacion-opciones">
+            <button type="button" :disabled="enviandoCodigoPremio || verificandoCodigoPremio" @click="iniciarEscaneoVerificacionPremio">Escanear QR personal</button>
+            <button type="button" :disabled="enviandoCodigoPremio || verificandoCodigoPremio" @click="enviarCodigoPremio">{{ enviandoCodigoPremio ? 'Enviando código…' : 'Enviar código al correo registrado' }}</button>
+          </div>
+          <p v-if="correoCodigoPremio" class="modal-verificacion-destino" role="status">Enviamos el código a {{ correoCodigoPremio }}. Expira en 10 minutos.</p>
+          <label v-if="correoCodigoPremio" class="modal-verificacion-campo">Código de 6 dígitos<input v-model="codigoPremio" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></label>
+          <button v-if="correoCodigoPremio" type="button" class="modal-verificacion-confirmar" :disabled="codigoPremio.length !== 6 || verificandoCodigoPremio" @click="verificarCodigoPremio">{{ verificandoCodigoPremio ? 'Verificando…' : 'Confirmar código' }}</button>
+          <div v-if="escaneandoVerificacionPremio" class="modal-verificacion-camara"><video ref="videoVerificacionPremio" autoplay playsinline muted aria-label="Cámara para escanear el QR personal de lealtad" /><button type="button" @click="detenerEscaneoVerificacionPremio">Cancelar escaneo</button></div>
+        </template>
+        <p v-if="errorVerificacionPremio" class="modal-verificacion-error" role="alert">{{ errorVerificacionPremio }}</p>
+        <button v-if="premioLealtadVerificado" type="button" class="modal-verificacion-confirmar" @click="confirmarAplicacionPremio">Canjear premio</button>
+      </div>
+    </ion-modal>
+
     <ion-modal :is-open="mostrarAdvertenciaStock" class="modal-stock force-light" @didDismiss="cerrarAdvertenciaStock">
       <div class="modal-stock-contenido">
         <div class="modal-stock-header">
@@ -1025,6 +1057,7 @@ import { ZONA_HORARIA_NEGOCIO } from '@/composables/useFechas'
 import { useSesion } from '@/composables/useSesion'
 import { obtenerIconoPorNombre } from '@/composables/iconosPrendas'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
+import { buscarTarjetaLealtadPorTelefono, canjearPremioLealtad, solicitarCodigoCanjeLealtad, verificarCodigoCanjeLealtad, type TarjetaLealtad } from '@/composables/useLealtad'
 import { imprimirTicketOrden as imprimirTicketOrdenCompartido, imprimirTicketPrendas as imprimirTicketPrendasCompartido, logoTicket } from '@/utils/documentosOrden'
 import {
   calendarOutline,
@@ -1156,6 +1189,21 @@ const productosScroll = ref<HTMLElement | null>(null)
 const mostrarDescuento = ref(false)
 const clienteEncontrado = ref<ClienteConEstado | null>(null)
 const promoSeleccionada = ref<Promocion | null>(null)
+const tarjetaLealtad = ref<TarjetaLealtad | null>(null)
+const buscandoTarjetaLealtad = ref(false)
+const premioLealtadAplicado = ref(false)
+const premioLealtadVerificado = ref(false)
+const mostrarVerificacionPremio = ref(false)
+const enviandoCodigoPremio = ref(false)
+const verificandoCodigoPremio = ref(false)
+const correoCodigoPremio = ref('')
+const codigoPremio = ref('')
+const errorVerificacionPremio = ref('')
+const escaneandoVerificacionPremio = ref(false)
+const videoVerificacionPremio = ref<HTMLVideoElement | null>(null)
+let controlesVerificacionPremio: IScannerControls | null = null
+let procesandoQrPremio = false
+let consultaLealtadId = 0
 const promoQrEscaneada = ref<Promocion | null>(null)
 const escaneandoCupon = ref(false)
 const errorEscaneoCupon = ref('')
@@ -1707,6 +1755,28 @@ const subirComprobanteTransferencia = async (event: Event) => {
 
 watch(() => pedido.telefono, buscarCliente)
 watch(() => pedido.codigoPais, () => buscarCliente(pedido.telefono))
+watch([() => pedido.telefono, () => pedido.codigoPais], async () => {
+  const id = ++consultaLealtadId
+  if (premioLealtadAplicado.value) {
+    pedido.descuentoPromocion = 0
+    pedido.descuentoPromocionTipo = 'porcentaje'
+  }
+  tarjetaLealtad.value = null
+  premioLealtadAplicado.value = false
+  premioLealtadVerificado.value = false
+  cerrarVerificacionPremio()
+  const telefono = normalizarTelefono((pedido.codigoPais || '503') + pedido.telefono)
+  if (telefono.length < 7) return
+  buscandoTarjetaLealtad.value = true
+  try {
+    const tarjeta = await buscarTarjetaLealtadPorTelefono(telefono)
+    if (id === consultaLealtadId) tarjetaLealtad.value = tarjeta
+  } catch (error) {
+    if (id === consultaLealtadId) console.warn('No se pudo consultar la tarjeta de lealtad:', error)
+  } finally {
+    if (id === consultaLealtadId) buscandoTarjetaLealtad.value = false
+  }
+})
 
 // Limpiar campos específicos de pago cuando cambia el método
 const seleccionarEstadoPago = (estado: 'porCobrar' | 'anticipo' | 'pagado') => {
@@ -1793,6 +1863,7 @@ const seleccionarPromocion = (promo: Promocion) => {
     return
   }
 
+  premioLealtadAplicado.value = false
   promoQrEscaneada.value = null
   promoSeleccionada.value = promo
   pedido.promocionQrId = promo.generarQr ? promo.id : null
@@ -1907,6 +1978,7 @@ const conectarEscanerCupon = async () => {
               return
             }
             emitirPitidoCupon()
+            premioLealtadAplicado.value = false
             promoQrEscaneada.value = promocion
             promoSeleccionada.value = promocion
             pedido.promocionQrId = promocion.id
@@ -1940,11 +2012,130 @@ onBeforeUnmount(() => {
 })
 
 const limpiarPromocion = () => {
+  premioLealtadAplicado.value = false
+  premioLealtadVerificado.value = false
   promoSeleccionada.value = null
   promoQrEscaneada.value = null
   pedido.descuentoPromocion = 0
   pedido.descuentoPromocionTipo = 'porcentaje'
   pedido.promocionQrId = null
+}
+
+const aplicarPremioLealtad = () => {
+  const tarjeta = tarjetaLealtad.value
+  if (!tarjeta?.token || tarjeta.sellos !== 10 || !tarjeta.premioDisponible) return
+  if (!premioLealtadVerificado.value) {
+    errorVerificacionPremio.value = ''
+    mostrarVerificacionPremio.value = true
+    return
+  }
+  confirmarAplicacionPremio()
+}
+
+const confirmarAplicacionPremio = () => {
+  const tarjeta = tarjetaLealtad.value
+  if (!premioLealtadVerificado.value || !tarjeta?.token || tarjeta.sellos !== 10 || !tarjeta.premioDisponible) return
+  promoSeleccionada.value = null
+  promoQrEscaneada.value = null
+  pedido.promocionQrId = null
+  pedido.descuentoPromocionTipo = tarjeta.tipoDescuento || 'porcentaje'
+  pedido.descuentoPromocion = Number(tarjeta.valorDescuento || 0)
+  premioLealtadAplicado.value = true
+  mostrarVerificacionPremio.value = false
+}
+
+const cerrarVerificacionPremio = () => {
+  detenerEscaneoVerificacionPremio()
+  mostrarVerificacionPremio.value = false
+  correoCodigoPremio.value = ''
+  codigoPremio.value = ''
+  errorVerificacionPremio.value = ''
+}
+
+const detenerEscaneoVerificacionPremio = () => {
+  controlesVerificacionPremio?.stop()
+  controlesVerificacionPremio = null
+  escaneandoVerificacionPremio.value = false
+  procesandoQrPremio = false
+}
+
+const iniciarEscaneoVerificacionPremio = async () => {
+  errorVerificacionPremio.value = ''
+  escaneandoVerificacionPremio.value = true
+  await nextTick()
+  if (!videoVerificacionPremio.value) {
+    errorVerificacionPremio.value = 'No se pudo iniciar la cámara.'
+    detenerEscaneoVerificacionPremio()
+    return
+  }
+  try {
+    controlesVerificacionPremio = await new BrowserMultiFormatReader().decodeFromVideoDevice(undefined, videoVerificacionPremio.value, (resultado) => {
+      if (!resultado || procesandoQrPremio) return
+      procesandoQrPremio = true
+      const token = resultado.getText().trim()
+      if (!/^[a-f0-9]{64}$/i.test(token) || token !== tarjetaLealtad.value?.token) {
+        errorVerificacionPremio.value = 'El QR no corresponde a la tarjeta de lealtad de este cliente.'
+        procesandoQrPremio = false
+        return
+      }
+      premioLealtadVerificado.value = true
+      detenerEscaneoVerificacionPremio()
+    })
+  } catch {
+    errorVerificacionPremio.value = 'No se pudo acceder a la cámara. Revisa el permiso de cámara.'
+    detenerEscaneoVerificacionPremio()
+  }
+}
+
+const telefonoClienteLealtad = () => normalizarTelefono((pedido.codigoPais || '503') + pedido.telefono)
+
+const enviarCodigoPremio = async () => {
+  if (enviandoCodigoPremio.value) return
+  enviandoCodigoPremio.value = true
+  errorVerificacionPremio.value = ''
+  try {
+    const solicitud = await solicitarCodigoCanjeLealtad(telefonoClienteLealtad())
+    correoCodigoPremio.value = solicitud.correo
+  } catch (error) {
+    errorVerificacionPremio.value = error instanceof Error ? error.message : 'No se pudo enviar el código.'
+  } finally {
+    enviandoCodigoPremio.value = false
+  }
+}
+
+const verificarCodigoPremio = async () => {
+  if (verificandoCodigoPremio.value || codigoPremio.value.length !== 6) return
+  verificandoCodigoPremio.value = true
+  errorVerificacionPremio.value = ''
+  try {
+    const verificada = await verificarCodigoCanjeLealtad(telefonoClienteLealtad(), codigoPremio.value)
+    if (!verificada.token || verificada.token !== tarjetaLealtad.value?.token) throw new Error('El código no verificó la tarjeta de lealtad de este cliente.')
+    if (verificada.sellos !== 10 || !verificada.premioDisponible) throw new Error('Esta tarjeta ya no tiene un premio disponible para canjear.')
+    tarjetaLealtad.value = { ...tarjetaLealtad.value, ...verificada }
+    premioLealtadVerificado.value = true
+  } catch (error) {
+    errorVerificacionPremio.value = error instanceof Error ? error.message : 'No se pudo verificar el código.'
+  } finally {
+    verificandoCodigoPremio.value = false
+  }
+}
+
+onBeforeUnmount(detenerEscaneoVerificacionPremio)
+
+const completarCanjePremioLealtad = async (ordenId?: string, token?: string) => {
+  if (!token || !ordenId) return
+  try {
+    const resultado = await canjearPremioLealtad(token, ordenId)
+    if (tarjetaLealtad.value?.token === token) {
+      tarjetaLealtad.value = { ...tarjetaLealtad.value, sellos: resultado.sellos, premioDisponible: false }
+    }
+    premioLealtadAplicado.value = false
+    const toast = await toastController.create({ message: 'Premio aplicado; la tarjeta volvió a 0 visitas.', duration: 3000, color: 'success' })
+    await toast.present()
+  } catch (error) {
+    premioLealtadAplicado.value = false
+    window.alert('La orden se creó con el descuento, pero no se pudo reiniciar la tarjeta: ' + (error instanceof Error ? error.message : 'revisa el programa de lealtad.'))
+  }
 }
 
 const clientePasoSiguiente = () => {
@@ -2065,6 +2256,7 @@ const crearOrdenConCliente = async () => {
       }
     }
 
+    const tokenPremioLealtad = premioLealtadAplicado.value ? tarjetaLealtad.value?.token : undefined
     const resultado = await crearOrden()
 
     if (resultado?.error) {
@@ -2077,6 +2269,8 @@ const crearOrdenConCliente = async () => {
       mostrarAdvertenciaStock.value = true
       return
     }
+
+    await completarCanjePremioLealtad(resultado?.orden?.id, tokenPremioLealtad)
 
     // Enviar correo de forma asíncrona sin bloquear la confirmación
     enviarConfirmacionCorreo(resultado?.orden).catch(error => {
@@ -2109,10 +2303,13 @@ const continuarOrdenSinStock = async () => {
     }
   }
 
+  const tokenPremioLealtad = premioLealtadAplicado.value ? tarjetaLealtad.value?.token : undefined
   const resultado = await crearOrden({ forzarSinStock: true })
 
   if (resultado?.error) {
     window.alert(`No se pudo crear la orden: ${resultado.error}`)
+  } else {
+    await completarCanjePremioLealtad(resultado?.orden?.id, tokenPremioLealtad)
   }
   } finally {
     creandoOrden.value = false
@@ -3408,6 +3605,9 @@ onMounted(() => {
   gap: 10px;
 }
 
+.lealtad-promo-info { display: grid; gap: 8px; margin: 4px 0 12px; padding: 12px 14px; border: 1px solid #b8e5d9; border-radius: 14px; background: #effcf7; color: #145c50; }
+.lealtad-promo-info > span { color: #3b6f68; font-size: .88rem; }
+.lealtad-promo-aplicar { justify-self: start; min-height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: #168b83; color: #fff; font: inherit; font-weight: 850; cursor: pointer; }
 .promo-escanear-btn {
   display: inline-flex;
   align-items: center;
@@ -3499,6 +3699,25 @@ onMounted(() => {
   font-weight: 800;
   cursor: pointer;
 }
+
+.modal-verificacion-premio::part(content) { --width: min(520px, 94vw); --height: auto; --max-height: 92vh; border-radius: 18px; background: #fff; }
+.modal-verificacion-contenido { display: grid; gap: 14px; padding: 22px; color: #123a66; background: #fff; }
+.modal-verificacion-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.modal-verificacion-header span { color: #1688ad; font-size: .76rem; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+.modal-verificacion-header h3 { margin: 4px 0 0; color: #123a66; }
+.modal-verificacion-header button { border: 0; background: transparent; color: #123a66; font-size: 1.6rem; cursor: pointer; }
+.modal-verificacion-explicacion, .modal-verificacion-destino { margin: 0; line-height: 1.5; color: #4b6175; }
+.modal-verificacion-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-verificacion-opciones button, .modal-verificacion-confirmar, .modal-verificacion-camara button { min-height: 44px; border: 0; border-radius: 11px; padding: 10px 14px; background: #123a66; color: white; font: inherit; font-weight: 800; cursor: pointer; }
+.modal-verificacion-opciones button:disabled, .modal-verificacion-confirmar:disabled { opacity: .55; cursor: wait; }
+.modal-verificacion-campo { display: grid; gap: 7px; font-weight: 800; }
+.modal-verificacion-campo input { min-height: 46px; border: 1px solid #c5d2df; border-radius: 10px; padding: 10px 14px; background: #fff; color: #123a66; font: inherit; letter-spacing: .2em; }
+.modal-verificacion-ok { border-radius: 10px; padding: 12px; background: #e8f8ee; color: #17663a; font-weight: 800; }
+.modal-verificacion-error { margin: 0; color: #b42318; font-weight: 700; }
+.modal-verificacion-camara { display: grid; gap: 10px; }
+.modal-verificacion-camara video { width: 100%; max-height: 40vh; border-radius: 12px; background: #0a1f38; object-fit: cover; }
+
+.modal-verificacion-premio :is(p, span, label, h3) { color-scheme: light; }
 
 .promo-lector-error {
   margin: 0;
