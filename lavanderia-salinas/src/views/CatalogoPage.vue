@@ -1297,8 +1297,8 @@ const quitarEtiqueta = (id: string) => {
 }
 
 .tab-chip.active {
-  background: #123a66;
-  border-color: #123a66;
+  background: var(--app-shell-header-color, #081a30);
+  border-color: var(--app-shell-header-color, #081a30);
   color: #f5f9fc;
 }
 
@@ -1331,7 +1331,7 @@ const quitarEtiqueta = (id: string) => {
   padding: 10px 18px;
   border-radius: 12px;
   border: none;
-  background: #123a66;
+  background: var(--app-shell-header-color, #081a30);
   color: #f5f9fc;
   font-weight: 800;
   font-size: 0.88rem;

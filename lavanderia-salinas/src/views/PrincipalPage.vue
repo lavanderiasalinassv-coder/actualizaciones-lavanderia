@@ -157,7 +157,7 @@
               :key="a.route"
               class="acceso-item"
               :class="{ destacado: a.destacado, active: route.path === a.route }"
-              :style="{ '--acceso-color': a.color }"
+              :style="{ '--acceso-color': a.destacado ? apariencia.appShellHeaderColor : a.color }"
               :disabled="
                 !esAdministrador &&
                 funcionesBloqueadas &&
@@ -2767,7 +2767,7 @@ const aplicarColor = () => {
 }
 
 .acceso-item.destacado {
-  background: linear-gradient(135deg, #123a66, #0d2b4e);
+  background: var(--acceso-color, var(--app-shell-header-color, #081a30));
   color: #f5f9fc;
   border-color: transparent;
 }
@@ -4200,7 +4200,7 @@ const aplicarColor = () => {
 }
 
 .acceso-item.destacado {
-  background: linear-gradient(135deg, var(--acceso-color, #123a66), color-mix(in srgb, var(--acceso-color, #123a66) 65%, black));
+  background: var(--acceso-color, var(--app-shell-header-color, #081a30));
   color: #f5f9fc;
   border-color: transparent;
 }

@@ -3,6 +3,7 @@
     v-if="!lateral"
     class="asistente-sali"
     :class="{ 'modo-voz-activo': conversacionPorVoz, hablando: reproduciendoVoz, escuchando }"
+    :style="{ background: apariencia.appShellHeaderColor }"
     type="button"
     :disabled="asistenteBloqueado"
     :title="asistenteBloqueado ? 'Activa tu asistencia para usar Burbujita' : (reproduciendoVoz ? 'Interrumpir a Burbujita' : 'Abrir chat de Burbujita')"
@@ -230,6 +231,7 @@ import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useSaliAiConfig } from '@/composables/useSaliAiConfig'
 import { obtenerTranscriptor, decodificarAudioParaWhisper } from '@/composables/useTranscripcionLocal'
 import { useOrdenes, type Orden } from '@/composables/useOrdenes'
+import { useApariencia } from '@/composables/useApariencia'
 
 type Mensaje = { rol: 'user' | 'assistant', texto: string }
 
@@ -353,6 +355,7 @@ const aplicarEdicionesPdfOrden = (orden: Orden, texto: string) => {
 }
 
 const { usuarioActual, rol, esAdministrador } = useSesion()
+const { apariencia } = useApariencia()
 const { funcionesBloqueadas } = useAccesoOperativo()
 const asistenteBloqueado = computed(() => !esAdministrador.value && funcionesBloqueadas.value)
 const { vozSeleccionada } = useSaliAiConfig()

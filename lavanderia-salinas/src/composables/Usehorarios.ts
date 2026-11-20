@@ -802,9 +802,9 @@ export function useHorarios() {
     }
     pagos.value.unshift(pago)
 
-    // Reinicia el ciclo completo del empleado para que el siguiente periodo empiece limpio.
+    // Reinicia los registros del ciclo pagado, pero conserva los turnos programados
+    // para que sigan apareciendo en el calendario.
     registros.value = registros.value.filter((r) => r.empleadoId !== empleadoId)
-    turnos.value = turnos.value.filter((t) => t.empleadoId !== empleadoId)
     notificaciones.value = notificaciones.value.filter((n) => n.empleadoId !== empleadoId)
 
     return pago

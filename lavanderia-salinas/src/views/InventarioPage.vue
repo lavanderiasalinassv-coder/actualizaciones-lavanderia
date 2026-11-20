@@ -683,6 +683,12 @@ h1 {
   font-weight: 700;
 }
 
+.header-actions .btn-primario,
+.empty-state .btn-primario {
+  --background: var(--app-shell-header-color, #081a30);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #081a30) 82%, black);
+}
+
 .btn-refill {
   --background: #16a34a;
   --background-hover: #15803d;

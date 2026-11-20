@@ -1,6 +1,6 @@
 <template>
   <ion-page>
-    <ion-content class="splash-content" :fullscreen="true">
+    <ion-content class="splash-content" :fullscreen="true" :style="{ '--splash-accent': apariencia.appShellHeaderColor }">
       <div class="orbe orbe-uno" aria-hidden="true"></div>
       <div class="orbe orbe-dos" aria-hidden="true"></div>
       <div class="cielo-burbujas" aria-hidden="true">
@@ -274,7 +274,7 @@ onMounted(() => {
     radial-gradient(circle at 50% 52%, rgba(207, 233, 245, 0.14) 0%, transparent 38%),
     radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
     radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
-    linear-gradient(160deg, #123a66 0%, #0d2b4e 100%);
+    linear-gradient(160deg, var(--splash-accent, #081a30) 0%, var(--splash-accent, #081a30) 100%);
   color: #eaf4fa;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -463,7 +463,7 @@ onMounted(() => {
   width: 38%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #a9d8ee, #4fb3e0);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--splash-accent, #e2ecef) 70%, #ffffff), var(--splash-accent, #e2ecef));
   animation: cargar 1.3s ease-in-out infinite;
   box-shadow: 0 0 12px rgba(79,179,224,.55);
 }
@@ -503,8 +503,8 @@ onMounted(() => {
 .boton-reintentar {
   border: none;
   color: #ffffff;
-  background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%);
-  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+  background: linear-gradient(135deg, var(--splash-accent, #e2ecef) 0%, color-mix(in srgb, var(--splash-accent, #e2ecef) 55%, #123a66) 100%);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--splash-accent, #e2ecef) 30%, transparent);
 }
 .boton-reintentar:hover:not(:disabled) { transform: translateY(-1px); }
 .boton-reintentar:disabled { opacity: 0.65; cursor: wait; }
@@ -548,7 +548,7 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: linear-gradient(135deg, var(--splash-accent, #e2ecef) 0%, color-mix(in srgb, var(--splash-accent, #e2ecef) 55%, #123a66) 100%);
   cursor: pointer;
 }
 .boton-dev-confirmar:disabled { opacity: 0.5; cursor: not-allowed; }

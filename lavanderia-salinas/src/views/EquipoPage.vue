@@ -658,6 +658,11 @@ h3 {
   font-weight: 700;
 }
 
+.header-row > .btn-primario {
+  --background: var(--app-shell-header-color, #081a30);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #081a30) 82%, black);
+}
+
 .btn-fantasma {
   --background: transparent;
   --color: #123a66;

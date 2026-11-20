@@ -674,8 +674,8 @@ const diasSeleccionadosTexto = computed(() => {
 }
 
 .btn-primario {
-  --background: #123a66;
-  --background-hover: #0d2b4e;
+  --background: var(--app-shell-header-color, #081a30);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #081a30) 82%, black);
   --color: #f5f9fc;
   --border-radius: 12px;
   font-weight: 700;
