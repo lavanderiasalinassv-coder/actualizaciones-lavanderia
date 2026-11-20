@@ -36,6 +36,7 @@
     <ion-modal
       :is-open="mostrarModalInactividad"
       class="modal-inactividad"
+      :style="estiloAppShell"
       :backdrop-dismiss="false"
       @didDismiss="mantenerSesionActiva"
     >
@@ -97,9 +98,11 @@ import WhatsappPanel from '@/components/WhatsappPanel.vue'
 import FacebookPannel from '@/components/FacebookPannel.vue'
 import NavegadorPannel from '@/components/NavegadorPannel.vue'
 import { usePanelRedes } from '@/composables/usePanelRedes'
+import { useApariencia } from '@/composables/useApariencia'
 
 const route = useRoute()
 const router = useRouter()
+const { estiloAppShell } = useApariencia()
 const RUTAS_SIN_CONTROL_INACTIVIDAD = new Set(['/', '/login', '/verificacion-2fa'])
 const rutaProtegida = computed(() => !RUTAS_SIN_CONTROL_INACTIVIDAD.has(route.path))
 const { cerrarSesion, validarSesion } = useSesion()
@@ -352,7 +355,7 @@ onUnmounted(() => {
 .inactividad-contenido {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(165deg, #123a66 0%, #0d2b4e 60%, #0a2140 100%);
+  background: var(--app-shell-header-color, #081a30);
   color: #eaf4fa;
   padding: 34px 28px 28px;
   display: flex;
