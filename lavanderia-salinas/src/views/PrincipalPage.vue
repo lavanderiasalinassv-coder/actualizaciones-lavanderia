@@ -1,6 +1,28 @@
 <template>
   <AppShell>
     <div class="home-page">
+    <section
+      v-if="usaVistaBienvenidaLateral"
+      class="principal-sidebar-welcome"
+      :style="{ '--welcome-accent': apariencia.appShellHeaderColor }"
+      aria-label="Bienvenida"
+    >
+      <div class="principal-sidebar-welcome-glow" aria-hidden="true"></div>
+      <div class="principal-sidebar-welcome-card">
+        <div class="principal-sidebar-welcome-logo">
+          <img :src="logoActual" alt="Logo de Lavandería Salinas" />
+        </div>
+        <div class="principal-sidebar-welcome-copy">
+          <p class="principal-sidebar-welcome-date">{{ fechaCorta }}</p>
+          <time class="principal-sidebar-welcome-time">{{ horaActual }}</time>
+          <div class="principal-sidebar-welcome-divider"></div>
+          <p class="principal-sidebar-welcome-greeting">{{ saludoHora }},</p>
+          <h1>{{ nombreUsuario }}</h1>
+          <span>Bienvenido a Lavandería Salinas</span>
+        </div>
+      </div>
+    </section>
+    <template v-else>
     <div class="home-banner-mobile">
       <div class="home-banner-mobile-top">
         <div class="home-banner-mobile-logo">
@@ -149,7 +171,7 @@
       </div>
 
       <!-- ───────────── Accesos rápidos + Tareas ───────────── -->
-      <div class="home-grid-row">
+      <div class="home-grid-row" :class="{ 'home-grid-row-swapped': apariencia.principalPanelesInvertidos }">
         <div class="accesos-card">
           <div class="accesos-grid">
             <button
@@ -252,6 +274,7 @@
         <span class="switch-riel"></span>
       </label>
     </div>
+    </template>
 
     <ion-modal :is-open="mostrarModalGasto" class="modal-home modal-gasto-shell" @didDismiss="mostrarModalGasto = false">
       <div class="modal-contenido modal-gasto-contenido force-light">
@@ -920,6 +943,7 @@ import { useHorarios } from '@/composables/Usehorarios'
 import { useTareas, type TareaAsignada } from '@/composables/useTareas'
 import { useTurno } from '@/composables/useTurno'
 import { useApariencia } from '@/composables/useApariencia'
+import { OPCIONES_ACCESO_PRINCIPAL, type AccesoDirecto, type RolAcceso } from '@/data/opcionesAccesoPrincipal'
 import { combinarFechaHoraCentroamerica, fechaHoyCentroamerica, formatearFechaCentroamerica } from '@/composables/useFechas'
 import logo from '@/assets/logo.png'
 import imagenDesarrollador from '@/assets/perfilprogramador.png'
@@ -934,19 +958,13 @@ import {
   businessOutline,
   calendarClearOutline,
   checkmarkCircleOutline,
-  cartOutline,
   closeOutline,
   cutOutline,
   createOutline,
-  cubeOutline,
   documentTextOutline,
   ellipseOutline,
   homeOutline,
   listOutline,
-  peopleOutline,
-  pricetagOutline,
-  receiptOutline,
-  settingsOutline,
   shieldCheckmarkOutline,
   shirtOutline,
   squareOutline,
@@ -955,7 +973,6 @@ import {
   personOutline,
   personCircleOutline,
   cameraOutline,
-  calendarOutline,
   refreshOutline,
   notificationsOutline,
   bookOutline,
@@ -1002,6 +1019,7 @@ const alertaTurnoAntiguo = ref('')
 const { empleadoActivo, asistenciaActiva, accesoOperativoBloqueado, funcionesBloqueadas } = useAccesoOperativo()
 
 const { apariencia } = useApariencia()
+const usaVistaBienvenidaLateral = computed(() => apariencia.appShellLayout !== 'top')
 const logoActual = computed(() => apariencia.appShellImagen || logo)
 const recargandoApp = ref(false)
 
@@ -1013,9 +1031,18 @@ const recargarApp = () => {
 }
 
 const mostrarAvisoTurnoRequerido = async () => {
-  // No mostrar aviso visual, solo toast
   const toast = await toastController.create({
-    message: 'Debes iniciar un turno en Caja y Reportes para acceder a esta sección.',
+    message: 'Abre una caja desde Caja y Reportes antes de comenzar a vender.',
+    duration: 4500,
+    position: 'top',
+    color: 'warning'
+  })
+  await toast.present()
+}
+
+const mostrarAvisoDepositosRequiereTurno = async () => {
+  const toast = await toastController.create({
+    message: 'Necesitas una caja abierta para acceder a Depósitos.',
     duration: 4500,
     position: 'top',
     color: 'warning'
@@ -1044,10 +1071,13 @@ const mostrarAvisoCierreProximo = async () => {
 }
 
 const mostrarAvisoDesdeRuta = () => {
-  if (route.query.aviso !== 'turno-requerido' && route.query.aviso !== 'turno-terminado') return
+  if (
+    route.query.aviso !== 'turno-requerido' &&
+    route.query.aviso !== 'turno-terminado' &&
+    route.query.aviso !== 'depositos-requiere-turno'
+  ) return
 
-  // Los administradores no necesitan ver avisos de turno
-  if (esAdministrador.value) {
+  if (esAdministrador.value && route.query.aviso === 'turno-terminado') {
     const query = { ...route.query }
     delete query.aviso
     void router.replace({ query }).catch(() => {})
@@ -1057,6 +1087,10 @@ const mostrarAvisoDesdeRuta = () => {
   const query = { ...route.query }
   delete query.aviso
   void router.replace({ query }).catch(() => {})
+  if (route.query.aviso === 'depositos-requiere-turno') {
+    void mostrarAvisoDepositosRequiereTurno()
+    return
+  }
   void (route.query.aviso === 'turno-terminado'
     ? mostrarAvisoTurnoTerminado()
     : mostrarAvisoTurnoRequerido())
@@ -1064,7 +1098,9 @@ const mostrarAvisoDesdeRuta = () => {
 
 onIonViewWillEnter(mostrarAvisoDesdeRuta)
 watch(() => route.query.aviso, (aviso) => {
-  if (aviso === 'turno-requerido' || aviso === 'turno-terminado') mostrarAvisoDesdeRuta()
+  if (aviso === 'turno-requerido' || aviso === 'turno-terminado' || aviso === 'depositos-requiere-turno') {
+    mostrarAvisoDesdeRuta()
+  }
 })
 watch(() => turno.abierto, (abierto) => {
   if (abierto) mostrarAvisoTurno.value = false
@@ -1073,8 +1109,7 @@ watch(() => turno.abierto, (abierto) => {
 const irA = async (r: string) => {
   if (navegando.value) return
 
-  // Para la página de venta (home), todos necesitan turno abierto
-  if (r === '/tabs/home' && !turno.abierto) {
+  if (r === '/tabs/home') {
     const turnoActual = await cargarTurno()
     if (!turnoActual?.abierto) {
       void mostrarAvisoTurnoRequerido()
@@ -1184,17 +1219,6 @@ const nombreUsuario = computed(() => (usuarioActual as any)?.value?.nombre || 'U
 const fechaCorta = computed(() =>
   ahora.value.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 )
-
-type RolAcceso = 'administrador' | 'recepcionista' | 'cajero' | 'operador'
-
-type AccesoDirecto = {
-  route: string
-  label: string
-  icon: string
-  color: string          // ← nuevo
-  destacado?: boolean
-  roles: RolAcceso[]
-}
 
 const { usuarioActual, esAdministrador, esOperador, rol, recargarSesion } = useSesion()
 
@@ -1630,24 +1654,12 @@ const guardarPerfil = async () => {
   }
 }
 
-const opcionesAcceso: AccesoDirecto[] = [
-  { route: '/tabs/home', label: 'Vender', icon: cartOutline, color: '', destacado: true, roles: ['administrador', 'recepcionista', 'cajero'] },
-  { route: '/tabs/ordenes', label: 'Órdenes', icon: documentTextOutline, color: '#2563eb', roles: ['administrador', 'recepcionista', 'cajero', 'operador'] },
-  { route: '/tabs/reportes', label: 'Caja y Reportes', icon: statsChartOutline, color: '#0d9488', roles: ['administrador', 'cajero'] },
-  { route: '/tabs/calendario', label: 'Calendario', icon: calendarOutline, color: '#0d5681', roles: [ 'administrador', 'recepcionista', 'cajero', 'operador'] },
-  { route: '/tabs/clientes', label: 'Clientes', icon: peopleOutline, color: '#7c3aed', roles: ['administrador'] },
-  { route: '/tabs/productos', label: 'Catálogo', icon: shirtOutline, color: '#c026d3', roles: ['administrador'] },
-  { route: '/tabs/inventario', label: 'Inventario', icon: cubeOutline, color: '#ea580c', roles: ['administrador'] },
-  { route: '/tabs/promociones', label: 'Promociones', icon: pricetagOutline, color: '#e11d48', roles: ['administrador'] },
-  { route: '/tabs/facturas', label: 'Facturas', icon: receiptOutline, color: '#ca8a04', roles: ['administrador'] },
-  { route: '/tabs/equipo', label: 'Usuarios y Rol', icon: personOutline, color: '#0891b2', roles: ['administrador'] },
-  { route: '/tabs/horarios', label: 'Horarios', icon: calendarClearOutline, color: '#0284c7', roles: ['administrador', 'recepcionista', 'cajero', 'operador'] },
-  { route: '/tabs/configuracion', label: 'Configuración', icon: settingsOutline, color: '#475569', roles: ['administrador', 'recepcionista', 'cajero', 'operador'] },
-]
-
 const accesos = computed<AccesoDirecto[]>(() => {
   const rolActual: RolAcceso = rol.value === 'admin' ? 'administrador' : (rol.value as RolAcceso)
-  return opcionesAcceso.filter((opcion) => opcion.roles.includes(rolActual))
+  const orden = new Map(apariencia.principalAccesosOrden.map((ruta, index) => [ruta, index]))
+  return OPCIONES_ACCESO_PRINCIPAL
+    .filter((opcion) => opcion.roles.includes(rolActual))
+    .sort((a, b) => (orden.get(a.route) ?? Number.MAX_SAFE_INTEGER) - (orden.get(b.route) ?? Number.MAX_SAFE_INTEGER))
 })
 
 /* ───────────── Tareas ───────────── */
@@ -1908,6 +1920,175 @@ const aplicarColor = () => {
   color-scheme: light;
 }
 
+.principal-sidebar-welcome {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  flex: 1;
+  min-height: clamp(360px, calc(100dvh - 260px), 680px);
+  place-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: clamp(16px, 4vw, 38px);
+  background:
+    radial-gradient(ellipse at 16% 18%, rgba(79, 179, 224, 0.16), transparent 38%),
+    radial-gradient(ellipse at 82% 86%, rgba(18, 58, 102, 0.08), transparent 40%);
+}
+
+.principal-sidebar-welcome-glow {
+  position: absolute;
+  top: -25%;
+  right: -14%;
+  z-index: -1;
+  width: min(56vw, 560px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--welcome-accent) 24%, transparent), transparent 70%);
+  filter: blur(12px);
+}
+
+.principal-sidebar-welcome-card {
+  display: grid;
+  width: min(820px, 100%);
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 6vw, 66px);
+  box-sizing: border-box;
+  padding: clamp(26px, 5vw, 58px);
+}
+
+.principal-sidebar-welcome-logo {
+  position: relative;
+  display: grid;
+  width: min(100%, 250px);
+  aspect-ratio: 1;
+  place-items: center;
+  justify-self: center;
+  box-sizing: border-box;
+  padding: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--welcome-accent) 78%, #4fb3e0), #072346 76%);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--welcome-accent) 28%, transparent);
+}
+
+.principal-sidebar-welcome-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 14px rgba(10, 31, 56, 0.16));
+}
+
+.principal-sidebar-welcome-copy {
+  position: relative;
+}
+
+.principal-sidebar-welcome-copy::before {
+  position: absolute;
+  top: 2px;
+  left: -22px;
+  width: 3px;
+  height: calc(100% - 4px);
+  border-radius: 3px;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--welcome-accent) 55%, #4fb3e0), transparent);
+  content: '';
+}
+
+.principal-sidebar-welcome-copy {
+  display: grid;
+  justify-items: start;
+  min-width: 0;
+}
+
+.principal-sidebar-welcome-date {
+  margin: 0 0 3px;
+  color: #72839a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.principal-sidebar-welcome-time {
+  color: var(--welcome-accent);
+  font-size: clamp(3.2rem, 8vw, 6rem);
+  font-weight: 900;
+  letter-spacing: -0.07em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.principal-sidebar-welcome-divider {
+  width: 74px;
+  height: 4px;
+  margin: 22px 0 18px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--welcome-accent), #4fb3e0);
+}
+
+.principal-sidebar-welcome-greeting {
+  margin: 0 0 4px;
+  color: #687a91;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 600;
+}
+
+.principal-sidebar-welcome-copy h1 {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: #10243d;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  text-overflow: ellipsis;
+}
+
+.principal-sidebar-welcome-copy > span {
+  margin-top: 9px;
+  color: #72839a;
+  font-size: 0.96rem;
+}
+
+@media (max-width: 700px) {
+  .principal-sidebar-welcome {
+    min-height: clamp(340px, calc(100dvh - 280px), 520px);
+    padding: 14px;
+  }
+
+  .principal-sidebar-welcome-card {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 20px;
+    padding: 24px 18px;
+    text-align: center;
+  }
+
+  .principal-sidebar-welcome-logo {
+    width: clamp(130px, 38vw, 190px);
+    padding: 20px;
+  }
+
+  .principal-sidebar-welcome-copy {
+    justify-items: center;
+  }
+
+  .principal-sidebar-welcome-copy::before {
+    display: none;
+  }
+
+  .principal-sidebar-welcome-date {
+    font-size: 0.76rem;
+  }
+
+  .principal-sidebar-welcome-time {
+    font-size: clamp(3rem, 15vw, 4.5rem);
+  }
+
+  .principal-sidebar-welcome-divider {
+    margin: 14px 0;
+  }
+}
+
 .alerta-turno-antiguo {
   position: relative;
   width: min(560px, 100%);
@@ -1917,11 +2098,17 @@ const aplicarColor = () => {
   gap: 12px;
   padding: 12px 16px;
   overflow: hidden;
-  background: linear-gradient(145deg, #123a66, #0a1f38);
-  border: 2px solid rgba(79, 179, 224, 0.78);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--app-shell-header-color, #072346) 82%, #ffffff),
+    var(--app-shell-header-color, #072346)
+  );
+  border: 2px solid color-mix(in srgb, var(--app-shell-header-color, #072346) 62%, #ffffff);
   border-radius: 12px;
-  color: #eaf4fa;
-  box-shadow: 0 12px 32px rgba(10, 31, 56, 0.3), 0 0 12px rgba(79, 179, 224, 0.16);
+  color: var(--app-shell-header-text-color, #ffffff);
+  box-shadow:
+    0 12px 32px color-mix(in srgb, var(--app-shell-header-color, #072346) 30%, transparent),
+    0 0 12px color-mix(in srgb, var(--app-shell-header-color, #072346) 20%, transparent);
 }
 
 .alerta-turno-antiguo-movil {
@@ -1937,7 +2124,7 @@ const aplicarColor = () => {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 700;
-  color: #eaf4fa;
+  color: var(--app-shell-header-text-color, #ffffff);
   line-height: 1.4;
 }
 
@@ -1953,14 +2140,14 @@ const aplicarColor = () => {
   background: transparent;
   border: none;
   border-radius: 50%;
-  color: #d7eaf7;
+  color: var(--app-shell-header-text-color, #ffffff);
   cursor: pointer;
   transition: background 0.2s ease;
   flex-shrink: 0;
 }
 
 .alerta-turno-cerrar:hover {
-  background: rgba(169, 216, 238, 0.16);
+  background: color-mix(in srgb, var(--app-shell-header-text-color, #ffffff) 16%, transparent);
 }
 
 .alerta-turno-cerrar ion-icon {
@@ -2666,11 +2853,17 @@ const aplicarColor = () => {
 .home-grid-row {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
+  grid-template-areas: "access tasks";
   gap: 18px;
   align-items: start;
 }
 
+.home-grid-row-swapped {
+  grid-template-areas: "tasks access";
+}
+
 .accesos-card {
+  grid-area: access;
   background: #ffffff;
   border: 1px solid rgba(10, 31, 56, 0.08);
   border-radius: 18px;
@@ -2767,7 +2960,7 @@ const aplicarColor = () => {
 }
 
 .acceso-item.destacado {
-  background: var(--acceso-color, var(--app-shell-header-color, #081a30));
+  background: var(--acceso-color, var(--app-shell-header-color, #072346));
   color: #f5f9fc;
   border-color: transparent;
 }
@@ -2842,6 +3035,7 @@ const aplicarColor = () => {
 
 /* ── Tareas ── */
 .tareas-card {
+  grid-area: tasks;
   background: #ffffff;
   border: 1px solid rgba(10, 31, 56, 0.08);
   border-radius: 18px;
@@ -4125,6 +4319,11 @@ const aplicarColor = () => {
 
   .home-grid-row {
     grid-template-columns: 1fr;
+    grid-template-areas: "access" "tasks";
+  }
+
+  .home-grid-row.home-grid-row-swapped {
+    grid-template-areas: "tasks" "access";
   }
 
   /* Accesos: grid compacto de 3 columnas con icono en chip de color */
@@ -4200,7 +4399,7 @@ const aplicarColor = () => {
 }
 
 .acceso-item.destacado {
-  background: var(--acceso-color, var(--app-shell-header-color, #081a30));
+  background: var(--acceso-color, var(--app-shell-header-color, #072346));
   color: #f5f9fc;
   border-color: transparent;
 }

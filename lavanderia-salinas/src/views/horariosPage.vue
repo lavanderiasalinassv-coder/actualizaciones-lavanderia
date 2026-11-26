@@ -2426,7 +2426,7 @@ const montoHoyEnVivo = computed(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #f5f9fc;
   display: grid;
   place-items: center;
@@ -2671,7 +2671,7 @@ const montoHoyEnVivo = computed(() => {
   border: none;
   border-radius: 11px;
   padding: 10px 15px;
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #f5f9fc;
   font-weight: 700;
   font-size: 0.82rem;
@@ -3579,7 +3579,7 @@ const montoHoyEnVivo = computed(() => {
 }
 
 .calendario-controles button.active {
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #ffffff;
 }
 
@@ -3591,19 +3591,19 @@ const montoHoyEnVivo = computed(() => {
   border: none;
   border-radius: 12px;
   padding: 10px 16px;
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #f5f9fc;
   font-weight: 800;
   font-size: 0.84rem;
   cursor: pointer;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-shell-header-color, #081a30) 28%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-shell-header-color, #072346) 28%, transparent);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
 }
 
 .btn-programar:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--app-shell-header-color, #081a30) 36%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--app-shell-header-color, #072346) 36%, transparent);
 }
 
 .btn-descargar-horario-pdf {

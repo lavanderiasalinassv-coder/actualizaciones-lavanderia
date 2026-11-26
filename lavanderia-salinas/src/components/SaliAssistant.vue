@@ -2,7 +2,10 @@
   <button
     v-if="!lateral"
     class="asistente-sali"
-    :class="{ 'modo-voz-activo': conversacionPorVoz, hablando: reproduciendoVoz, escuchando }"
+    :class="[
+      { 'modo-voz-activo': conversacionPorVoz, hablando: reproduciendoVoz, escuchando },
+      { 'asistente-sali-izquierda': apariencia.saliAssistantPosition === 'left' }
+    ]"
     :style="{ background: apariencia.appShellHeaderColor }"
     type="button"
     :disabled="asistenteBloqueado"
@@ -1462,6 +1465,7 @@ onUnmounted(() => {
 }
 
 .asistente-sali { position: fixed; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 30010; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 12px 17px; background: linear-gradient(135deg, #126f9a, #1e4f8e); color: #fff; box-shadow: 0 12px 28px rgba(10, 67, 111, .32); display: flex; align-items: center; gap: 7px; font-size: .9rem; font-weight: 800; cursor: pointer; transition: transform .18s ease, background .18s ease; }
+.asistente-sali-izquierda { right: auto; left: 24px; }
 .asistente-sali ion-icon { font-size: 21px; }
 .asistente-sali:hover, .asistente-sali:focus-visible { background: #0d2b4e; transform: translateY(-2px); outline: none; }
 .asistente-sali:disabled { cursor: not-allowed; opacity: .5; filter: grayscale(.45); transform: none; }
@@ -1727,6 +1731,6 @@ onUnmounted(() => {
 .sali-capa.lateral .sali-ventana { position: fixed; top: var(--sali-desplazamiento-superior, 0px); right: 0; bottom: auto; height: var(--sali-alto-visible, 100dvh); width: var(--sali-panel-ancho); max-width: none; max-height: none; border-radius: 0; }
 .sali-capa.lateral.izquierda .sali-ventana { right: auto; left: 0; }
 .sali-capa.lateral .sali-contenido { height: var(--sali-alto-visible, 100dvh); }
-@media (max-width: 700px) { .asistente-sali { right: 16px; bottom: calc(82px + env(safe-area-inset-bottom)); } .sali-accion-header { display: none; } }
+@media (max-width: 700px) { .asistente-sali { right: 16px; bottom: calc(82px + env(safe-area-inset-bottom)); } .asistente-sali-izquierda { right: auto; left: 16px; } .sali-accion-header { display: none; } }
 @media (max-width: 1000px) { :global(html.sali-lateral-activo) { --sali-panel-ancho: min(390px, 44vw); } }
 </style>

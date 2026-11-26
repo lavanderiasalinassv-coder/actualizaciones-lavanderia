@@ -274,7 +274,7 @@ onMounted(() => {
     radial-gradient(circle at 50% 52%, rgba(207, 233, 245, 0.14) 0%, transparent 38%),
     radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
     radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
-    linear-gradient(160deg, var(--splash-accent, #081a30) 0%, var(--splash-accent, #081a30) 100%);
+    linear-gradient(160deg, var(--splash-accent, #072346) 0%, var(--splash-accent, #072346) 100%);
   color: #eaf4fa;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -325,8 +325,8 @@ onMounted(() => {
   pointer-events: none;
   filter: blur(6px);
 }
-.orbe-uno { width: 240px; height: 240px; top: -100px; right: -70px; background: rgba(169, 216, 238, 0.16); }
-.orbe-dos { width: 200px; height: 200px; bottom: -90px; left: -60px; background: rgba(18, 58, 102, 0.28); }
+.orbe-uno { width: 240px; height: 240px; top: -100px; right: -70px; background: rgba(255, 255, 255, 0.18); }
+.orbe-dos { width: 200px; height: 200px; bottom: -90px; left: -60px; background: rgba(255, 255, 255, 0.12); }
 
 .splash-wrap {
   position: relative;
@@ -358,7 +358,7 @@ onMounted(() => {
   width: min(75vw, 360px);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(74, 188, 229, 0.38), rgba(42, 106, 190, 0.12) 42%, transparent 70%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1) 42%, transparent 70%);
   filter: blur(12px);
   animation: splash-resplandor 2.05s ease-out both;
 }

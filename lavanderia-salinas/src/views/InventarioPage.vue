@@ -685,8 +685,8 @@ h1 {
 
 .header-actions .btn-primario,
 .empty-state .btn-primario {
-  --background: var(--app-shell-header-color, #081a30);
-  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #081a30) 82%, black);
+  --background: var(--app-shell-header-color, #072346);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #072346) 82%, black);
 }
 
 .btn-refill {

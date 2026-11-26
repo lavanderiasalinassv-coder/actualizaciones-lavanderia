@@ -477,7 +477,7 @@ ion-content {
 .keypad-container::before {
   width: 220px;
   height: 220px;
-  background: color-mix(in srgb, var(--orb-color-uno) 20%, transparent);
+  background: rgba(255, 255, 255, 0.18);
   top: -90px;
   right: -60px;
   filter: blur(4px);
@@ -486,7 +486,7 @@ ion-content {
 .keypad-container::after {
   width: 180px;
   height: 180px;
-  background: color-mix(in srgb, var(--orb-color-dos) 32%, transparent);
+  background: rgba(255, 255, 255, 0.12);
   bottom: -70px;
   left: -50px;
   filter: blur(8px);

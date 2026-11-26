@@ -20,10 +20,146 @@
       :scroll-y="false"
       :force-overscroll="false"
     >
+      <div
+        class="shell-layout"
+        :class="{
+          'shell-layout-sidebar': usaSidebar,
+          'shell-layout-sidebar-right': apariencia.appShellLayout === 'sidebar-right'
+        }"
+      >
+        <aside v-if="usaSidebar" class="app-shell-sidebar">
+          <div class="app-shell-sidebar-brand">
+            <button class="app-shell-sidebar-avatar" type="button" title="Editar mi perfil" aria-label="Editar mi perfil" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirPerfil">
+              <img v-if="esUsuarioDesarrollador" :src="imagenDesarrollador" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+              <img v-else-if="usuarioActual?.imagenPerfil" :src="usuarioActual.imagenPerfil" :alt="`Foto de ${usuarioActual?.nombre || 'Usuario'}`" />
+              <ion-icon v-else :icon="personCircleOutline" />
+            </button>
+            <div class="app-shell-sidebar-welcome">
+              <span>Bienvenido</span>
+              <strong>{{ usuarioActual?.nombre || 'Usuario' }}</strong>
+            </div>
+          </div>
+          <div class="app-shell-sidebar-tools" aria-label="Herramientas de la aplicación">
+            <span class="app-shell-sidebar-section-title">Herramientas</span>
+            <div class="banner-notificacion-icono app-shell-sidebar-notification">
+              <button class="notificacion-icono-btn" type="button" title="Notificaciones y opciones" aria-label="Notificaciones y opciones" @click="abrirMenuNotificaciones">
+                <ion-icon :icon="notificationsOutline" />
+                <span v-if="!insigniaNotificacionesOculta && totalAlertasNotificaciones > 0" class="notificacion-burbuja-pequena">{{ totalAlertasNotificaciones }}</span>
+              </button>
+              <div v-if="mostrarMenuNotificaciones" class="notificacion-menu">
+                <button v-if="!esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalNotificaciones = true; mostrarMenuNotificaciones = false">
+                  <ion-icon :icon="notificationsOutline" />
+                  <span>Notificaciones</span>
+                  <span v-if="totalNotificacionesNoLeidas > 0" class="notificacion-menu-burbuja">{{ totalNotificacionesNoLeidas }}</span>
+                </button>
+                <button class="notificacion-menu-item" @click="mostrarMenuNotificaciones = false; irA('/tabs/guia')">
+                  <ion-icon :icon="bookOutline" />
+                  <span>Guía</span>
+                </button>
+                <button v-if="!esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalReportarProblema = true; mostrarMenuNotificaciones = false">
+                  <ion-icon :icon="documentTextOutline" />
+                  <span>Reportar problema</span>
+                </button>
+                <button v-if="esModoDesarrollador" class="notificacion-menu-item" @click="mostrarModalListaProblemas = true; mostrarMenuNotificaciones = false">
+                  <ion-icon :icon="listOutline" />
+                  <span>Lista de problemas</span>
+                  <span v-if="problemasPendientes.length > 0" class="notificacion-menu-burbuja">{{ problemasPendientes.length }}</span>
+                </button>
+                <button v-if="esModoDesarrollador || esAdministrador" class="notificacion-menu-item" @click="abrirHistorialAvisos">
+                  <ion-icon :icon="listOutline" />
+                  <span>Mis avisos enviados</span>
+                </button>
+                <button v-if="esAdministrador || esModoDesarrollador" class="notificacion-menu-item" @click="abrirModalAviso">
+                  <ion-icon :icon="megaphoneOutline" />
+                  <span>Enviar aviso</span>
+                </button>
+                <button v-if="esElectron" class="notificacion-menu-item" @click="abrirBuscarActualizaciones()">
+                  <ion-icon :icon="cloudDownloadOutline" />
+                  <span>Buscar actualizaciones</span>
+                  <span v-if="actualizacionPendiente" class="notificacion-menu-burbuja">1</span>
+                </button>
+                <button v-if="esModoDesarrollador" class="notificacion-menu-item notificacion-menu-item-peligro" @click="limpiarNotificacionesDesdeMenu">
+                  <ion-icon :icon="trashOutline" />
+                  <span>Limpiar notificaciones</span>
+                </button>
+                <button v-else class="notificacion-menu-item" @click="mostrarModalListaProblemas = true; mostrarMenuNotificaciones = false">
+                  <ion-icon :icon="listOutline" />
+                  <span>Mis reportes</span>
+                </button>
+              </div>
+            </div>
+            <button v-if="!esOperador" class="notificacion-icono-btn whatsapp-launch-btn" type="button" title="Abrir WhatsApp Web" aria-label="Abrir WhatsApp Web" :disabled="!esAdministrador && funcionesBloqueadas" @click="abrirWhatsapp">
+              <ion-icon :icon="logoWhatsapp" />
+            </button>
+            <button v-if="esAdministrador" class="notificacion-icono-btn facebook-launch-btn" type="button" title="Abrir Facebook Messenger" aria-label="Abrir Facebook Messenger" @click="abrirFacebook">
+              <ion-icon :icon="logoFacebook" />
+            </button>
+            <button v-if="esAdministrador" class="notificacion-icono-btn navegador-launch-btn" type="button" title="Abrir Navegador" aria-label="Abrir Navegador" @click="abrirNavegador">
+              <ion-icon :icon="globeOutline" />
+            </button>
+          </div>
+          <div class="app-shell-sidebar-actions" aria-label="Acciones rápidas">
+            <span class="app-shell-sidebar-section-title">Acciones rápidas</span>
+            <button v-if="!esOperador && !esRecepcionista" class="app-shell-sidebar-action" type="button" :disabled="botonesOperativosBloqueados" :title="!turno.abierto ? 'Necesitas una caja abierta para acceder' : hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
+              <span class="banner-deposito-icono">
+                <ion-icon :icon="businessOutline" />
+                <span v-if="hayDepositosPendientes" class="deposito-pendiente-insignia" aria-label="Hay depósitos pendientes">!</span>
+              </span>
+              <span>Depósito</span>
+            </button>
+            <button v-if="!esOperador" class="app-shell-sidebar-action" type="button" :disabled="botonesOperativosBloqueados" title="Registrar gasto" @click="abrirModalGasto">
+              <ion-icon :icon="cutOutline" />
+              <span>Gasto</span>
+            </button>
+            <button class="app-shell-sidebar-action" type="button" :disabled="recargandoApp" :title="recargandoApp ? 'Reiniciando...' : 'Reiniciar toda la aplicación'" @click="refrescarAplicacion">
+              <ion-icon :icon="refreshOutline" />
+              <span>{{ recargandoApp ? 'Reiniciando...' : 'Reiniciar' }}</span>
+            </button>
+            <button v-if="!esOperador && !esRecepcionista && !esCajero" class="app-shell-sidebar-action" type="button" :disabled="botonesOperativosBloqueados" title="Cierres" @click="mostrarModalCierres = true">
+              <ion-icon :icon="lockClosedOutline" />
+              <span>Cierres</span>
+            </button>
+          </div>
+          <nav class="app-shell-sidebar-nav" aria-label="Navegación principal">
+            <button
+              type="button"
+              class="app-shell-sidebar-link"
+              :class="{ active: route.path === '/tabs/principal' }"
+              :aria-current="route.path === '/tabs/principal' ? 'page' : undefined"
+              title="Inicio"
+              aria-label="Inicio"
+              @click="irA('/tabs/principal')"
+            >
+              <ion-icon :icon="homeOutline" />
+              <span>Inicio</span>
+            </button>
+            <button
+              v-for="opcion in opcionesBarraLateral"
+              :key="opcion.route"
+              type="button"
+              class="app-shell-sidebar-link"
+              :class="{ active: route.path === opcion.route }"
+              :aria-current="route.path === opcion.route ? 'page' : undefined"
+              :disabled="!esAdministrador && funcionesBloqueadas && opcion.route !== '/tabs/horarios'"
+              :title="!esAdministrador && funcionesBloqueadas && opcion.route !== '/tabs/calendario' && opcion.route !== '/tabs/horarios' ? 'Activa tu turno para continuar' : opcion.label"
+              :aria-label="opcion.label"
+              @click="irA(opcion.route)"
+            >
+              <ion-icon :icon="opcion.icon" />
+              <span>{{ opcion.label }}</span>
+            </button>
+          </nav>
+          <footer class="app-shell-sidebar-footer">
+            <button class="app-shell-sidebar-logout" type="button" @click="cerrarSesion">
+              <ion-icon :icon="logOutOutline" />
+              <span>Cerrar sesión</span>
+            </button>
+          </footer>
+        </aside>
       <main class="main-content">
         <div class="content-wrapper">
           <!-- Banner general (aparece en todas las vistas) -->
-          <div class="global-banner" ref="bannerRef" :class="{ 'banner-colapsado': squeeze >= 0.98 }">
+          <div v-show="!usaSidebar" class="global-banner" ref="bannerRef" :class="{ 'banner-colapsado': squeeze >= 0.98 }">
             <div class="banner-glow" aria-hidden="true"></div>
 
             <div class="banner-full" :style="bannerFullStyle">
@@ -141,7 +277,7 @@
               </div>
 
               <div v-show="!mostrarAccionesCompactas" class="banner-acciones">
-                <button v-if="!esOperador && !esRecepcionista" class="banner-btn" :disabled="botonesOperativosBloqueados" :title="hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
+                <button v-if="!esOperador && !esRecepcionista" class="banner-btn" :disabled="botonesOperativosBloqueados" :title="!turno.abierto ? 'Necesitas una caja abierta para acceder' : hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
                   <span class="banner-deposito-icono">
                     <ion-icon :icon="businessOutline" />
                     <span v-if="hayDepositosPendientes" class="deposito-pendiente-insignia" aria-label="Hay depósitos pendientes">!</span>
@@ -262,7 +398,7 @@
               </button>
 
               <div v-show="mostrarAccionesCompactas" class="banner-acciones banner-acciones-compactas">
-                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" :title="hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
+                <button v-if="!esOperador && !esRecepcionista" class="banner-btn banner-btn-compacta" :disabled="botonesOperativosBloqueados" :title="!turno.abierto ? 'Necesitas una caja abierta para acceder' : hayDepositosPendientes ? 'Hay depósitos pendientes de revisar' : 'Ir a depósitos'" @click="IrAdeposito">
                   <span class="banner-deposito-icono">
                     <ion-icon :icon="businessOutline" />
                     <span v-if="hayDepositosPendientes" class="deposito-pendiente-insignia" aria-label="Hay depósitos pendientes">!</span>
@@ -289,7 +425,7 @@
             </div>
           </div>
 
-          <div class="shell-view-boundary-alert" aria-live="polite">
+          <div v-show="!usaSidebar" class="shell-view-boundary-alert" aria-live="polite">
             <slot name="view-boundary-alert" />
           </div>
 
@@ -306,6 +442,7 @@
         </div>
 
       </main>
+      </div>
     </ion-content>
 
     <!-- Modal: gasto -->
@@ -1594,6 +1731,7 @@ import { useHorarios } from '@/composables/Usehorarios'
 import { combinarFechaHoraCentroamerica } from '@/composables/useFechas'
 import { usePedido } from '@/composables/Usepedido'
 import { useApariencia } from '@/composables/useApariencia'
+import { OPCIONES_ACCESO_PRINCIPAL, type RolAcceso } from '@/data/opcionesAccesoPrincipal'
 import { useModalesCaja } from '@/composables/useModalesCaja'
 import { getApiBaseUrl } from '@/composables/useApiConfig'
 import { useNotificaciones, type NotificacionUsuario } from '@/composables/useNotificaciones'
@@ -1647,6 +1785,7 @@ const router = useRouter()
 const route = useRoute()
 const { ultimaOrdenCreada } = usePedido()
 const { apariencia, estiloAppShell } = useApariencia()
+const usaSidebar = computed(() => apariencia.appShellLayout !== 'top')
 const esDiciembre = useDiciembre()
 const logoCloudinaryFallido = ref(false)
 const logoActual = computed(() => esDiciembre.value ? logoNavidad : (logoCloudinaryFallido.value ? logo : (apariencia.appShellImagen || logo)))
@@ -1687,6 +1826,13 @@ const hayDepositosPendientes = computed(() => historialCierres.value.some((cierr
   (!cierre.deposito || cierre.deposito.estado === 'pendiente')
 ))
 const { cerrarSesion: cerrarSesionSesion, recargarSesion, rol, usuarioActual, esOperador, esAdministrador } = useSesion()
+const opcionesBarraLateral = computed(() => {
+  const rolActual: RolAcceso = rol.value === 'admin' ? 'administrador' : (rol.value as RolAcceso)
+  const orden = new Map(apariencia.principalAccesosOrden.map((ruta, index) => [ruta, index]))
+  return OPCIONES_ACCESO_PRINCIPAL
+    .filter((opcion) => opcion.roles.includes(rolActual))
+    .sort((a, b) => (orden.get(a.route) ?? Number.MAX_SAFE_INTEGER) - (orden.get(b.route) ?? Number.MAX_SAFE_INTEGER))
+})
 const { funcionesBloqueadas } = useAccesoOperativo()
 const {
   totalNotificacionesNoLeidas,
@@ -2295,6 +2441,10 @@ let ultimoScrollTop = 0
 const ALTURA_BARRA_COMPACTA = 76
 
 const medirBanner = () => {
+  if (usaSidebar.value) {
+    alturaBannerPx.value = 0
+    return
+  }
   if (bannerRef.value && squeeze.value < 0.5 && bannerOffsetPx.value === 0) {
     alturaBannerPx.value = bannerRef.value.offsetHeight
   }
@@ -2302,7 +2452,7 @@ const medirBanner = () => {
 
 const iniciarEnfoqueVenta = () => {
   const contenido = contentAreaRef.value
-  if (!contenido) return
+  if (!contenido || usaSidebar.value) return
 
   medirBanner()
   contenido.scrollTop = 0
@@ -2380,24 +2530,39 @@ const UMBRAL_COLAPSAR = 32
 const UMBRAL_EXPANDIR = 6
 const squeeze = ref(0)
 const alturaContenidoSuperiorCss = computed(() =>
-  `${squeeze.value >= 0.98
+  usaSidebar.value
+    ? '24px'
+    : `${squeeze.value >= 0.98
     ? ALTURA_BARRA_COMPACTA + UMBRAL_COLAPSAR + 12
     : alturaBannerPx.value + 24}px`
 )
 const alturaLimiteVistaCss = computed(() =>
-  `${squeeze.value >= 0.98
+  usaSidebar.value
+    ? '0px'
+    : `${squeeze.value >= 0.98
     ? ALTURA_BARRA_COMPACTA + UMBRAL_COLAPSAR - 12
     : alturaBannerPx.value}px`
 )
 let bannerColapsado = false
 let frameProgramado = false
 
+watch(usaSidebar, (sidebar) => {
+  bannerOffsetPx.value = 0
+  squeeze.value = 0
+  bannerColapsado = false
+  ultimoScrollTop = 0
+  if (sidebar) mostrarMenuNotificaciones.value = false
+  nextTick(medirBanner)
+})
+
 const actualizarShellCompacto = (event: Event) => {
+  if (usaSidebar.value) return
   if (frameProgramado) return
   frameProgramado = true
 
   requestAnimationFrame(() => {
     frameProgramado = false
+    if (usaSidebar.value) return
     const target = event.target as HTMLDivElement
     const scrollTop = Math.max(0, target?.scrollTop ?? 0)
     const delta = scrollTop - ultimoScrollTop
@@ -3446,6 +3611,347 @@ const getIconoLavanderia = (id: string) => {
   height: 100%;
 }
 
+.shell-layout {
+  width: 100%;
+  height: 100dvh;
+}
+
+.shell-layout-sidebar {
+  display: flex;
+  overflow: hidden;
+}
+
+.shell-layout-sidebar .main-content {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
+.shell-layout-sidebar-right .app-shell-sidebar {
+  order: 2;
+}
+
+.app-shell-sidebar {
+  z-index: 30;
+  display: flex;
+  width: 236px;
+  height: 100dvh;
+  flex: 0 0 236px;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  overflow: visible;
+  padding: 18px 12px;
+  background: var(--app-shell-header-color);
+  color: #f5f9fc;
+  box-shadow: 8px 0 24px rgba(6, 20, 38, 0.16);
+}
+
+.shell-layout-sidebar-right .app-shell-sidebar {
+  box-shadow: -8px 0 24px rgba(6, 20, 38, 0.16);
+}
+
+.app-shell-sidebar-brand {
+  display: flex;
+  min-height: 112px;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 6px 8px;
+  color: #fff;
+  text-align: center;
+}
+
+.app-shell-sidebar-avatar {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  place-items: center;
+  overflow: hidden;
+  padding: 3px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #eaf4fa;
+  cursor: pointer;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.app-shell-sidebar-avatar:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.68);
+}
+
+.app-shell-sidebar-avatar:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-shell-sidebar-avatar:focus-visible {
+  outline: 2px solid #a9d8ee;
+  outline-offset: 3px;
+}
+
+.app-shell-sidebar-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.app-shell-sidebar-avatar ion-icon {
+  font-size: 48px;
+}
+
+.app-shell-sidebar-welcome {
+  display: grid;
+  max-width: 100%;
+  gap: 2px;
+}
+
+.app-shell-sidebar-welcome span {
+  color: rgba(226, 238, 248, 0.7);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.app-shell-sidebar-welcome strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-sidebar-tools,
+.app-shell-sidebar-actions {
+  display: grid;
+  flex: 0 0 auto;
+  align-items: center;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.app-shell-sidebar-tools {
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(3, 12, 24, 0.16);
+}
+
+.app-shell-sidebar-section-title {
+  grid-column: 1 / -1;
+  color: rgba(226, 238, 248, 0.58);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.app-shell-sidebar-tools .banner-notificacion-icono {
+  min-width: 0;
+}
+
+.app-shell-sidebar-tools .notificacion-icono-btn,
+.app-shell-sidebar-tools > .notificacion-icono-btn {
+  width: 100%;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(245, 249, 252, 0.9);
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.app-shell-sidebar-tools .notificacion-icono-btn:hover:not(:disabled),
+.app-shell-sidebar-tools > .notificacion-icono-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.app-shell-sidebar-tools .notificacion-icono-btn ion-icon,
+.app-shell-sidebar-tools > .notificacion-icono-btn ion-icon {
+  font-size: 17px;
+}
+
+.app-shell-sidebar-tools > .whatsapp-launch-btn {
+  color: #54df87;
+}
+
+.app-shell-sidebar-tools > .facebook-launch-btn {
+  color: #75a9ff;
+}
+
+.app-shell-sidebar-tools > .navegador-launch-btn {
+  color: #89d3f2;
+}
+
+.app-shell-sidebar-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.app-shell-sidebar-notification .notificacion-menu {
+  left: 0;
+  right: auto;
+}
+
+.shell-layout-sidebar-right .app-shell-sidebar-notification .notificacion-menu {
+  left: auto;
+  right: 0;
+}
+
+.app-shell-sidebar-action {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(245, 249, 252, 0.9);
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.app-shell-sidebar-action > ion-icon,
+.app-shell-sidebar-action .banner-deposito-icono {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(169, 216, 238, 0.14);
+  color: #b7e5f7;
+  font-size: 15px;
+}
+
+.app-shell-sidebar-action .banner-deposito-icono ion-icon {
+  font-size: 15px;
+}
+
+.app-shell-sidebar-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(169, 216, 238, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.app-shell-sidebar-action:hover:not(:disabled) > ion-icon,
+.app-shell-sidebar-action:hover:not(:disabled) .banner-deposito-icono {
+  background: rgba(169, 216, 238, 0.22);
+  color: #fff;
+}
+
+.app-shell-sidebar-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.app-shell-sidebar-nav {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.app-shell-sidebar-link {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(245, 249, 252, 0.82);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.app-shell-sidebar-link ion-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+.app-shell-sidebar-link:hover,
+.app-shell-sidebar-link.active {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.app-shell-sidebar-link:focus-visible {
+  outline: 2px solid #a9d8ee;
+  outline-offset: 2px;
+}
+
+.app-shell-sidebar-link:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.app-shell-sidebar-footer {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.app-shell-sidebar-logout {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-shell-sidebar-logout {
+  justify-content: center;
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(220, 38, 38, 0.2);
+}
+
+.app-shell-sidebar-logout:hover {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(220, 38, 38, 0.32);
+}
+
 .main-content {
   position: relative;
   z-index: 1;
@@ -3602,6 +4108,10 @@ ion-content.shell-container {
 
 .shell-view-boundary-alert > :deep(*) {
   pointer-events: auto;
+}
+
+.shell-layout-sidebar .shell-view-boundary-alert {
+  display: none;
 }
 
 /* Cuando ya llegó a barra completa, la zona central no recibe clics. */
@@ -4506,6 +5016,159 @@ ion-content.shell-container {
 @media (max-width: 900px) {
    .global-banner {
     display: none;
+  }
+
+  .shell-layout-sidebar,
+  .shell-layout-sidebar-right {
+    flex-direction: column;
+  }
+
+  .shell-layout-sidebar-right .app-shell-sidebar {
+    order: 0;
+  }
+
+  .app-shell-sidebar {
+    display: grid;
+    width: 100%;
+    height: 132px;
+    flex: 0 0 132px;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-rows: 38px 34px 40px;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 6px 10px;
+    overflow: visible;
+    box-shadow: 0 6px 16px rgba(6, 20, 38, 0.16);
+  }
+
+  .shell-layout-sidebar-right .app-shell-sidebar {
+    box-shadow: 0 6px 16px rgba(6, 20, 38, 0.16);
+  }
+
+  .app-shell-sidebar-brand {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    width: 42px;
+    min-height: 0;
+    height: 38px;
+    flex: 0 0 42px;
+    place-items: center;
+    padding: 0;
+  }
+
+  .app-shell-sidebar-avatar {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    padding: 2px;
+    border-width: 1px;
+  }
+
+  .app-shell-sidebar-avatar ion-icon {
+    font-size: 26px;
+  }
+
+  .app-shell-sidebar-welcome,
+  .app-shell-sidebar-link span,
+  .app-shell-sidebar-section-title,
+  .app-shell-sidebar-action > span:last-child,
+  .app-shell-sidebar-logout span {
+    display: none;
+  }
+
+  .app-shell-sidebar-tools {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: repeat(4, 32px);
+    justify-content: start;
+    gap: 4px;
+  }
+
+  .app-shell-sidebar-tools .notificacion-icono-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .app-shell-sidebar-notification .notificacion-menu {
+    position: fixed;
+    top: 50px;
+    left: 10px;
+    right: auto;
+    max-height: calc(100dvh - 60px);
+    overflow-y: auto;
+  }
+
+  .shell-layout-sidebar-right .app-shell-sidebar-notification .notificacion-menu {
+    left: auto;
+    right: 10px;
+  }
+
+  .app-shell-sidebar-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    justify-content: flex-start;
+    gap: 5px;
+  }
+
+  .app-shell-sidebar-action {
+    width: 32px;
+    min-height: 32px;
+    flex: 0 0 32px;
+    padding: 4px;
+  }
+
+  .app-shell-sidebar-action > ion-icon,
+  .app-shell-sidebar-action .banner-deposito-icono {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font-size: 16px;
+  }
+
+  .app-shell-sidebar-nav {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .app-shell-sidebar-link {
+    width: 40px;
+    min-height: 40px;
+    justify-content: center;
+    gap: 0;
+    padding: 7px;
+  }
+
+  .app-shell-sidebar-footer {
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+  }
+
+  .app-shell-sidebar-logout {
+    width: 32px;
+    min-height: 32px;
+    justify-content: center;
+    gap: 0;
+    padding: 4px;
+  }
+
+  .shell-layout-sidebar .main-content {
+    width: 100%;
+    height: calc(100dvh - 132px);
+    min-height: 0;
+    flex: 1;
   }
 
   .shell-view-boundary-alert {

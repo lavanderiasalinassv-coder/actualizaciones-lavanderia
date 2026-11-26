@@ -336,7 +336,7 @@ onMounted(() => {
 .lealtad-contador { display: grid; min-width: 122px; justify-items: center; padding: 13px 18px; border: 1px solid #d5e8ed; border-radius: 16px; background: #eff8fa; color: #123a66; }
 .lealtad-contador strong { font-size: 1.6rem; }
 .lealtad-contador span { color: #61778e; font-size: .75rem; font-weight: 700; }
-.lealtad-contenido { display: grid; grid-template-columns: minmax(230px, 340px) minmax(0, 1fr); align-items: center; gap: clamp(24px, 5vw, 54px); padding: clamp(18px, 4vw, 34px); border: 1px solid rgba(169,227,225,.35); border-radius: 20px; background: var(--app-shell-header-color, #081a30); color: #fff; box-shadow: 0 12px 30px rgba(18,58,102,.18); }
+.lealtad-contenido { display: grid; grid-template-columns: minmax(230px, 340px) minmax(0, 1fr); align-items: center; gap: clamp(24px, 5vw, 54px); padding: clamp(18px, 4vw, 34px); border: 1px solid rgba(169,227,225,.35); border-radius: 20px; background: var(--app-shell-header-color, #072346); color: #fff; box-shadow: 0 12px 30px rgba(18,58,102,.18); }
 .lealtad-qr-marco { display: grid; width: 100%; place-items: center; padding: 0; border: 0; background: transparent; }
 .lealtad-qr-cupon { display: grid; width: 100%; justify-items: center; gap: 8px; }
 .lealtad-qr-sello { color: #6d829c; font-size: .62rem; font-weight: 800; text-align: center; }

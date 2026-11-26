@@ -207,7 +207,7 @@ let timerCuentaRegresiva: ReturnType<typeof setInterval> | null = null
 
 // Estilos dinámicos para ajustar la app cuando hay paneles laterales abiertos
 const estilosAppConPanel = computed(() => {
-  return {}
+  return { ...estiloAppShell.value }
 })
 
 const tiempoFormateado = computed(() => {
@@ -355,7 +355,7 @@ onUnmounted(() => {
 .inactividad-contenido {
   position: relative;
   overflow: hidden;
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #eaf4fa;
   padding: 34px 28px 28px;
   display: flex;

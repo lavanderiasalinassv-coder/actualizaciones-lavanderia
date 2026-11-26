@@ -735,7 +735,7 @@ const compartirCatalogo = async () => {
     const pdf = new jsPDF({ unit: 'mm', format: 'letter' })
     const ancho = pdf.internal.pageSize.getWidth()
     const alto = pdf.internal.pageSize.getHeight()
-    const colorEncabezado = colorPdf(apariencia.appShellHeaderColor, [8, 26, 48])
+    const colorEncabezado = colorPdf(apariencia.appShellHeaderColor, [7, 35, 70])
     const colorFondo = colorPdf(apariencia.appShellColor, [226, 236, 239])
     const grupos = agruparServiciosParaPdf()
     const margen = 16
@@ -1297,8 +1297,8 @@ const quitarEtiqueta = (id: string) => {
 }
 
 .tab-chip.active {
-  background: var(--app-shell-header-color, #081a30);
-  border-color: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
+  border-color: var(--app-shell-header-color, #072346);
   color: #f5f9fc;
 }
 
@@ -1331,7 +1331,7 @@ const quitarEtiqueta = (id: string) => {
   padding: 10px 18px;
   border-radius: 12px;
   border: none;
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #f5f9fc;
   font-weight: 800;
   font-size: 0.88rem;

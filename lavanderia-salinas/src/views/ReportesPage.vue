@@ -2147,7 +2147,7 @@ const confirmarRestaurarOrden = async () => {
 .barra {
   position: relative;
   width: min(100%, 48px);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--app-shell-header-color, #081a30) 62%, white) 0%, var(--app-shell-header-color, #081a30) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-shell-header-color, #072346) 62%, white) 0%, var(--app-shell-header-color, #072346) 100%);
   border: 1px solid rgba(10, 31, 56, 0.22);
   border-radius: 8px 8px 3px 3px;
   min-height: 4px;
@@ -2357,7 +2357,7 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .vista-toggle-btn.active {
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #ffffff;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.36);
 }
@@ -3213,8 +3213,8 @@ const confirmarRestaurarOrden = async () => {
 }
 
 .turno-panel-actions .btn-primario {
-  --background: var(--app-shell-header-color, #081a30);
-  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #081a30) 82%, black);
+  --background: var(--app-shell-header-color, #072346);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #072346) 82%, black);
 }
 
 .btn-advertencia {

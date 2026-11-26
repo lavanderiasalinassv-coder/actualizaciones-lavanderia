@@ -1,21 +1,21 @@
 <template>
   <ion-page class="force-light" :style="estiloLogin">
     <NieveNavidena />
-    <ion-content class="keypad-container" :scroll-y="false" :style="estiloLogin">
+    <ion-content class="keypad-container" :class="`login-theme-${apariencia.loginTheme}`" :scroll-y="false" :style="estiloLogin">
       <div v-if="cargando" class="loading-overlay">
         <div class="escena-lavado">
           <svg class="lavadora-animada" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <rect x="14" y="8" width="72" height="84" rx="14" fill="#0d2b4e" stroke="#a9d8ee" stroke-width="2"/>
-            <line x1="14" y1="26" x2="86" y2="26" stroke="#a9d8ee" stroke-width="1.5" opacity="0.6"/>
-            <circle cx="74" cy="17" r="2" fill="#a9d8ee"/>
-            <circle cx="66" cy="17" r="2" fill="#a9d8ee"/>
-            <circle class="drum-ring" cx="50" cy="58" r="26" fill="#cfe9f5" stroke="#a9d8ee" stroke-width="3"/>
+            <rect x="14" y="8" width="72" height="84" rx="14" fill="var(--login-color)" stroke="var(--login-color)" stroke-width="2"/>
+            <line x1="14" y1="26" x2="86" y2="26" stroke="var(--login-color)" stroke-width="1.5" opacity="0.6"/>
+            <circle cx="74" cy="17" r="2" fill="var(--login-color)"/>
+            <circle cx="66" cy="17" r="2" fill="var(--login-color)"/>
+            <circle class="drum-ring" cx="50" cy="58" r="26" fill="color-mix(in srgb, var(--login-color) 18%, #ffffff)" stroke="var(--login-color)" stroke-width="3"/>
             <clipPath id="drumClip">
               <circle cx="50" cy="58" r="21" />
             </clipPath>
             <g clip-path="url(#drumClip)">
-              <rect class="agua agua-1" x="20" y="58" width="60" height="30" fill="#123a66"/>
-              <rect class="agua agua-2" x="20" y="62" width="60" height="26" fill="#a9d8ee" opacity="0.75"/>
+              <rect class="agua agua-1" x="20" y="58" width="60" height="30" fill="var(--login-color)"/>
+              <rect class="agua agua-2" x="20" y="62" width="60" height="26" fill="color-mix(in srgb, var(--login-color) 35%, #ffffff)" opacity="0.75"/>
             </g>
           </svg>
           <div class="sombra-suelo"></div>
@@ -36,15 +36,23 @@
         <ion-icon :icon="powerOutline" />
       </button>
 
-      <div class="desktop-layout">
+      <div class="desktop-layout" :class="[`login-layout-${apariencia.loginLayout}`, `login-theme-${apariencia.loginTheme}`]">
         <section class="brand-side">
           <div class="brand-panel">
-            <div class="brand-orb orb-one"></div>
-            <div class="brand-orb orb-two"></div>
-
             <div class="logo-container">
               <img :src="logoActual" alt="Lavandería Salinas" class="logo" :class="{ 'logo-cargando': logoCargando }" @load="terminarCargaLogo" @error="usarLogoLocal" />
               <span v-if="logoCargando" class="logo-cargando-indicador" aria-label="Cargando logo"></span>
+            </div>
+            <div class="login-brand-story desktop-only">
+              <span class="login-brand-overline">CUIDADO PARA CADA PRENDA</span>
+              <h1>Tu ropa,<br />en buenas manos.</h1>
+              <p>Frescura y cuidado especial en cada ciclo.</p>
+            </div>
+            <div class="login-brand-art desktop-only" aria-hidden="true">
+              <span class="login-brand-orbit"></span>
+              <span class="login-brand-bubble">🫧</span>
+              <span class="login-brand-basket">🧺</span>
+              <span class="login-brand-sparkle">✦</span>
             </div>
             <div v-if="logoConexionError" class="logo-conexion-error">
               <ion-icon :icon="warningOutline" />
@@ -56,6 +64,17 @@
         <section class="keypad-side">
           <div class="login-card">
             <div class="card-top-glow"></div>
+            <div class="market-login-lockup desktop-only">
+              <img :src="logoActual" alt="Lavandería Salinas" />
+              <span>
+                <b>Lavandería Salinas</b>
+                <small>{{ fechaHoraActual }}</small>
+              </span>
+            </div>
+            <div class="market-login-welcome desktop-only">
+              <h1>Bienvenido<br />de vuelta.</h1>
+              <p>Ingresa tu PIN para continuar</p>
+            </div>
 
             <div class="logo-container mobile-logo-wrap mobile-only">
               <img :src="logoActual" alt="Lavandería Salinas" class="logo mobile-logo" :class="{ 'logo-cargando': logoCargando }" @load="terminarCargaLogo" @error="usarLogoLocal" />
@@ -134,7 +153,7 @@
     </ion-content>
 
     <!-- Modal 2FA -->
-    <ion-modal :is-open="mostrarModal2FA" class="modal-2fa" @didDismiss="cerrarModal2FA">
+    <ion-modal :is-open="mostrarModal2FA" class="modal-2fa" :style="estiloLogin" @didDismiss="cerrarModal2FA">
       <div class="modal-2fa-contenido force-light">
         <div class="modal-2fa-header">
           <div class="modal-2fa-icon">🔐</div>
@@ -186,7 +205,7 @@
     </ion-modal>
 
     <!-- Modal Recuperación PIN -->
-    <ion-modal :is-open="mostrarModalRecuperacionPIN" class="modal-recuperacion-pin" @didDismiss="cerrarModalRecuperacionPIN">
+    <ion-modal :is-open="mostrarModalRecuperacionPIN" class="modal-recuperacion-pin" :style="estiloLogin" @didDismiss="cerrarModalRecuperacionPIN">
       <div class="modal-recuperacion-pin-contenido force-light">
         <div class="modal-recuperacion-pin-header">
           <div class="modal-recuperacion-pin-icon">🔑</div>
@@ -978,12 +997,7 @@ const reenviarCodigoRecuperacion = async () => {
 </script>
 <style scoped>
 ion-content {
-  --background:
-    radial-gradient(circle at 8% 10%,  rgba(18, 58, 102, 0.20) 0%, transparent 30%),
-    radial-gradient(circle at 92% 8%,  rgba(169, 216, 238, 0.18) 0%, transparent 25%),
-    radial-gradient(circle at 15% 80%, rgba(18, 58, 102, 0.14) 0%, transparent 28%),
-    radial-gradient(circle at 85% 75%, rgba(169, 216, 238, 0.12) 0%, transparent 30%),
-    linear-gradient(160deg, #f5f9fc 0%, #eef4f8 45%, #e7eff5 100%);
+  --background: linear-gradient(160deg, #f5f9fc 0%, #eef4f8 45%, #e7eff5 100%);
   color: #0a1f38;
 }
 
@@ -1004,7 +1018,7 @@ ion-content {
 .loading-overlay p {
   font-size: 18px;
   font-weight: 700;
-  color: #a9d8ee;
+  color: color-mix(in srgb, var(--login-color) 42%, #ffffff);
   margin: 0;
 }
 
@@ -1112,11 +1126,7 @@ ion-content {
 
 .keypad-container {
   --background:
-    radial-gradient(circle at 8% 10%,  rgba(169, 216, 238, 0.20) 0%, transparent 28%),
-    radial-gradient(circle at 90% 6%,  rgba(207, 233, 245, 0.26) 0%, transparent 26%),
-    radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
-    radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
-    linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #123a66) 100%) !important;
+    linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #000000) 100%) !important;
   background-image: none !important;
   background-size: cover;
   background-position: center;
@@ -1136,26 +1146,27 @@ ion-content {
 .keypad-container::after {
   content: '';
   position: absolute;
+  z-index: 0;
   border-radius: 999px;
   pointer-events: none;
 }
 
 .keypad-container::before {
-  width: 220px;
-  height: 220px;
-  background: color-mix(in srgb, var(--orb-color-uno) 20%, transparent);
-  top: -90px;
-  right: -60px;
-  filter: blur(4px);
+  width: 240px;
+  height: 240px;
+  background: rgba(255, 255, 255, 0.18);
+  top: -35px;
+  right: -25px;
+  filter: blur(6px);
 }
 
 .keypad-container::after {
-  width: 180px;
-  height: 180px;
-  background: color-mix(in srgb, var(--orb-color-dos) 32%, transparent);
-  bottom: -70px;
-  left: -50px;
-  filter: blur(8px);
+  width: 220px;
+  height: 220px;
+  background: rgba(255, 255, 255, 0.12);
+  bottom: -75px;
+  left: -55px;
+  filter: blur(7px);
 }
 
 /* ── Layout de dos columnas ── */
@@ -1187,28 +1198,6 @@ ion-content {
   justify-content: center;
 }
 
-.brand-orb {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.orb-one {
-  width: 140px;
-  height: 140px;
-  right: -40px;
-  top: -30px;
-  background: color-mix(in srgb, var(--orb-color-uno) 2%, transparent);
-}
-
-.orb-two {
-  width: 160px;
-  height: 160px;
-  left: -70px;
-  bottom: -90px;
-  background: color-mix(in srgb, var(--orb-color-dos) 14%, transparent);
-}
-
 .logo-container {
   position: relative;
   display: flex;
@@ -1227,8 +1216,8 @@ ion-content {
   width: 28px;
   height: 28px;
   margin: -14px 0 0 -14px;
-  border: 3px solid rgba(18, 58, 102, 0.2);
-  border-top-color: #123a66;
+  border: 3px solid color-mix(in srgb, var(--login-color) 20%, transparent);
+  border-top-color: var(--login-color);
   border-radius: 50%;
   animation: giroLogo 0.8s linear infinite;
 }
@@ -1287,9 +1276,9 @@ ion-content {
   text-transform: uppercase;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(169, 216, 238, 0.12);
+  background: color-mix(in srgb, var(--login-color) 12%, transparent);
   margin-bottom: 14px;
-  color: #a9d8ee;
+  color: color-mix(in srgb, var(--login-color) 42%, #ffffff);
 }
 
 .brand-copy h1 {
@@ -1333,14 +1322,14 @@ ion-content {
   border-radius: 28px;
   display: grid;
   place-items: center;
-  background: rgba(169, 216, 238, 0.10);
-  border: 1px solid rgba(169, 216, 238, 0.20);
+  background: color-mix(in srgb, var(--login-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--login-color) 20%, transparent);
   margin-bottom: 12px;
 }
 
 .user-avatar {
   font-size: 64px;
-  color: #a9d8ee;
+  color: color-mix(in srgb, var(--login-color) 42%, #ffffff);
 }
 
 .user-avatar-text {
@@ -1396,12 +1385,12 @@ ion-content {
   height: 16px;
   border-radius: 50%;
   background: transparent;
-  border: 2px solid rgba(169, 216, 238, 0.35);
+  border: 2px solid color-mix(in srgb, var(--login-color) 55%, #ffffff);
 }
 
 .dot.filled {
-  background: #a9d8ee;
-  border-color: #5c9dc2;
+  background: var(--login-color);
+  border-color: color-mix(in srgb, var(--login-color) 82%, #000000);
   animation: popIn 0.2s ease-out;
 }
 
@@ -1424,7 +1413,7 @@ ion-content {
   border-radius: 22px;
   font-size: 22px;
   font-weight: 800;
-  color: #cfe9f5;
+  color: color-mix(in srgb, var(--login-color) 30%, #ffffff);
   background: rgba(255, 255, 255, 0.05) !important;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -1443,15 +1432,15 @@ ion-content {
 }
 
 .btn-huella {
-  --background: rgba(169, 216, 238, 0.10) !important;
+  --background: color-mix(in srgb, var(--login-color) 10%, transparent) !important;
   --box-shadow: none !important;
-  --color: #a9d8ee !important;
+  --color: color-mix(in srgb, var(--login-color) 42%, #ffffff) !important;
   --padding-start: 0 !important;
   --padding-end: 0 !important;
-  --ripple-color: rgba(169, 216, 238, 0.24) !important;
-  background: rgba(169, 216, 238, 0.10) !important;
-  border: 1px solid rgba(169, 216, 238, 0.20) !important;
-  color: #a9d8ee !important;
+  --ripple-color: color-mix(in srgb, var(--login-color) 24%, transparent) !important;
+  background: color-mix(in srgb, var(--login-color) 10%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--login-color) 20%, transparent) !important;
+  color: color-mix(in srgb, var(--login-color) 42%, #ffffff) !important;
   font-size: 32px !important;
   display: flex;
   align-items: center;
@@ -1534,11 +1523,7 @@ ion-content {
 
   .keypad-container {
     --background:
-      radial-gradient(circle at 8% 10%,  rgba(169, 216, 238, 0.20) 0%, transparent 28%),
-      radial-gradient(circle at 90% 6%,  rgba(207, 233, 245, 0.26) 0%, transparent 26%),
-      radial-gradient(circle at 12% 82%, rgba(169, 216, 238, 0.20) 0%, transparent 30%),
-      radial-gradient(circle at 88% 78%, rgba(18, 58, 102, 0.18) 0%, transparent 26%),
-      linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #123a66) 100%) !important;
+      linear-gradient(160deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #000000) 100%) !important;
     padding: 24px;
   }
 
@@ -1593,9 +1578,7 @@ ion-content {
 @media (min-width: 992px) {
   .keypad-container {
     --background:
-      radial-gradient(circle at 10% 10%, rgba(169, 216, 238, 0.14) 0%, transparent 28%),
-      radial-gradient(circle at 90% 90%, rgba(207, 233, 245, 0.10) 0%, transparent 22%),
-      linear-gradient(180deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #123a66) 100%) !important;
+      linear-gradient(180deg, var(--login-color) 0%, color-mix(in srgb, var(--login-color) 82%, #000000) 100%) !important;
     padding: 24px;
   }
 
@@ -1730,8 +1713,8 @@ ion-content {
 }
 
 .modal-2fa-codigo-input input:focus {
-  border-color: #16a34a;
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  border-color: var(--login-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--login-color) 15%, transparent);
 }
 
 .modal-2fa-codigo-input input::placeholder {
@@ -1765,18 +1748,18 @@ ion-content {
 
 .btn-outline-2fa:hover {
   background: #f5f9fc;
-  border-color: #a9d8ee;
+  border-color: color-mix(in srgb, var(--login-color) 42%, #ffffff);
 }
 
 .btn-principal-2fa {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: linear-gradient(135deg, var(--login-color), color-mix(in srgb, var(--login-color) 80%, #000000));
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--login-color) 30%, transparent);
 }
 
 .btn-principal-2fa:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--login-color) 40%, transparent);
 }
 
 .btn-principal-2fa:disabled {
@@ -1802,7 +1785,7 @@ ion-content {
 
 .btn-reenvio:hover:not(:disabled) {
   background: #f5f9fc;
-  color: #16a34a;
+  color: var(--login-color);
 }
 
 .btn-reenvio:disabled {
@@ -1814,7 +1797,7 @@ ion-content {
 .olvide-pin-btn {
   background: transparent;
   border: none;
-  color: #507383;
+  color: var(--login-color);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -1826,8 +1809,8 @@ ion-content {
 }
 
 .olvide-pin-btn:hover:not(:disabled) {
-  color: #123a66;
-  background: rgba(79, 179, 224, 0.1);
+  color: var(--login-color);
+  background: color-mix(in srgb, var(--login-color) 10%, transparent);
 }
 
 .olvide-pin-btn:disabled {
@@ -1857,21 +1840,21 @@ ion-content {
 
 .modal-recuperacion-pin-icon {
   font-size: 2.5rem;
-  background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%);
+  background: linear-gradient(135deg, var(--login-color), color-mix(in srgb, var(--login-color) 80%, #000000));
   width: 60px;
   height: 60px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--login-color) 30%, transparent);
 }
 
 .modal-recuperacion-pin-titulo {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #123a66;
+  color: var(--login-color);
 }
 
 .modal-recuperacion-pin-subtitulo {
@@ -1911,8 +1894,8 @@ ion-content {
 .modal-recuperacion-pin-email-input input:focus,
 .modal-recuperacion-pin-codigo-input input:focus {
   outline: none;
-  border-color: #4fb3e0;
-  box-shadow: 0 0 0 3px rgba(79, 179, 224, 0.1);
+  border-color: var(--login-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--login-color) 10%, transparent);
 }
 
 .modal-recuperacion-pin-email-input input:disabled,
@@ -1963,18 +1946,18 @@ ion-content {
   flex: 1;
   padding: 12px 20px;
   border: none;
-  background: linear-gradient(135deg, #4fb3e0 0%, #123a66 100%);
+  background: linear-gradient(135deg, var(--login-color), color-mix(in srgb, var(--login-color) 80%, #000000));
   color: white;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(79, 179, 224, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--login-color) 30%, transparent);
 }
 
 .btn-principal-recuperacion:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(79, 179, 224, 0.4);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--login-color) 40%, transparent);
 }
 
 .btn-principal-recuperacion:disabled {
@@ -1991,7 +1974,7 @@ ion-content {
 .btn-reenvio-recuperacion {
   background: transparent;
   border: none;
-  color: #4fb3e0;
+  color: var(--login-color);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -2001,8 +1984,8 @@ ion-content {
 }
 
 .btn-reenvio-recuperacion:hover:not(:disabled) {
-  background: rgba(79, 179, 224, 0.1);
-  color: #123a66;
+  background: color-mix(in srgb, var(--login-color) 10%, transparent);
+  color: var(--login-color);
 }
 
 .btn-reenvio-recuperacion:disabled {
@@ -2013,5 +1996,595 @@ ion-content {
 .force-light {
   --ion-background-color: transparent;
   --ion-text-color: #ffffff;
+}
+
+@media (min-width: 992px) {
+  .desktop-layout.login-layout-reverse {
+    flex-direction: row-reverse;
+  }
+
+  .desktop-layout.login-layout-centered,
+  .desktop-layout.login-layout-header {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    height: auto;
+    min-height: 100vh;
+    max-width: 1100px;
+  }
+
+  .desktop-layout.login-layout-centered .brand-side,
+  .desktop-layout.login-layout-centered .keypad-side,
+  .desktop-layout.login-layout-header .brand-side,
+  .desktop-layout.login-layout-header .keypad-side {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+
+  .desktop-layout.login-layout-centered .brand-panel {
+    min-height: auto;
+    padding: 8px 24px 0;
+  }
+
+  .desktop-layout.login-layout-centered .brand-panel .logo-container {
+    margin: 0 0 12px;
+  }
+
+  .desktop-layout.login-layout-centered .brand-panel .logo {
+    width: 260px;
+    max-width: min(58vw, 260px);
+  }
+
+  .desktop-layout.login-layout-centered .keypad-side {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .desktop-layout.login-layout-centered .login-card {
+    min-height: auto;
+    padding: 8px 18px 22px;
+  }
+
+  .desktop-layout.login-layout-header {
+    max-width: 1320px;
+  }
+
+  .desktop-layout.login-layout-header .brand-panel {
+    min-height: auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 18px clamp(24px, 7vw, 92px);
+  }
+
+  .desktop-layout.login-layout-header .brand-panel .logo-container {
+    justify-content: flex-start;
+    margin: 0;
+  }
+
+  .desktop-layout.login-layout-header .brand-panel .logo {
+    width: 170px;
+    max-width: 24vw;
+    filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.28));
+  }
+
+  .desktop-layout.login-layout-header .keypad-side {
+    max-width: 500px;
+    align-self: center;
+  }
+
+  .desktop-layout.login-layout-header .login-card {
+    min-height: auto;
+    padding: 10px 20px 24px;
+  }
+
+  .desktop-layout.login-layout-integrated {
+    max-width: 560px;
+    gap: 0;
+  }
+
+  .desktop-layout.login-layout-integrated .brand-side {
+    display: none !important;
+  }
+
+  .desktop-layout.login-layout-integrated .keypad-side {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+
+  .desktop-layout.login-layout-integrated .login-card {
+    min-height: auto;
+    padding: 30px 28px 26px;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24) !important;
+    backdrop-filter: blur(18px);
+  }
+
+  .desktop-layout.login-layout-integrated .mobile-logo-wrap {
+    display: flex !important;
+    margin: 0 0 18px;
+  }
+
+  .desktop-layout.login-layout-integrated .mobile-logo-wrap .logo {
+    width: 190px;
+    max-width: 50vw;
+  }
+}
+
+.login-brand-story,
+.login-brand-art,
+.market-login-lockup,
+.market-login-welcome {
+  display: none;
+}
+
+.keypad-container.login-theme-market {
+  --background: #f3f5f8 !important;
+  padding: 0 !important;
+}
+
+.keypad-container.login-theme-market::before,
+.keypad-container.login-theme-market::after {
+  display: none;
+}
+
+.desktop-layout.login-theme-market {
+  height: 100dvh;
+  min-height: 620px;
+  max-width: 1500px;
+  gap: 0;
+  align-items: stretch;
+  background: #f3f5f8;
+}
+
+.desktop-layout.login-theme-market .brand-side {
+  flex: 1.12;
+  min-width: 0;
+}
+
+.desktop-layout.login-theme-market .brand-panel {
+  position: relative;
+  min-height: calc(100% - 32px);
+  margin: 16px 0 16px 16px;
+  padding: 9% 9%;
+  overflow: hidden;
+  align-items: flex-start;
+  border: 0 !important;
+  border-radius: 24px;
+  background:
+    radial-gradient(ellipse at 76% 32%, color-mix(in srgb, var(--login-color) 76%, #ffffff), transparent 35%),
+    linear-gradient(145deg, color-mix(in srgb, var(--login-color) 90%, #ffffff), color-mix(in srgb, var(--login-color) 72%, #000000)) !important;
+  color: #ffffff;
+  box-shadow: 0 22px 54px rgba(11, 25, 45, 0.18);
+}
+
+.desktop-layout.login-theme-market .brand-panel::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(145deg, transparent 38%, rgba(3, 18, 30, 0.25));
+  content: '';
+}
+
+.desktop-layout.login-theme-market .brand-panel > .logo-container {
+  display: none;
+}
+
+.desktop-layout.login-theme-market .login-brand-story {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: min(100%, 470px);
+}
+
+.login-brand-overline {
+  color: rgba(235, 243, 251, 0.72);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.login-brand-story h1 {
+  margin: 24px 0 14px;
+  color: #ffffff;
+  font-size: clamp(2.6rem, 5vw, 4.4rem);
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 1.04;
+}
+
+.login-brand-story p {
+  max-width: 300px;
+  margin: 0;
+  color: rgba(232, 241, 249, 0.78);
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.desktop-layout.login-theme-market .login-brand-art {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-brand-orbit {
+  position: absolute;
+  top: 21%;
+  right: 7%;
+  width: 300px;
+  height: 300px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 32px rgba(255, 255, 255, 0.035),
+    0 0 0 64px rgba(255, 255, 255, 0.027),
+    0 0 0 96px rgba(255, 255, 255, 0.02),
+    0 0 0 128px rgba(255, 255, 255, 0.015);
+}
+
+.login-brand-bubble,
+.login-brand-basket,
+.login-brand-sparkle {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 20px 46px rgba(3, 14, 28, 0.28);
+}
+
+.login-brand-bubble {
+  top: 34%;
+  right: 17%;
+  width: 116px;
+  height: 116px;
+  border-radius: 32px;
+  font-size: 55px;
+  transform: rotate(-8deg);
+}
+
+.login-brand-basket {
+  top: 54%;
+  right: 39%;
+  width: 94px;
+  height: 94px;
+  border-radius: 28px;
+  font-size: 48px;
+  transform: rotate(7deg);
+}
+
+.login-brand-sparkle {
+  top: 64%;
+  right: 11%;
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+  color: var(--login-color);
+  font-size: 42px;
+  transform: rotate(8deg);
+}
+
+.desktop-layout.login-theme-market .keypad-side {
+  flex: 0.88;
+  min-width: 0;
+  max-width: 640px;
+  margin: 0 auto;
+  background: #ffffff;
+}
+
+.desktop-layout.login-theme-market .login-card {
+  width: min(100%, 460px);
+  min-height: min(760px, calc(100dvh - 40px));
+  align-items: flex-start;
+  padding: 38px 28px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.desktop-layout.login-theme-market .market-login-lockup {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 48px;
+}
+
+.market-login-lockup > img {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  object-fit: contain;
+  filter: none;
+}
+
+.market-login-lockup > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.market-login-lockup b {
+  overflow: hidden;
+  color: #17243a;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-login-lockup small {
+  color: #7a8798;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.desktop-layout.login-theme-market .market-login-welcome {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.market-login-welcome h1 {
+  margin: 0 0 10px;
+  color: var(--login-color);
+  font-size: clamp(2.15rem, 3.2vw, 2.85rem);
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 1.05;
+}
+
+.market-login-welcome p {
+  margin: 0;
+  color: #8591a1;
+  font-size: 0.86rem;
+}
+
+@media (min-width: 992px) {
+  .desktop-layout.login-theme-market .user-avatar-container {
+    display: none;
+  }
+}
+
+.desktop-layout.login-theme-market .pad-relativo {
+  max-width: 340px;
+}
+
+.desktop-layout.login-theme-market .display-shell {
+  min-height: 52px;
+}
+
+.desktop-layout.login-theme-market .display {
+  border-color: #e7ebf0;
+  background: #f7f9fb;
+  box-shadow: none;
+}
+
+.desktop-layout.login-theme-market .dot {
+  border-color: #b7c1ce;
+}
+
+.desktop-layout.login-theme-market .dot.filled {
+  border-color: var(--login-color);
+  background: var(--login-color);
+}
+
+.desktop-layout.login-theme-market .keypad-grid {
+  max-width: 300px;
+}
+
+.desktop-layout.login-theme-market .key-col {
+  margin-bottom: 7px;
+}
+
+.desktop-layout.login-theme-market .key {
+  --background: #ffffff !important;
+  --color: #26364d !important;
+  --box-shadow: 0 3px 10px rgba(25, 41, 63, 0.045) !important;
+  --border-radius: 11px !important;
+  width: 76px !important;
+  height: 52px !important;
+  border: 1px solid #e1e6ed !important;
+  background: #ffffff !important;
+  color: #26364d !important;
+}
+
+.desktop-layout.login-theme-market .key:active {
+  --background: #f0f3f7 !important;
+}
+
+.desktop-layout.login-theme-market .system-time {
+  display: none;
+}
+
+.keypad-container.login-theme-linen {
+  --background: #f3f5f8 !important;
+}
+
+.desktop-layout.login-theme-linen .brand-panel {
+  border-radius: 28px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--login-color) 86%, #ffffff),
+    color-mix(in srgb, var(--login-color) 68%, #000000)
+  ) !important;
+}
+
+.desktop-layout.login-theme-linen .login-card {
+  border: 1px solid #e4e9f0 !important;
+  border-radius: 28px;
+  background: #ffffff !important;
+  box-shadow: 0 20px 50px rgba(28, 45, 69, 0.1) !important;
+}
+
+.desktop-layout.login-theme-linen .avatar-shell {
+  border-color: color-mix(in srgb, var(--login-color) 18%, transparent);
+  background: color-mix(in srgb, var(--login-color) 10%, transparent);
+}
+
+.desktop-layout.login-theme-linen .market-login-welcome h1,
+.desktop-layout.login-theme-linen .user-avatar-text {
+  color: #17243a;
+}
+
+.desktop-layout.login-theme-linen .market-login-welcome p {
+  color: #526278;
+}
+
+.desktop-layout.login-theme-linen .user-avatar {
+  color: var(--login-color);
+}
+
+.desktop-layout.login-theme-linen .key {
+  --background: #ffffff !important;
+  --color: #17243a !important;
+  --box-shadow: 0 4px 12px rgba(28, 45, 69, 0.08) !important;
+  --border-radius: 15px !important;
+  border: 1px solid color-mix(in srgb, var(--login-color) 24%, #ffffff) !important;
+  color: #17243a !important;
+}
+
+.keypad-container.login-theme-aurora {
+  --background:
+    radial-gradient(ellipse at 16% 8%, color-mix(in srgb, var(--login-color) 76%, #ffffff), transparent 42%),
+    radial-gradient(ellipse at 84% 90%, color-mix(in srgb, var(--login-color) 34%, transparent), transparent 40%),
+    linear-gradient(
+      140deg,
+      color-mix(in srgb, var(--login-color) 42%, #101010) 0%,
+      color-mix(in srgb, var(--login-color) 30%, #101010) 56%,
+      #101010 100%
+    ) !important;
+}
+
+.desktop-layout.login-theme-aurora .login-card {
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+
+.desktop-layout.login-theme-aurora .key {
+  --background: rgba(255, 255, 255, 0.12) !important;
+  --color: #f4f5ff !important;
+  --box-shadow: 0 8px 18px rgba(9, 14, 37, 0.16) !important;
+  --border-radius: 50% !important;
+  border-color: rgba(255, 255, 255, 0.17) !important;
+  color: #f4f5ff !important;
+}
+
+.keypad-container.login-theme-minimal {
+  --background: #f4f6f9 !important;
+}
+
+.desktop-layout.login-theme-minimal {
+  background: #f4f6f9;
+}
+
+.desktop-layout.login-theme-minimal .brand-panel {
+  border-radius: 28px;
+  background: linear-gradient(145deg, #ffffff, #eaf0f6) !important;
+  box-shadow: inset 0 0 0 1px #e1e7ef;
+}
+
+.desktop-layout.login-theme-minimal .logo {
+  filter: drop-shadow(0 10px 24px rgba(28, 45, 69, 0.12));
+}
+
+.desktop-layout.login-theme-minimal .login-card {
+  border: 1px solid #e4e9f0 !important;
+  border-radius: 28px;
+  background: #ffffff !important;
+  box-shadow: 0 18px 48px rgba(28, 45, 69, 0.08) !important;
+}
+
+.desktop-layout.login-theme-minimal .user-avatar-text {
+  color: #526278;
+}
+
+.desktop-layout.login-theme-minimal .user-avatar {
+  color: var(--login-color);
+}
+
+.desktop-layout.login-theme-minimal .key {
+  --background: #f8fafc !important;
+  --color: #26364d !important;
+  --box-shadow: none !important;
+  --border-radius: 13px !important;
+  border: 1px solid #e6ebf1 !important;
+  color: #26364d !important;
+}
+
+@media (max-width: 991px) {
+  .keypad-container.login-theme-market {
+    --background: #f3f5f8 !important;
+    padding: 18px !important;
+  }
+
+  .desktop-layout.login-theme-market {
+    height: auto;
+    min-height: 100dvh;
+    background: transparent;
+  }
+
+  .desktop-layout.login-theme-market .login-card {
+    min-height: auto;
+    padding: 18px 14px;
+    border-radius: 22px;
+    background: #ffffff !important;
+    box-shadow: 0 18px 48px rgba(28, 45, 69, 0.1) !important;
+  }
+
+  .desktop-layout.login-theme-market .user-avatar-container {
+    display: flex !important;
+  }
+
+  .desktop-layout.login-theme-market .avatar-shell {
+    border-color: #e2e8f0;
+    background: #f5f7fa;
+  }
+
+  .desktop-layout.login-theme-market .user-avatar,
+  .desktop-layout.login-theme-market .user-avatar-text {
+    color: #26364d;
+  }
+
+  .desktop-layout.login-theme-market .key {
+    --background: #f8fafc !important;
+    --color: #26364d !important;
+    border: 1px solid #e1e6ed !important;
+    color: #26364d !important;
+  }
+
+  .keypad-container.login-theme-linen {
+    --background: #f3f5f8 !important;
+  }
+
+  .desktop-layout.login-theme-linen .login-card,
+  .desktop-layout.login-theme-minimal .login-card {
+    min-height: auto;
+    border-radius: 22px;
+    background: #ffffff !important;
+    box-shadow: 0 18px 48px rgba(28, 45, 69, 0.1) !important;
+  }
+
+  .desktop-layout.login-theme-minimal .login-card {
+    background: #ffffff !important;
+    box-shadow: 0 18px 48px rgba(28, 45, 69, 0.08) !important;
+  }
+
+  .desktop-layout.login-theme-aurora .login-card,
+  .desktop-layout.login-theme-nocturne .login-card {
+    min-height: auto;
+    border-radius: 24px;
+  }
 }
 </style>

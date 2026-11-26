@@ -14,9 +14,10 @@
         <ion-tab-button
           v-if="!esOperador && !esRecepcionista"
           tab="depositos"
-          :href="turnoCerrado ? undefined : '/tabs/depositos'"
+          href="/tabs/depositos"
           class="tab-btn tab-depositos"
-          :class="{ 'tab-disabled': turnoCerrado }"
+          :class="{ 'tab-caja-cerrada': turnoCerrado }"
+          :title="turnoCerrado ? 'Necesitas una caja abierta para acceder' : 'Depósitos'"
         >
           <span class="tab-icon-wrap">
             <ion-icon aria-hidden="true" :icon="walletOutline" />
@@ -72,16 +73,16 @@ import { useAccesoOperativo } from '@/composables/useAccesoOperativo'
 
 const { funcionesBloqueadas } = useAccesoOperativo()
 
-const turnoCerrado = computed(() =>
-  (esCajero.value || esRecepcionista.value) && (!turno.abierto || funcionesBloqueadas.value)
-)
-
 const router = useRouter()
 const { abrirModalGasto, abrirModalCierres } = useModalesCaja()
 const { cerrarSesion, esAdministrador, esOperador, rol } = useSesion()
 const { turno } = useTurno()
 const esRecepcionista = computed(() => rol.value === 'recepcionista')
 const esCajero = computed(() => rol.value === 'cajero' || rol.value === 'caja')
+const turnoCerrado = computed(() =>
+  !turno.abierto ||
+  ((esCajero.value || esRecepcionista.value) && funcionesBloqueadas.value)
+)
 
 const salir = () => {
   cerrarSesion()
@@ -108,6 +109,11 @@ const salir = () => {
   --color: #b0b8c4 !important;
   opacity: 0.5;
   pointer-events: none;
+}
+
+.tab-btn.tab-caja-cerrada {
+  --color: #8c98a7;
+  opacity: 0.7;
 }
 
 .tab-btn.tab-disabled .tab-icon-wrap {

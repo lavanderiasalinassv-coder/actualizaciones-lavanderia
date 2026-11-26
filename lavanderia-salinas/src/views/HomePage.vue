@@ -440,9 +440,9 @@ const verDetalleTurno = () => {
 }
 
 .filtro-chip.active {
-  background: #123a66;
-  border-color: #123a66;
-  color: #f5f9fc;
+  background: var(--app-shell-header-color, #123a66);
+  border-color: var(--app-shell-header-color, #123a66);
+  color: var(--app-shell-header-text-color, #ffffff);
 }
 
 /* ── Área de servicios ── */
@@ -609,20 +609,20 @@ const verDetalleTurno = () => {
 
 /* ── Botones ── */
 .btn-primario {
-  --background: #123a66;
-  --background-hover: #0d2b4e;
-  --color: #f5f9fc;
+  --background: var(--app-shell-header-color, #123a66);
+  --background-hover: color-mix(in srgb, var(--app-shell-header-color, #123a66) 82%, black);
+  --color: var(--app-shell-header-text-color, #ffffff);
   --border-radius: 12px;
   font-weight: 700;
 }
 
 .btn-fantasma {
   --background: transparent;
-  --color: #123a66;
+  --color: var(--app-shell-header-color, #123a66);
   --border-radius: 12px;
   --border-width: 1px;
   --border-style: solid;
-  --border-color: rgba(18, 58, 102, 0.25);
+  --border-color: color-mix(in srgb, var(--app-shell-header-color, #123a66) 25%, transparent);
   font-weight: 700;
 }
 

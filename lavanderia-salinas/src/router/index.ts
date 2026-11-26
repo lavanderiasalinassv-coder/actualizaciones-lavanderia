@@ -111,7 +111,8 @@ const routes: Array<RouteRecordRaw> = [
       },
       {
         path: 'depositos',
-        component: () => import('@/views/DepositosPage.vue')
+        component: () => import('@/views/DepositosPage.vue'),
+        meta: { requiresTurno: true }
       },
       {
         path: 'principal',
@@ -238,18 +239,25 @@ router.beforeEach(async (to) => {
 
   if (!to.meta.requiresTurno) return true
 
-  // Los administradores pueden acceder sin turno abierto, EXCEPTO para la página de venta (home)
-  if (esAdministrador(rolActual) && to.path !== '/tabs/home') return true
+  // Los administradores pueden acceder sin turno, excepto a venta y depósitos.
+  if (
+    esAdministrador(rolActual) &&
+    to.path !== '/tabs/home' &&
+    to.path !== '/tabs/depositos'
+  ) return true
 
   const { turno, cargarTurno } = useTurno()
-  if (turno.abierto) return true
-
-  const turnoActual = await cargarTurno()
+  const requiereTurnoActualizado = to.path === '/tabs/home' || to.path === '/tabs/depositos'
+  const turnoActual = requiereTurnoActualizado || !turno.abierto
+    ? await cargarTurno()
+    : turno
   if (turnoActual?.abierto) return true
 
   return {
     path: '/tabs/principal',
-    query: { aviso: 'turno-requerido' }
+    query: {
+      aviso: to.path === '/tabs/depositos' ? 'depositos-requiere-turno' : 'turno-requerido'
+    }
   }
 })
 

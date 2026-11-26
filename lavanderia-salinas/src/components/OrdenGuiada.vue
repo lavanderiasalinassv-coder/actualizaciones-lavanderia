@@ -5869,4 +5869,57 @@ onMounted(() => {
   42% { opacity: 1; transform: translate(var(--confeti-x), var(--confeti-y)) rotate(130deg) scale(1); }
   100% { opacity: 0; transform: translate(var(--confeti-x-final), var(--confeti-y-final)) rotate(300deg) scale(0.8); }
 }
+
+.orden-guiada {
+  --orden-acento: var(--app-shell-header-color, #123a66);
+  --orden-acento-texto: var(--app-shell-header-text-color, #ffffff);
+  --orden-acento-suave: color-mix(in srgb, var(--orden-acento) 10%, #ffffff);
+  --orden-acento-borde: color-mix(in srgb, var(--orden-acento) 26%, #ffffff);
+  --orden-acento-sombra: color-mix(in srgb, var(--orden-acento) 20%, transparent);
+}
+
+.orden-guiada :is(.primary-btn, .step-next-btn, .action-btn.principal, .action-btn.azul, .modal-verificacion-opciones button, .modal-verificacion-confirmar, .modal-verificacion-camara button, .modal-stock-botones > .primary-btn, .regalo-correo, .carrito-cantidad button) {
+  background: var(--orden-acento) !important;
+  color: var(--orden-acento-texto) !important;
+}
+
+.orden-guiada :is(.paso-chip.active, .estado-btn.active, .monto-chip.active) {
+  border-color: var(--orden-acento) !important;
+  background: var(--orden-acento) !important;
+  color: var(--orden-acento-texto) !important;
+  box-shadow: 0 8px 18px var(--orden-acento-sombra);
+}
+
+.orden-guiada :is(.paso-chip.active, .estado-btn.active, .monto-chip.active) :is(span, strong) {
+  color: var(--orden-acento-texto) !important;
+}
+
+.orden-guiada .promo-card.active {
+  border-color: var(--orden-acento-borde);
+  background: linear-gradient(180deg, var(--orden-acento-suave), #ffffff);
+}
+
+.orden-guiada .paso-chip.active .paso-numero {
+  border-color: color-mix(in srgb, var(--orden-acento-texto) 44%, transparent);
+  background: color-mix(in srgb, var(--orden-acento-texto) 16%, transparent);
+  color: var(--orden-acento-texto) !important;
+}
+
+.orden-guiada :is(.wizard-step, .ghost-btn, .secondary-btn, .boton-ordenes, .descuento-btn, .link-btn, .estado-btn, .monto-chip, .mini-resumen strong) {
+  color: var(--orden-acento) !important;
+}
+
+.orden-guiada :is(.ghost-btn, .secondary-btn, .boton-ordenes, .descuento-btn, .link-btn, .estado-btn, .monto-chip) {
+  border-color: var(--orden-acento-borde);
+}
+
+.orden-guiada .boton-ordenes,
+.orden-guiada .descuento-btn {
+  background: var(--orden-acento-suave);
+}
+
+.orden-guiada .wizard-dots span.active,
+.orden-guiada .wizard-dots span.done {
+  background: var(--orden-acento);
+}
 </style>

@@ -1,5 +1,5 @@
 :root {
-  --ion-font-family: 'Segoe UI', 'Roboto', sans-serif;
+  --ion-font-family: var(--app-font-family, 'Segoe UI', 'Roboto', sans-serif);
   --ion-text-color: #0a1f38;
   --ion-background-color: #ffffff;
   --ion-item-background: #ffffff;
@@ -11,6 +11,15 @@
 
 html {
   font-size: 17px;
+}
+
+html,
+body {
+  font-family: var(--app-font-family, 'Segoe UI', 'Roboto', sans-serif) !important;
+}
+
+body :not(ion-icon) {
+  font-family: var(--preview-font-family, var(--app-font-family, 'Segoe UI', 'Roboto', sans-serif)) !important;
 }
 
 body,
@@ -64,7 +73,103 @@ textarea {
   -webkit-touch-callout: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 /* Fix para modales y focus */
 ion-modal ion-content {
   --overflow: hidden;
+}
+
+ion-toast {
+  --background: rgba(255, 255, 255, 0.98);
+  --color: #142238;
+  --border-radius: 17px;
+  --border-width: 1px;
+  --border-style: solid;
+  --border-color: rgba(15, 23, 42, 0.08);
+  --box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18), 0 3px 8px rgba(15, 23, 42, 0.08);
+  --min-width: min(360px, calc(100vw - 24px));
+  --max-width: min(520px, calc(100vw - 24px));
+  --min-height: 58px;
+  --start: 12px;
+  --end: 12px;
+}
+
+ion-toast::part(container) {
+  overflow: hidden;
+}
+
+ion-toast::part(content) {
+  padding: 14px 18px;
+}
+
+ion-toast::part(message) {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+}
+
+ion-toast::part(header) {
+  margin-bottom: 3px;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+ion-toast::part(icon) {
+  margin-inline-start: 16px;
+  font-size: 21px;
+}
+
+ion-toast.ion-color-success {
+  --ion-color-base: #ecfdf5;
+  --ion-color-contrast: #14532d;
+  --ion-color-shade: #d1fae5;
+  --ion-color-tint: #f0fdf4;
+  --border-color: rgba(5, 150, 105, 0.2);
+  --button-color: #047857;
+}
+
+ion-toast.ion-color-warning {
+  --ion-color-base: #fffbeb;
+  --ion-color-contrast: #78350f;
+  --ion-color-shade: #fef3c7;
+  --ion-color-tint: #fefce8;
+  --border-color: rgba(217, 119, 6, 0.22);
+  --button-color: #b45309;
+}
+
+ion-toast.ion-color-danger {
+  --ion-color-base: #fff1f2;
+  --ion-color-contrast: #881337;
+  --ion-color-shade: #ffe4e6;
+  --ion-color-tint: #fff5f6;
+  --border-color: rgba(225, 29, 72, 0.2);
+  --button-color: #be123c;
+}
+
+ion-toast.ion-color-primary {
+  --ion-color-base: #eff6ff;
+  --ion-color-contrast: #1e3a8a;
+  --ion-color-shade: #dbeafe;
+  --ion-color-tint: #f5f9ff;
+  --border-color: rgba(37, 99, 235, 0.2);
+  --button-color: #1d4ed8;
+}
+
+@media (max-width: 480px) {
+  ion-toast {
+    --start: 12px;
+    --end: 12px;
+  }
+
+  ion-toast::part(content) {
+    padding: 13px 15px;
+  }
 }

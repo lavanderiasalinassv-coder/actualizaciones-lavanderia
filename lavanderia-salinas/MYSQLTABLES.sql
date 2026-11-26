@@ -3,15 +3,22 @@ CREATE TABLE `apariencia_config` (
   `app_shell_color` varchar(20) NOT NULL,
   `app_shell_header_color` varchar(20) NOT NULL,
   `app_shell_imagen` longtext NOT NULL,
+  `principal_access_order` longtext,
+  `principal_panels_swapped` tinyint(1) NOT NULL DEFAULT 0,
   `login_color` varchar(20) NOT NULL,
   `login_imagen` longtext NOT NULL,
+  `login_layout` varchar(32) NOT NULL DEFAULT 'classic',
+  `login_theme` varchar(32) NOT NULL DEFAULT 'nocturne',
+  `sali_assistant_position` varchar(16) NOT NULL DEFAULT 'right',
   `orb_color_uno` varchar(20) NOT NULL,
   `orb_color_dos` varchar(20) NOT NULL,
+  `font_family` varchar(32) NOT NULL DEFAULT 'system',
   `actualizado_en` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
-INSERT INTO `apariencia_config` VALUES (1,'#ffffff','#081a30','','#0a1f38','','#a9d8ee','#123a66','2026-09-18 20:21:51');
+INSERT INTO `apariencia_config` (`id`, `app_shell_color`, `app_shell_header_color`, `app_shell_imagen`, `principal_access_order`, `principal_panels_swapped`, `login_color`, `login_imagen`, `login_layout`, `login_theme`, `sali_assistant_position`, `orb_color_uno`, `orb_color_dos`, `font_family`, `actualizado_en`)
+VALUES (1,'#ffffff','#072346','','["/tabs/home","/tabs/ordenes","/tabs/reportes","/tabs/calendario","/tabs/clientes","/tabs/productos","/tabs/inventario","/tabs/promociones","/tabs/facturas","/tabs/equipo","/tabs/horarios","/tabs/configuracion"]',0,'#0a1f38','','classic','nocturne','right','#a9d8ee','#123a66','system','2026-09-18 20:21:51');
 
 CREATE TABLE `catalogo_categorias` (
   `id` varchar(36) NOT NULL,

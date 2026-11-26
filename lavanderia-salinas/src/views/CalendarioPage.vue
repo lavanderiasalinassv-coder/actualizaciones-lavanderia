@@ -2244,7 +2244,7 @@ const cambiarEstadoPago = async (id: string) => {
 }
 
 .vista-chip.active {
-  background: var(--app-shell-header-color, #081a30);
+  background: var(--app-shell-header-color, #072346);
   color: #ffffff;
 }
 
@@ -4080,8 +4080,8 @@ const cambiarEstadoPago = async (id: string) => {
 }
 
 .vista-chip.active {
-  background: var(--app-shell-header-color, #081a30);
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--app-shell-header-color, #081a30) 28%, transparent);
+  background: var(--app-shell-header-color, #072346);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--app-shell-header-color, #072346) 28%, transparent);
 }
 
 .leyenda {
